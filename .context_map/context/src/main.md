@@ -57,7 +57,7 @@ Main application controller for Image Boss - orchestrates the entire user interf
 
 **`elements` object** (L45-63) - DOM element references
 
-**`init()`** (L68-74) - Renders nav, creates overlays, sets up listeners, selects default service
+**`init()`** (L73-101) - Renders nav, creates overlays, sets up listeners, and initializes the **Caption Copy Button** (L78-98) with visual "Copied!" feedback and clipboard integration.
 
 **`createSAMOverlay()`** (L85-141) - Generates the interactive layer for point selection. Features **Refinement Throttling** (L104-124) via `throttledSmartSelect` to prevent GPU command-buffer flooding during interactive use.
 
@@ -67,7 +67,7 @@ Main application controller for Image Boss - orchestrates the entire user interf
 
 **`setupComparisonSlider()`** (L152-320) - Creates before/after slider for upscaling with clip-path
 
-**`selectService(serviceId)`** (L356-394) - Switches active service, renders controls, and releases memory for heavy models.
+**`selectService(serviceId)`** (L421-475) - Switches active service, renders controls, and releases memory. Features **Visibility Sync** (L467-471) to ensure the caption container and result canvas are correctly toggled based on the service type.
 
 **`renderControls(serviceId)`** (L442-874) - Generates service-specific control panels. Uses isolated scope `{}` for cases to prevent `SyntaxError` (L780-820). **Blur Case** includes after-sliders; **Object Case** includes mode toggles and manual tools.
 
@@ -79,7 +79,7 @@ Main application controller for Image Boss - orchestrates the entire user interf
 
 **`resetWorkspace()`** (L987-1012) - Clears all state and returns to upload screen.
 
-**`processImage()`** (L1014-1085) - Lazy-loads processor, calls process(), handles results. Includes `finally` block (L1082) to hide sticky status bar.
+**`processImage()`** (L1085-1151) - Lazy-loads processor, calls process(), and routes results. Includes **Caption Routing** (L1127-1130) which populates UI labels with raw strings and stores the padded canvas for exports.
 
 **`smartSelect()`** (L1087-1137) - Handles interactive segmentation. Implements **Coordinate Scaling** (L1093-1100) to map points to the 1024px AI input dimension.
 
@@ -89,13 +89,13 @@ Main application controller for Image Boss - orchestrates the entire user interf
 
 **`getControlValues()`** (L1239-1287) - Extracts control values per service.
 
-**`downloadResult()`** (L1289-1371) - Exports result with **Service-Specific Suffixes**.
+**`downloadResult()`** (L1383-1463) - Exports result with **Service-Specific Suffixes**.
 
 **`init()` call** (L1374) - Application start.
 
 **Chat UI functions** (L1378-1411) - `setupChatUI()`, `removeChatUI()`, `handleChatSend()`.
 
-**Manual editing functions** (L1415-1513) - Includes `updateResultDisplay` (L1438-1464) which synchronizes `state.resultCanvas` (L1453).
+**`updateResultDisplay()`** (L1529-1606): Synchronizes UI with result. Features **View Toggle** (L1542).
 
 ## Code Details
 

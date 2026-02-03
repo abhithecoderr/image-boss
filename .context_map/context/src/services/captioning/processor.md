@@ -14,18 +14,18 @@ Main-thread interface for the Florence-2 image captioning service. Manages a bac
 
 ## Project Flow Connection
 - **In-take**: Uses `createImageBitmap` (L31) for zero-copy memory transfer to the worker.
-- **IPC Payload**: Passes `modelId` and `task` (e.g. `<MORE_DETAILED_CAPTION>`) to the worker (L72).
-- **Rendering**: `createCaptionOverlay` (L82-128) expands the canvas and draws a custom text bar at the bottom.
-- **Data Persistence**: Stores the raw caption in `resultCanvas.dataset.caption` (L125) for easier copying by other UI components.
+- **IPC Payload**: Passes `modelId` and `task` (e.g. `<MORE_DETAILED_CAPTION>`) to the worker (L59).
+- **Rendering**: `createCaptionOverlay` (L72-119) expands the canvas and draws a custom text bar at the bottom.
+- **Data Persistence**: Stores the raw caption in `resultCanvas.dataset.caption` (L116) for easier copying.
 
 ## File Code Structure
 
 **`getWorker()`** (L10-15): Singleton worker instance provider.
 
-**`process(sourceCanvas, options, onProgress)`** (L24-77): Main async entry point.
+**`process(sourceCanvas, options, onProgress)`** (L24-68): Main async entry point.
 - **Zero-Copy Transfer**: Invokes `createImageBitmap` and transfers the bitmap to the worker context.
-- **Dynamic Options**: Passes the selected `task` (from UI selector) to the worker.
+- **Result Return**: Resolves with `{ canvas, caption }` (L49) to support both UI display and downloads.
 
-**`createCaptionOverlay(sourceCanvas, caption)`** (L82-128):
-- **Layout**: Creates a padded canvas (`sourceCanvas.height + 60`).
-- **Rendering**: Draws original image and wraps text into the black bottom bar.
+**`createCaptionOverlay(sourceCanvas, caption)`** (L72-119):
+- **Typography**: Uses **24px Inter Bold** (L76).
+- **Dynamic Layout**: Calculates lines via `ctx.measureText` (L84-96) and computes `bottomBarHeight` dynamically (L97-101) based on text length.
