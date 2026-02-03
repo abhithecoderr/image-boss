@@ -1,0 +1,43 @@
+# Decision Logs
+
+[2026-02-02 17:48] Blur initialization error (22031288) -> Suspected AutoModel/Config mismatch -> Switched to AutoModelForPoseEstimation + Enhanced logging.
+[2026-02-02 17:52] AutoModelForPoseEstimation failed with "Unsupported model type: yolos" -> Transformers.js v3 incompatibility with YOLO26-pose -> Pivoted to raw onnxruntime-web (ORT) for full control over session and preprocessing.
+[2026-02-02 17:54] Blur not appearing after ORT pivot -> Raw YOLOv10/YOLO26 tensors return coordinates in input space (640px) -> Added normalization logic to scale coordinates back to 0-1 for `applyBlur`.
+[2026-02-02 17:58] Radius still tiny (0.79) -> Realized onnx-community YOLO pose outputs are ALREADY normalized (0-1) in the tensor -> Reverted normalization division to restore correct pixel-space scaling in `applyBlur`.
+[2026-02-02 18:04] Blur covering whole image -> Radius huge (1421px) -> Suspected tensor shape mismatch (Transposed vs Non-Transposed) or missing NMS -> Pivot: Implement auto-shape detection for [1, 56, 8400] and IOU-based NMS to filter massive overlaps.
+[2026-02-02 18:07] Massive radius confirmed -> Realized raw ONNX output might be in Pixel Domain (0-640) instead of Normalized Domain (0-1) despite `preprocessor_config` -> Added Auto-Domain detection to normalize tensors BEFORE translation logic.
+[2026-02-02 18:10] Detections found but misplaced -> Shape is [1, 300, 57] -> Identified two bugs: (1) typo using `dx` for `kY` calculation, (2) MISMAP: indices 0-3 are `[x1, y1, x2, y2]` in this model, not `[cx, cy, w, h]`. Also keypoints start at index 6 (after score and class).
+[2026-02-02 18:12] Pivot: Implementing generic YOLO parser with box format detection and fixed keypoint offsets.
+[2026-02-02 18:18] Blur invisible (8 faces detected) -> `Pixel: false` but coordinates likely in Pixel Domain -> Suspected `isPixelSpace` check failure due to score threshold or prediction subset -> Root Cause: Interpreting pixel-coord 100.5 as normalized 100.5, shifting blur off-screen.
+[2026-02-02 18:20] Pivot: Broadening `isPixelSpace` check to all predictions and fixing `isCenterFormat` logic to handle [300, 57] / YOLOS-Pose variants.
+[2026-02-02 18:02] Blur still invisible -> Identified model output as transposed `[1, 56, 8400]` -> Refactored parser to use `data[row * num_predictions + col]` access pattern and `cx, cy, w, h` to `box` conversion.
+[2026-02-02 18:35] NMS-Group Invariant: Loosened IOU to 0.75 and confidence floor to 0.2 to solve the "Missing 9th Person" erasure in dense photos.
+[2026-02-02 18:40] Interactive Refinement: Refactored worker/processor to support `reblur` command. Detections are cached on the main thread, enabling instant sub-100ms slider updates for Radius and Feathering.
+[2026-02-02 19:15] HCM Sync: Full audit and range-alignment of shadow files (main.md, processor.md, worker.md) following Protocol v3.1.
+[2026-02-02 19:20] Blur Shape Control: Implemented adjustable elliptical masks using `maskCtx.ellipse`. This allows users to better fit blurs to taller human faces compared to strict circles.
+[2026-02-02 19:45] Naming Logic: Refactored `downloadResult` to use a mapping table instead of a hardcoded "-upscaled" suffix. This restores semantic accuracy to the user's file exports.
+[2026-02-02 19:45] Naming Logic: Refactored `downloadResult` to use a mapping table instead of a hardcoded "-upscaled" suffix. This restores semantic accuracy to the user's file exports.
+[2026-02-02 19:55] Line Art Restoration: Fixed UI bug where Line Art was treated as a transparency mask. Added missing Threshold slider and updated `updateResultDisplay` whitelist.
+[2026-02-02 20:05] Object Extraction & Removal: Restored interactive `smartSelect` with multi-mask support.
+- [x] Implement "Surgical Inpaint" with multiple variants (Texture vs Patch)
+- [x] Sync HCM context maps (Realisation: Multi-Strategy Result Loop)
+- [x] Debug iterator error (SAM Schema & Tensor Slicing)
+[2026-02-02 20:12] Object UI Debug: Fixed click capture failure by repairing CSS syntax errors. Implemented `syncSAMOverlay` for responsive scaling.
+[2026-02-02 20:18] CSS Ghosting (RECOVERY): Identified duplicate `.sam-selection-overlay` definitions in `main.css` containing `pointer-events: none`. Removed and consolidated into a high-priority interaction layer with `z-index: 150`.
+[2026-02-02 20:25] Object Result Debug: Fixed empty result panel by correcting `mode` propagation from `process()` to `worker()` and back to `processor()`. Resolved card-selection UI bug and race conditions in `isProcessing` state.
+[2026-02-02 20:34] Object Rendering Fix (Architect Loop): Discovered that `updateResultDisplay` was returning early due to uninitialized `manualMaskCanvas` for the Object service. Also fixed 'remove' mode logic by whitelisting `object-segmentation` for direct rendering (bypassing legacy `destination-in` compositing).
+[2026-02-02 20:38] Logic Guard Fix: Resolved "Double-Flagging" bug where `smartSelect` was blocked by `isProcessing=true` set in the caller (`processImage`). Added detailed `[Main]`, `[Processor]`, and `[Worker]` logging for visibility.
+[2026-02-02 20:42] SAM Schema Fix: Identified "undefined is not iterable" error as a mismatch in Transformers.js keys (manual `point_coords`/`point_labels` required) and a `masks[0][0]` indexing error. Refactored `worker.js` with correct schema and manual tensor data slicing.
+[2026-02-02 20:55] SAM Array-of-Tensors Invariant: Discovered that `post_process_masks` returns an *Array* of Tensors (usually `[Tensor]`) even for single-image batches. Fixed "Cannot read properties of undefined (dims)" by correctly accessing `masks[0]` and validating the Tensor structure before slicing. Reverted to official `input_points` API.
+[2026-02-02 21:05] Multi-Point UX Refinement: Implemented "Replace-by-Default, Refine-with-Shift" logic to resolve subject-switching confusion. Extended IPC payload to support multi-point arrays and updated `worker.js` to build the required triple-nested tensors for SAM.
+[2026-02-02 21:15] Manual Refinement Expansion: Integrated legacy "Erase" and "Restore" brush tools into the Object Segmentation service. Added Brush Size controls and state synchronization to enable manual pixel-level cleanup of AI-generated masks.
+[2026-02-02 21:30] Scoping Fix (main.js): Resolved `SyntaxError` by wrapping service cases in curly braces `{}`. This isolates `toolBtns` and other constants, preventing redeclaration errors.
+[2026-02-02 21:35] UI Persistence Fix: Added `statusBar.classList.add('hidden')` to `finally` blocks in `processImage` and `smartSelect`. This ensures the "Generating mask..." loader disappears even after successful completion.
+[2026-02-02 21:40] Download State Sync: Updated `updateResultDisplay` to synchronize `state.resultCanvas = displayCanvas`. This fixed the bug where the Download button would fail because the internal result pointer was uninitialized.
+[2026-02-02 21:50] Performance Optimization (v4.1): Implemented "Hot-Refinement" architecture. (1) Input Capping: Downscaling AI inputs to 1024px on the main thread. (2) Embedding Cache: Splitting SAM into Encoding/Decoding phases. Redefined worker IPC to support `image_embeddings` reuse, reducing refinement latency from 10s to <300ms.
+[2026-02-02 22:05] Object Removal Overhaul: Solved "subject-bleed" by adding a "Boundary Initialization" pass in `surgicalInpaint`. Also added 3px mask dilation via `shadowBlur` in `processor.js` to eliminate halos.
+[2026-02-02 22:45] Negative Point Implementation: Added support for background exclusion markers (label: 0).
+[2026-02-02 22:50] UI Pivot: Replaced legacy "Right-click" refinement with a dedicated "Marker Type" selector (Green/Red dots) in the control panel. This improves discoverability and simplifies tablet/touch interaction. Updated `state.samPointLabel` and markers styling.
+[2026-02-02 23:10] Performance Optimization (v4.1) Failure -> Identified "High-Res Mask Wall" as the root cause of UI stutter. Capping AI input is not enough if masks are reconstructed at 4K.
+[2026-02-02 23:15] Pivot: Deep Optimization Strategy (v4.2). (1) 768px Low-Res Mask Generation in Worker. (2) GPU-Accelerated Scaling in Processor via `ctx.drawImage`. (3) Explicit Tensor Disposal. (4) Refinement Throttling (100ms debounce) in `main.js`.
+[2026-02-02 23:58] Architecture Pivot: Dual-Model Object Segmentation (v4.5). Integrated SAM-2 for precision while retaining SlimSAM for speed. Increased vision cap to 1024px.

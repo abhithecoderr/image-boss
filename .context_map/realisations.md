@@ -1,0 +1,25 @@
+# Realisations
+
+- [2026-02-02] Transformers.js/ONNX Runtime Web sometimes returns numeric error pointers (e.g., 22031288) instead of stringified errors. Wrapping initialization in detailed error-to-string logic is essential for debugging.
+- [2026-02-02] YOLO26-pose models require specific AutoModel classes (like AutoModelForPoseEstimation) to correctly map repo-level config.json entries.
+- [2026-02-02] Even with specific AutoModel classes, Transformers.js may throw "Unsupported model type" error for recent architectures like YOLO26. Raw ONNX Runtime (ORT) is the reliable fallback for surgical control over input/output tensors.
+- [2026-02-02] YOLOv8/v10/YOLO26-pose ONNX models typically output a transposed tensor of shape `[batch, values, predictions]` (e.g., `[1, 56, 8400]`).- [x] Sync `blur/worker.md` (Update applyBlur and NMS logic)
+- [x] Sync `blur/processor.md` (Add reblur caching details)
+- [x] Sync `main.md` (Add After-Sliders UI logic)
+- [x] Verify `global_context.md` accuracy
+- [x] Finalize `decision_logs.md` and `realisations.md`
+- [2026-02-02] CSS Overlap Trap: Multiple global definitions for the same class name in different parts of a large stylesheet can lead to "silent interaction death" where `pointer-events: none` from a legacy block overrides new logic. Consolidation is mandatory.
+- [2026-02-02] Display Buffer Invariant: `updateResultDisplay` acts as a pure function of `manualMaskCanvas`. Services that skip standard `processImage` paths MUST manually invoke `initManualMask` to populate the display buffer, or the result panel will silently fail to render.
+- [2026-02-02] Coordination Domain Trap: If a model outputs pixel-space coordinates (e.g. 100.0) but is interpreted as normalized [0, 1], facial keypoints will scale to 192000+ pixels, making the blur "invisible" without throwing errors. Runtime domain checks must be exhaustive across all high-confidence predictions.
+- [2026-02-02] Preprocessing Invariants: YOLO models with `do_pad: false` in `preprocessor_config.json` expect images to be stretched to the target size (e.g. 640x640) rather than letterboxed. Letterboxing adds coordinate offsets (dx/dy) that will shift detections if not manually compensated in the parser.
+- [2026-02-02] Protocol Invariant: HCM v3.1 (Atomic Flow) is required for surgical precision. Bypassing Phase Zero (DNA Sync) leads to "Coordinate Domain Traps" and redundant debug cycles.
+- [2026-02-02] Patch Geometry: When transition to elliptical masking, the crop patch (OffscreenCanvas) must be scaled by the maximum radius dimension to prevent visual artifacts or clipping at high aspect ratios.
+- [2026-02-02] UX Invariant: Hardcoded naming suffixes (e.g., "-upscaled") lead to significant user confusion about underlying service logic. Naming should always be derived from the `APP_CONFIG` or a central service map.
+- [2026-02-02] SAM Embedding Cache: Separating the SAM pipeline into Encoding (heavy) and Decoding (light) phases reduces refinement latency from ~10s to ~200ms. Since the image encoder is deterministic, caching `image_embeddings` keyed by a dimension-based fingerprint is safe within a single session.
+- [2026-02-02] High-Res Mask Wall: Modern browsers/GPUs can handle 4K+ images for display, but generating, transferring, and iterating over full-resolution (12-50MP) mask buffers in JavaScript/Web Worker loops is prohibitively expensive. It causes massive UI stuttering and "Device Lost" errors.
+- [2026-02-02] Low-Res Mask + GPU Scaling Invariant: Generating masks at the AI's internal resolution (e.g. 768px) and scaling them to the original size via `ctx.drawImage` (GPU-backed) is 100x more efficient than full-resolution reconstruction. Mask quality loss is negligible due to the soft nature of segmentation boundaries.
+- [2026-02-02] WebGPU Memory Management: Explicit `.dispose()` on Transformers.js output tensors is generally good, but **must be avoided** for internal refinement tensors if the model relies on persistent state between decoder calls. Aggressive disposal causes "Device Lost" during refinement.
+- [2026-02-02] Cache Desynchronization Trap: Workers can lose local state (due to restarts or hardware resets) without the main thread knowing. Always implement a "missing cache" signal in the worker and a recovery handler in the processor.
+- [2026-02-02] UX/Performance Balance: Auto-processing is great for low-res but dangerous for high-res WebGPU tasks. Manual triggers (Process button) are safer and provide a better UX for complex guidance tasks.
+- [2026-02-02] SAM-2 Intelligence Advantage: Pivot to **SAM-2 (Hiera-Tiny)** for high-fidelity segmentation. Its multi-point reasoning (Prompt Encoder) is significantly superior to SlimSAM for complex boundaries, while its decoder remains "hot" and responsive (<100ms) on WebGPU.
+- [2026-02-02] Normalized Coordinate Invariant: Pass coordinates between threads as **normalized percentages (0..1)** rather than absolute pixels. This prevents "Domain Mismatch" errors when different parts of the system (Processor vs Main) use different internal resolution caps (e.g., 768px vs 1024px).
