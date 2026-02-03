@@ -63,6 +63,9 @@ const elements = {
   btnDownload: document.getElementById('btn-download'),
   layerPicker: document.getElementById('layer-picker'),
   layersContainer: document.getElementById('layers-container'),
+  captionResultContainer: document.getElementById('caption-result-container'),
+  captionText: document.getElementById('caption-text'),
+  btnCopyCaption: document.getElementById('btn-copy-caption'),
   samOverlay: null,
   samRect: null,
 };
@@ -74,6 +77,29 @@ async function init() {
   renderNavigation();
   createSAMOverlay();
   setupEventListeners();
+
+  // Initialize Caption Copy Button
+  if (elements.btnCopyCaption) {
+    elements.btnCopyCaption.onclick = async () => {
+      const text = elements.captionText.textContent;
+      if (!text) return;
+
+      try {
+        await navigator.clipboard.writeText(text);
+        elements.btnCopyCaption.classList.add('copied');
+        const originalText = elements.btnCopyCaption.querySelector('span').textContent;
+        elements.btnCopyCaption.querySelector('span').textContent = 'Copied!';
+
+        setTimeout(() => {
+          elements.btnCopyCaption.classList.remove('copied');
+          elements.btnCopyCaption.querySelector('span').textContent = originalText;
+        }, 2000);
+        showToast('Caption copied to clipboard!', 'success');
+      } catch (err) {
+        showToast('Failed to copy', 'error');
+      }
+    };
+  }
 
   // Select first service by default
   selectService(SERVICE_ORDER[0]);
@@ -430,10 +456,19 @@ async function selectService(serviceId) {
     }
   }
 
-  // Reset result if we have an image
+  // Reset and refresh display if we have an image
   if (state.originalCanvas) {
-    elements.resultPlaceholder.classList.remove('hidden');
-    elements.btnDownload.disabled = true;
+    if (state.resultCanvas) {
+      updateResultDisplay();
+    } else {
+      elements.resultPlaceholder.classList.remove('hidden');
+      elements.btnDownload.disabled = true;
+      // Also hide caption container if selecting a non-caption service
+      if (serviceId !== 'captioning') {
+        elements.captionResultContainer?.classList.add('hidden');
+        elements.resultCanvas?.classList.remove('hidden');
+      }
+    }
   }
 }
 
@@ -650,10 +685,27 @@ function renderControls(serviceId) {
         </p>
       `;
 
-      // Update range values dynamically
+      // Update range values dynamically and refine
+      const upscaleRefineDebounced = debounce(async () => {
+        if (!state.resultCanvas || !state.processor || state.isProcessing) return;
+        const options = getControlValues();
+        try {
+            const refined = await state.processor.refine(options);
+            state.resultCanvas = refined;
+            initManualMask(state.resultCanvas);
+            setupComparisonSlider();
+        } catch (err) {
+            console.error('Upscaling refinement failed:', err);
+        }
+      }, 100);
+
       controls.querySelectorAll('input[type="range"]').forEach(input => {
         input.addEventListener('input', (e) => {
           e.target.nextElementSibling.textContent = e.target.value;
+
+          if (['upscale-details', 'upscale-brightness', 'upscale-saturation'].includes(e.target.id)) {
+            upscaleRefineDebounced();
+          }
         });
       });
       break;
@@ -891,6 +943,22 @@ function renderControls(serviceId) {
       });
       break;
 
+    case 'captioning': {
+      const tasks = SERVICES['captioning'].tasks || [];
+      controls.innerHTML = `
+        <div class="control-group">
+          <label class="control-label">Captioning Task</label>
+          <select id="captioning-task" class="control-select">
+            ${tasks.map(t => `<option value="${t.id}" ${t.id === '<MORE_DETAILED_CAPTION>' ? 'selected' : ''}>${t.name}</option>`).join('')}
+          </select>
+        </div>
+        <p style="color: var(--text-muted); font-size: 11px; margin-top: 8px;">
+          Choose the level of detail for the generated image description.
+        </p>
+      `;
+      break;
+    }
+
     case 'chat':
       controls.innerHTML = `
         <p class="control-label">One-on-One Chat</p>
@@ -1093,6 +1161,9 @@ async function processImage() {
     if (state.currentService.id === 'blur') {
       state.resultCanvas = result.canvas;
       showToast(`Blurred ${result.count} face(s)`, 'info');
+    } else if (state.currentService.id === 'captioning') {
+      state.resultCanvas = result.canvas; // For download
+      elements.captionText.textContent = result.caption;
     } else {
       state.resultCanvas = result;
     }
@@ -1165,18 +1236,45 @@ async function smartSelect() {
     elements.statusBar.classList.add('hidden');
   }
 }
-function handleObjectResults(result) {
-  const { options } = result;
+async function handleObjectResults(result) {
+  const { options: candidates, mode } = result;
 
-  // Update primary display with first option as default
-  initManualMask(options[0]);
-  updateResultDisplay();
-
-  // Show Option Picker
+  // Clear picker
   elements.layerPicker.classList.remove('hidden');
   elements.layersContainer.innerHTML = '';
 
-  options.forEach((canvas, idx) => {
+  let firstCard = null;
+
+  const renderCandidate = async (candidate, card) => {
+    try {
+      if (!card) {
+        // Global status for initial default render
+        updateProgress(elements.statusBar, 0.9, 'Generating high-res preview...');
+        elements.statusBar.classList.remove('hidden');
+      }
+      if (card) {
+        card.style.opacity = '0.5';
+        card.style.pointerEvents = 'none';
+      }
+
+      const renderedCanvas = await candidate.render(state.originalCanvas, mode);
+      initManualMask(renderedCanvas);
+      updateResultDisplay();
+
+      if (card) {
+        card.style.opacity = '1';
+        card.style.pointerEvents = 'auto';
+      } else {
+        elements.statusBar.classList.add('hidden');
+      }
+    } catch (err) {
+      console.error('[Main] Failed to render candidate:', err);
+      showToast('Render failed', 'error');
+    }
+  };
+
+  // 1. Build Selection Grid First (Instant)
+  candidates.forEach((candidate, idx) => {
     const card = document.createElement('div');
     card.className = 'layer-card' + (idx === 0 ? ' active' : '');
     card.style.cssText = `
@@ -1188,27 +1286,19 @@ function handleObjectResults(result) {
       cursor: pointer;
       border: 2px solid ${idx === 0 ? 'var(--accent)' : 'transparent'};
       position: relative;
+      transition: opacity 0.2s, border-color 0.2s;
     `;
 
-    // Scale canvas to fit thumbnail
-    const thumb = document.createElement('canvas');
-    thumb.width = 120;
-    thumb.height = 120;
-    const tCtx = thumb.getContext('2d');
-
-    // Draw original background if thumb is transparent and in extract mode
-    if (state.editing.activeMode === 'extract') {
-       tCtx.fillStyle = '#eee'; // Checkerboard placeholder
-       tCtx.fillRect(0,0,120,120);
-    }
-
-    tCtx.drawImage(canvas, 0, 0, 120, 120);
+    // Instant Thumbnail from candidate
+    const thumb = candidate.getThumbnail();
     card.appendChild(thumb);
 
     const label = document.createElement('div');
     label.textContent = `Option ${idx + 1}`;
     label.style.cssText = 'position: absolute; bottom: 0; left: 0; right: 0; background: rgba(0,0,0,0.5); color: white; font-size: 10px; text-align: center; padding: 2px;';
     card.appendChild(label);
+
+    if (idx === 0) firstCard = card;
 
     card.onclick = () => {
       elements.layersContainer.querySelectorAll('.layer-card').forEach(c => {
@@ -1217,12 +1307,16 @@ function handleObjectResults(result) {
       });
       card.classList.add('active');
       card.style.borderColor = 'var(--accent)';
-      initManualMask(canvas);
-      updateResultDisplay();
+
+      // Lazy render full-res on selection
+      renderCandidate(candidate, card);
     };
 
     elements.layersContainer.appendChild(card);
   });
+
+  // 2. Render first option in background (non-blocking for UI grid)
+  renderCandidate(candidates[0], firstCard);
 }
 function updateSAMMarkers() {
   if (!elements.samOverlay) return;
@@ -1311,6 +1405,10 @@ function getControlValues() {
 
     case 'line-art':
       options.threshold = parseInt(document.getElementById('lineart-threshold')?.value || 50);
+      break;
+
+    case 'captioning':
+      options.task = document.getElementById('captioning-task')?.value || '<MORE_DETAILED_CAPTION>';
       break;
   }
 
@@ -1473,20 +1571,37 @@ function updateResultDisplay() {
 
   if (!mask || !original) return;
 
-  displayCanvas.width = original.width;
-  displayCanvas.height = original.height;
+  // Support variable result sizes (e.g. captioning adds padding)
+  displayCanvas.width = mask.width;
+  displayCanvas.height = mask.height;
+
   const ctx = displayCanvas.getContext('2d');
   ctx.clearRect(0, 0, displayCanvas.width, displayCanvas.height);
 
-  if (state.currentService.id === 'blur' || state.currentService.id === 'upscaling' || state.currentService.id === 'line-art' || state.currentService.id === 'object-segmentation') {
-    // For blur/upscaling, the mask variable actually contains the full processed image
-    ctx.drawImage(mask, 0, 0);
+  if (state.currentService.id === 'captioning') {
+    // Text-only mode for captioning
+    displayCanvas.classList.add('hidden');
+    elements.captionResultContainer.classList.remove('hidden');
   } else {
-    // For background removal, composite original with the transparency mask
-    ctx.drawImage(original, 0, 0);
-    ctx.globalCompositeOperation = 'destination-in';
-    ctx.drawImage(mask, 0, 0);
-    ctx.globalCompositeOperation = 'source-over';
+    displayCanvas.classList.remove('hidden');
+    elements.captionResultContainer.classList.add('hidden');
+
+    if (state.currentService.id === 'blur' ||
+        state.currentService.id === 'upscaling' ||
+        state.currentService.id === 'line-art' ||
+        state.currentService.id === 'object-segmentation') {
+      // For these services, the result is a full replacement image (stored in mask canvas)
+      ctx.drawImage(mask, 0, 0);
+    } else {
+      // For background removal, composite original with the transparency mask
+      // Note: This assumes original and mask are same size
+      displayCanvas.width = original.width;
+      displayCanvas.height = original.height;
+      ctx.drawImage(original, 0, 0);
+      ctx.globalCompositeOperation = 'destination-in';
+      ctx.drawImage(mask, 0, 0);
+      ctx.globalCompositeOperation = 'source-over';
+    }
   }
 
   elements.resultPlaceholder.classList.add('hidden');

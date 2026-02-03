@@ -15,29 +15,27 @@ Main-thread orchestrator for the interactive object segmentation feature. Manage
   - `core/canvas-utils.js`: For inpainting and extraction compositing
 
 ## Project Flow Connection
-- **In-take Serialization**: Uses `createImageBitmap` (L58) for zero-copy transfer. Implements **1024px Input Capping** (L43) to support higher-fidelity SAM-2 inference.
+- **In-take Serialization**: Uses `createImageBitmap` (L101) for zero-copy transfer. Implements **1024px Input Capping** (L83) to support higher-fidelity SAM-2 inference.
 - **Model-Aware Fingerprinting**: Cache logic now incorporates `modelId` to prevent cross-model embedding collisions.
-- **Cache Signaling**: Tracks `lastImageFingerprint` (L35) to skip expensive bitmap transfers on refinement hits.
+- **Cache Signaling**: Tracks `lastImageFingerprint` (L77) to skip expensive bitmap transfers on refinement hits.
 - **Workflow Phase**: Passes an array of coordinate objects (`{x, y, label}`) to the worker for multi-point prompting.
-- **Result Reification**: `applyExtraction` (L101) and `applyRemoval` (L137) use **GPU-Accelerated Scaling**. They receive 768px mask buffers and project them to the original resolution using `ctx.drawImage`, bypassing the memory/CPU wall of high-res JS loop processing.
+- **Lazy Candidate Pattern (NEW)**: Returns `MaskCandidate` instances instead of canvases. This prevents blocking the main thread with three sequential extraction/inpainting operations.
+- **GPU-Accelerated Scaling**: `applyExtraction` (L161) and `applyRemoval` (L195) receive 768px mask buffers and project them to the original resolution using `ctx.drawImage`, bypassing the memory/CPU wall of high-res JS loop processing.
 
 ## File Code Structure
 
-**`getWorker()`** (L11-16): Standard singleton instantiator for the background worker.
+**`MaskCandidate` Class** (L22-80):
+- **Lazy Wrapper**: Encapsulates 1-channel mask data and metadata.
+- **`getThumbnail()`** (L43-69): Generates a 120px picker preview instantly using canvas scaling on the low-res mask.
+- **`render(sourceCanvas, mode)`** (L75-80): Orchestrates the heavy rendering only when selected by the user.
 
-**`process(sourceCanvas, options, onProgress)`** (L25-67):
-- **Point Mapping** (L26): Receives the full `points` array from `main.js`.
-- **IPC Listener** (L37-61): Manages the `progress` -> `complete` cycle. Maps raw mask data from the worker into specific `Extract` or `Remove` canvas results depending on the active mode (L47).
+**`process(sourceCanvas, options, onProgress)`** (L88-147):
+- **Return Type**: Now returns `options: MaskCandidate[]`.
+- **IPC Listener** (L128-142): Converts worker results into `MaskCandidate` instances.
 
-**`applyExtraction(sourceCanvas, result)`** (L72-103):
-- **Compositing** (L98): Draws the original image first, then uses `destination-in` with the scaled binary mask to "cut out" the object.
+**`applyExtraction(sourceCanvas, candidate)`** (L161-190):
+- **Compositing**: Draws the original image first, then uses `destination-in` with the scaled binary mask to "cut out" the object.
 
-**`applyRemoval(sourceCanvas, result)`** (L132-177):
-- **Mask Dilation** (L164-169): Uses `shadowBlur` to expand the AI mask slightly, eliminating halos.
-- **Inpainting Loop** (L174): Passes the dilated mask to `surgicalInpaint` for background synthesis.
-
-## Code Details
-
-**`points: options.points`** (L65): Payload injection. Unlike legacy services, this passes the entire refinement history to the model for higher accuracy.
-
-**`resultOptions.map`** (L47): Variation Generator. Converts the 3 AI-suggested masks into 3 distinct user-selectable candidates.
+**`applyRemoval(sourceCanvas, candidate)`** (L195-230):
+- **Mask Dilation**: Uses `shadowBlur` (L225) to expand the AI mask slightly, eliminating halos.
+- **Inpainting Loop**: Passes the dilated mask to `surgicalInpaint` for background synthesis.

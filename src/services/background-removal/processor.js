@@ -8,6 +8,7 @@ import { resizeCanvas } from '../../core/canvas-utils.js';
 
 let worker = null;
 let lastProgressTime = 0;
+let lastProcessedCanvas = null;
 const PROGRESS_THROTTLE = 100; // ms
 
 function getWorker() {
@@ -55,9 +56,8 @@ export async function predict(points, labels) {
     const w = getWorker();
 
     const handler = ({ data }) => {
-      const { type, result, error } = data;
       if (type === 'complete') {
-        resolve(createResultCanvas(result));
+        resolve(applyMaskToCanvas(lastProcessedCanvas, result));
       } else if (type === 'error') {
         reject(new Error(error));
       }
@@ -89,6 +89,7 @@ export async function process(sourceCanvas, options = {}, onProgress) {
 
     // Downsize large images to save RAM in worker (Max 2048px)
     const processedCanvas = resizeCanvas(sourceCanvas, 2048);
+    lastProcessedCanvas = processedCanvas;
     const originalWidth = sourceCanvas.width;
     const originalHeight = sourceCanvas.height;
 
@@ -106,7 +107,7 @@ export async function process(sourceCanvas, options = {}, onProgress) {
         }
       } else if (type === 'complete') {
         w.removeEventListener('message', messageHandler);
-        resolve(createResultCanvas(result));
+        resolve(applyMaskToCanvas(lastProcessedCanvas, result));
       } else if (type === 'error') {
         w.removeEventListener('message', messageHandler);
         reject(new Error(error));
@@ -141,7 +142,7 @@ export async function refine(options = {}) {
     const handler = ({ data }) => {
       const { type, result, error } = data;
       if (type === 'complete') {
-        resolve(createResultCanvas(result));
+        resolve(applyMaskToCanvas(lastProcessedCanvas, result));
       } else if (type === 'error') {
         reject(new Error(error));
       }
@@ -177,23 +178,45 @@ export async function clear(clearModels = false) {
 }
 
 /**
- * Create canvas from worker result (RGBA pixel data)
+ * Apply 1-channel mask result to a source canvas using GPU scaling
  */
-function createResultCanvas(result) {
-  const { pixelData, width, height } = result;
+function applyMaskToCanvas(sourceCanvas, maskResult) {
+  if (!sourceCanvas) return null;
+  const { pixelData, width: maskWidth, height: maskHeight } = maskResult;
 
-  const safeWidth = (Number.isFinite(width) && width > 0) ? Math.floor(width) : 1;
-  const safeHeight = (Number.isFinite(height) && height > 0) ? Math.floor(height) : 1;
-
+  // Create high-res result container (matching processed resolution)
   const resultCanvas = document.createElement('canvas');
-  resultCanvas.width = safeWidth;
-  resultCanvas.height = safeHeight;
+  resultCanvas.width = sourceCanvas.width;
+  resultCanvas.height = sourceCanvas.height;
   const ctx = resultCanvas.getContext('2d');
 
-  const clampedData = new Uint8ClampedArray(pixelData);
-  const imageData = new ImageData(clampedData, safeWidth, safeHeight);
+  // Create low-res mask canvas
+  const maskCanvas = document.createElement('canvas');
+  maskCanvas.width = maskWidth;
+  maskCanvas.height = maskHeight;
+  const mCtx = maskCanvas.getContext('2d');
 
-  ctx.putImageData(imageData, 0, 0);
+  // Convert 1-channel result to RGBA grayscale for masking
+  const maskData = new Uint8ClampedArray(maskWidth * maskHeight * 4);
+  const rawMask = new Uint8Array(pixelData);
+  for (let i = 0; i < rawMask.length; i++) {
+      const val = rawMask[i];
+      const offset = i * 4;
+      // We only strictly need the alpha channel for destination-in,
+      // but setting RGB to match ensures visibility if debugging.
+      maskData[offset] = val;
+      maskData[offset + 1] = val;
+      maskData[offset + 2] = val;
+      maskData[offset + 3] = val;
+  }
+  mCtx.putImageData(new ImageData(maskData, maskWidth, maskHeight), 0, 0);
+
+  // Composite: Copy original and mask it via GPU-accelerated drawImage
+  ctx.drawImage(sourceCanvas, 0, 0);
+  ctx.globalCompositeOperation = 'destination-in';
+  ctx.drawImage(maskCanvas, 0, 0, resultCanvas.width, resultCanvas.height);
+  ctx.globalCompositeOperation = 'source-over';
+
   return resultCanvas;
 }
 

@@ -59,7 +59,7 @@ The application follows a **Hub-and-Spoke** architecture centered on `main.js`.
 1. **Coordination**: `main.js` imports `config.js` to build the UI and route user actions.
 2. **Utility Access**: Both `main.js` and all service processors depend on `core/canvas-utils.js` for image manipulation and `core/ui-utils.js` for feedback.
 3. **Task Delegation**: When a service is activated, `main.js` calls the corresponding `processor.js`, which manages a dedicated `Web Worker` for non-blocking AI inference. For Blur/Pose services, the worker utilizes raw ONNX sessions to bypass high-level pipeline registries.
-4. **Data Loop**: Raw `ImageData` or `ImageBitmaps` are transferred to workers via IPC (postMessage), processed via Stretching or Letterboxing (model-specific), and back-transferred for final canvas rendering.
+4. **Data Loop**: Raw data (1-channel masks or ImageBitmaps) is transferred to workers via IPC. Processes utilize **GPU-Accelerated Scaling** (scaling low-res model outputs via `ctx.drawImage`), **Hot-Refinement** (caching AI results in workers), and **Lazy Candidate Rendering** (deferring full-res rendering until selection) to maintain 60fps UI performance even with multi-million pixel images.
 
 ## Each folder and file 2-3 line purpose description
 
@@ -75,10 +75,10 @@ The application follows a **Hub-and-Spoke** architecture centered on `main.js`.
 - **[ui-utils.js](file:///c:/projects/bg/my-ai-app/src/core/ui-utils.js)**: Reusable helpers for toast notifications, progress bars, and declarative DOM element creation.
 
 ### Service Modules (`src/services/`)
-- **[background-removal/](file:///c:/projects/bg/my-ai-app/src/services/background-removal/)**: Implements BiRefNet and MODNet for surgical background extraction.
-- **[upscaling/](file:///c:/projects/bg/my-ai-app/src/services/upscaling/)**: A tile-based implementation of Real-ESRGAN for 4x resolution enhancement.
-- **[blur/](file:///c:/projects/bg/my-ai-app/src/services/blur/)**: Uses YOLO-Pose (via raw ORT for tensor-level control) to detect faces and apply localized, feathered Gaussian blurs. Handles diverse tensor shapes ([1, 56, 8400] and [1, 300, 57]) with auto-domain detection.
-- **[object-segmentation/](file:///c:/projects/bg/my-ai-app/src/services/object-segmentation/)**: Interactive SlimSAM processor supporting multi-point refinement. Utilizes a **Hot-Refinement** architecture with an embedding cache. Implements a **Low-Res Masking + GPU Scaling** pattern (generating 768px masks and scaling via GPU-backed Canvas) to achieve buttery-smooth <100ms updates even on 8K images.
+- **[background-removal/](file:///c:/projects/bg/my-ai-app/src/services/background-removal/)**: Implements BiRefNet and MODNet. Uses **Raw 1-Channel Masking** and GPU-backed composition to enable near-instant threshold and feathering updates.
+- **[upscaling/](file:///c:/projects/bg/my-ai-app/src/services/upscaling/)**: A tile-based implementation of Real-ESRGAN for 4x resolution enhancement. Employs a **Hot-Refinement** cache to allow real-time adjustment of brightness, saturation, and detail intensity (<100ms) without re-running the heavy AI tiling loop.
+- **[blur/](file:///c:/projects/bg/my-ai-app/src/services/blur/)**: Uses YOLO-Pose (via raw ORT for tensor-level control) to detect faces and apply localized, feathered Gaussian blurs.
+- **[object-segmentation/](file:///c:/projects/bg/my-ai-app/src/services/object-segmentation/)**: Interactive SlimSAM and SAM-2 processors. Pioneer of the **Hot-Refinement** and **Low-Res Masking + GPU Scaling** patterns used throughout the app.
 - **[chat/](file:///c:/projects/bg/my-ai-app/src/services/chat/)**: Integrates local LLMs (LFM 1.2B) for conversational AI within the workspace.
 
 ## State Management

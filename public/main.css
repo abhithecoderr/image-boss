@@ -826,6 +826,65 @@ body {
 }
 
 /* ============================================
+   Caption Specific
+   ============================================ */
+.caption-result-container {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  padding: var(--space-xl);
+  background: var(--bg-secondary);
+  z-index: 5;
+  overflow-y: auto;
+  animation: fadeIn var(--transition-normal);
+}
+
+.caption-text {
+  flex: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 28px;
+  line-height: 1.4;
+  font-weight: 500;
+  color: var(--text-primary);
+  text-align: center;
+  max-width: 800px;
+  margin: 0 auto;
+  white-space: pre-wrap;
+}
+
+.btn-copy-caption {
+  align-self: flex-end;
+  padding: var(--space-sm) var(--space-md);
+  background: var(--bg-tertiary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  color: var(--text-secondary);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  margin-top: var(--space-md);
+}
+
+.btn-copy-caption:hover {
+  background: var(--bg-hover);
+  color: var(--text-primary);
+  border-color: var(--border-light);
+}
+
+.btn-copy-caption.copied {
+  background: var(--success);
+  color: #000;
+  border-color: var(--success);
+}
+
+/* ============================================
    Responsive
    ============================================ */
 @media (max-width: 768px) {

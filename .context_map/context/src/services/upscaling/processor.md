@@ -1,35 +1,39 @@
 # Context Map: upscaling/processor.js
 
 ## Purpose
-Main-thread controller for the image upscaling service. Manages the lifecycle of a dedicated Real-ESRGAN worker, handles zero-copy transfer of image bitmaps, and implements post-inference canvas reconstruction with automatic memory management for transferable objects.
+Main-thread controller for the image upscaling service. Manages the lifecycle of a dedicated Real-ESRGAN worker, handles zero-copy transfer of image bitmaps, and orchestrates "Hot-Refinement" tasks for instant filter updates without re-running AI inference.
 
 ## Imports
-- **worker.js**: Loaded as a dedicated Web Worker (L6)
+- **worker.js**: Loaded as a dedicated Web Worker
 
 ## Dependencies
 - **Used by**:
-  - `main.js`: Primary interface for resolution enhancement and detail sharpening
+  - `main.js`: Primary interface for resolution enhancement and slider-driven refinement.
 - **Uses**:
-  - `upscaling/worker.js`: Handles tile-based ONNX inference and frequency-separation filtering
+  - `upscaling/worker.js`: Handles tile-based ONNX inference and lightweight filter-pass refinement.
 
 ## Project Flow Connection
-- **Data Intake**: Converts `sourceCanvas` to an `ImageBitmap` (L29) for efficient off-thread processing.
-- **Worker Configuration**: Passes user-defined parameters (`scale`, `detailsIntensity`, `brightness`, `saturation`) and hard-coded tiling constants (`patchSize`, `padding`) to the worker (L62-68).
-- **Result Finalization**: Reconstructs a high-resolution canvas (L40-44) and immediately calls `result.close()` (L45) to release transferable GPU memory.
+- **Data Intake**: Converts `sourceCanvas` to an `ImageBitmap` (L30) for efficient off-thread processing.
+- **Worker Configuration**: Passes user-defined parameters (`scale`, `detailsIntensity`, `brightness`, `saturation`) to the worker.
+- **Refinement Flow**: `refine` (L77-106) enables sub-100ms updates by triggering the worker's cached filter branch.
+- **Result Finalization**: Reconstructs a high-resolution canvas (L41-45) and immediately calls `result.close()` (L46).
 
 ## File Code Structure
 
-**`getWorker()`** (L10-15): Standard singleton provider for the global upscaling worker.
+**`getWorker()`** (L11-16): Standard singleton provider for the global upscaling worker.
 
-**`process(sourceCanvas, options, onProgress)`** (L24-72):
-- **Transferable Logic** (L29, L70): Moves the image to the worker without copying.
-- **Message Router** (L31-53): Tracks standard `progress`, `complete`, and `error` IPC types.
-- **UI Feedback** (L47): Reports the final dimensions of the upscaled result to the status bar.
+**`process(sourceCanvas, options, onProgress)`** (L25-73):
+- **Transferable Logic** (L30, L71): Moves the image to the worker without copying.
+- **Message Router** (L32-54): Tracks `progress`, `complete`, and `error` IPC types.
+
+**`refine(options)`** (L77-106):
+- **Lightweight Update**: Sends a `type: 'refine'` message to the worker.
+- **Zero-Inference**: Resolves instantly using the worker's cached AI output.
 
 ## Code Details
 
-**`async function process()`** (L24-72): Injects a `const bitmap = await createImageBitmap(sourceCanvas)` call (L29). Moves the reference to the worker via `postMessage(payload, [payload.image])` (L70) to ensure zero-copy logic.
+**`async function process()`** (L25-73): Injects a `const bitmap = await createImageBitmap(resized)` call. Moves the reference to the worker via `postMessage`.
 
-**`result.close()` call** (L45): Executes inside the `complete` branch of the `onmessage` listener (L31-53). Essential for immediate RAM deallocation of the back-transferred `ImageBitmap`.
+**`result.close()` call** (L46, L96): Essential for immediate RAM deallocation of the back-transferred `ImageBitmap` in both `process` and `refine` listeners.
 
-**`patchSize: 64` parameter** (L67): Hardcoded within the `process` branch. Prevents ONNX runtime shader overflows by forcing the worker to use manageable tile dimensions.
+**`patchSize: 128` parameter** (L68): Forces the worker to use optimal tile dimensions for WebGPU stability.

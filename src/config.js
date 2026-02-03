@@ -101,13 +101,18 @@ export const SERVICES = {
     id: 'captioning',
     name: 'Caption',
     icon: '💬',
-    description: 'Generate image descriptions',
-    model: 'Xenova/vit-gpt2-image-captioning',
-    pipeline: 'image-to-text',
-    dtype: 'q8',
+    description: 'Detailed image descriptions (Florence-2)',
+    model: 'onnx-community/Florence-2-base-ft',
+    pipeline: 'custom',
+    dtype: 'fp16',
     device: 'webgpu',
     usesWorker: true,
     warmup: false,
+    tasks: [
+      { id: '<CAPTION>', name: 'Short Caption' },
+      { id: '<DETAILED_CAPTION>', name: 'Detailed Caption' },
+      { id: '<MORE_DETAILED_CAPTION>', name: 'Very Detailed' }
+    ]
   },
   'chat': {
     id: 'chat',

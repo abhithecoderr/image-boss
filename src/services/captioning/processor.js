@@ -22,11 +22,13 @@ function getWorker() {
  * @returns {Promise<HTMLCanvasElement>} Result canvas with caption overlay
  */
 export async function process(sourceCanvas, options = {}, onProgress) {
-  return new Promise((resolve, reject) => {
+  console.log('[Processor] Starting Florence-2 captioning...');
+
+  return new Promise(async (resolve, reject) => {
     const w = getWorker();
 
-    // Convert canvas to data URL
-    const imageData = sourceCanvas.toDataURL('image/png');
+    // Use zero-copy ImageBitmap transfer
+    const bitmap = await createImageBitmap(sourceCanvas);
 
     w.onmessage = ({ data }) => {
       const { type, progress, message, result, error } = data;
@@ -34,25 +36,34 @@ export async function process(sourceCanvas, options = {}, onProgress) {
       if (type === 'progress') {
         onProgress?.(progress, message);
       } else if (type === 'complete') {
-        onProgress?.(0.9, 'Rendering result...');
+        onProgress?.(0.95, 'Rendering result...');
 
-        // Create result canvas with caption overlay
+        // Generate the final display canvas (for download)
         const resultCanvas = createCaptionOverlay(sourceCanvas, result.caption);
 
-        // Log caption for easy copying
-        console.log('Generated Caption:', result.caption);
+        // Detailed log of structured vision result
+        console.log('[Processor] Florence-2 Result:', result.raw);
+        console.log('[Processor] Caption:', result.caption);
 
-        onProgress?.(1, 'Caption generated');
-        resolve(resultCanvas);
+        onProgress?.(1, 'Complete!');
+        resolve({ canvas: resultCanvas, caption: result.caption });
       } else if (type === 'error') {
+        console.error('[Processor] Worker Error:', error);
         reject(new Error(error));
       }
     };
 
     w.onerror = (err) => reject(new Error(err.message));
 
-    // Send image to worker
-    w.postMessage({ type: 'process', payload: { imageData } });
+    // Send to worker
+    w.postMessage({
+      type: 'process',
+      payload: {
+        bitmap,
+        modelId: options.modelId || 'onnx-community/Florence-2-base-ft',
+        task: options.task || '<MORE_DETAILED_CAPTION>'
+      }
+    }, [bitmap]);
   });
 }
 
@@ -60,48 +71,61 @@ export async function process(sourceCanvas, options = {}, onProgress) {
  * Create canvas with caption overlay
  */
 function createCaptionOverlay(sourceCanvas, caption) {
-  const padding = 60;
   const resultCanvas = document.createElement('canvas');
-  resultCanvas.width = sourceCanvas.width;
-  resultCanvas.height = sourceCanvas.height + padding;
   const ctx = resultCanvas.getContext('2d');
 
-  // Fill background
-  ctx.fillStyle = '#1a1a1a';
+  // Setup font for measurement
+  const fontSize = 24;
+  ctx.font = `600 ${fontSize}px Inter, -apple-system, sans-serif`;
+  const maxWidth = sourceCanvas.width - 80;
+
+  // 1. Calculate word wrap and required height
+  const words = caption.split(' ');
+  const lines = [];
+  let currentLine = '';
+
+  for (let word of words) {
+    const testLine = currentLine + word + ' ';
+    if (ctx.measureText(testLine).width > maxWidth && currentLine !== '') {
+      lines.push(currentLine.trim());
+      currentLine = word + ' ';
+    } else {
+      currentLine = testLine;
+    }
+  }
+  lines.push(currentLine.trim());
+
+  const lineHeight = fontSize * 1.4;
+  const textHeight = lines.length * lineHeight;
+  const verticalPadding = 60;
+  const bottomBarHeight = textHeight + verticalPadding;
+
+  // 2. Setup Canvas Dimensions
+  resultCanvas.width = sourceCanvas.width;
+  resultCanvas.height = sourceCanvas.height + bottomBarHeight;
+
+  // Re-apply font after resize
+  ctx.font = `600 ${fontSize}px Inter, -apple-system, sans-serif`;
+
+  // 3. Render
+  // Background
+  ctx.fillStyle = '#111111';
   ctx.fillRect(0, 0, resultCanvas.width, resultCanvas.height);
 
-  // Draw original image
+  // Original Image
   ctx.drawImage(sourceCanvas, 0, 0);
 
-  // Draw caption bar
-  ctx.fillStyle = 'rgba(0, 0, 0, 0.85)';
-  ctx.fillRect(0, sourceCanvas.height, resultCanvas.width, padding);
-
-  // Draw caption text
+  // Caption Text
   ctx.fillStyle = '#ffffff';
-  ctx.font = '16px Inter, sans-serif';
   ctx.textAlign = 'center';
   ctx.textBaseline = 'middle';
 
-  // Word wrap if needed
-  const maxWidth = resultCanvas.width - 40;
-  const words = caption.split(' ');
-  let line = '';
-  let y = sourceCanvas.height + padding / 2;
+  lines.forEach((line, i) => {
+    const y = sourceCanvas.height + (verticalPadding / 2) + (i * lineHeight) + (lineHeight / 2);
+    ctx.fillText(line, resultCanvas.width / 2, y);
+  });
 
-  for (let word of words) {
-    const testLine = line + word + ' ';
-    if (ctx.measureText(testLine).width > maxWidth && line !== '') {
-      ctx.fillText(line.trim(), resultCanvas.width / 2, y);
-      line = word + ' ';
-      y += 20;
-    } else {
-      line = testLine;
-    }
-  }
-  ctx.fillText(line.trim(), resultCanvas.width / 2, y);
-
-  // Store caption for copy functionality
+  // Store caption for copy functionality if needed
   resultCanvas.dataset.caption = caption;
 
   return resultCanvas;

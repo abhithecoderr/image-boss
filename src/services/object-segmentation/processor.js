@@ -18,15 +18,71 @@ function getWorker() {
 }
 
 /**
+ * Represents a segmentation variant that can be rendered on-demand.
+ * This "Lazy" approach prevents UI freezes by avoiding full-res rendering for non-selected candidates.
+ */
+class MaskCandidate {
+  constructor(maskResult) {
+    this.maskData = maskResult.maskData;
+    this.maskWidth = maskResult.maskWidth;
+    this.maskHeight = maskResult.maskHeight;
+    this.scaleIndex = maskResult.scaleIndex;
+  }
+
+  /**
+   * Fast thumbnail generation from low-res AI mask
+   */
+  getThumbnail() {
+    const thumbCanvas = document.createElement('canvas');
+    thumbCanvas.width = 120;
+    thumbCanvas.height = 120;
+    const tCtx = thumbCanvas.getContext('2d');
+
+    // Create a temporary low-res mask
+    const maskCanvas = document.createElement('canvas');
+    maskCanvas.width = this.maskWidth;
+    maskCanvas.height = this.maskHeight;
+    const mCtx = maskCanvas.getContext('2d');
+    const mImageData = mCtx.createImageData(this.maskWidth, this.maskHeight);
+    const mData = mImageData.data;
+
+    for (let i = 0; i < this.maskData.length; i++) {
+        const val = this.maskData[i];
+        const offset = i * 4;
+        mData[offset] = val;
+        mData[offset + 1] = val;
+        mData[offset + 2] = val;
+        mData[offset + 3] = val;
+    }
+    mCtx.putImageData(mImageData, 0, 0);
+
+    // Draw to 120px thumbnail
+    tCtx.drawImage(maskCanvas, 0, 0, 120, 120);
+    return thumbCanvas;
+  }
+
+  /**
+   * Full-resolution rendering (Extraction or Removal)
+   */
+  async render(sourceCanvas, mode) {
+    if (mode === 'remove') {
+      return applyRemoval(sourceCanvas, this);
+    } else {
+      return applyExtraction(sourceCanvas, this);
+    }
+  }
+}
+
+/**
  * Segment object at click point
  * @param {HTMLCanvasElement} sourceCanvas - Source image canvas
  * @param {Object} options - Processing options (includes clickX, clickY)
  * @param {Function} onProgress - Progress callback
- * @returns {Promise<HTMLCanvasElement>} Result canvas with segmentation highlight
+ * @returns {Promise<Object>} Result object with lazy candidates
  */
 export async function process(sourceCanvas, options = {}, onProgress) {
   const points = options.points || [];
-  console.log('[Processor] Starting process', { pointCount: points.length, mode: options.mode });
+  console.log('[Processor] Starting object process', { pointCount: points.length, mode: options.mode });
 
   return new Promise(async (resolve, reject) => {
     const w = getWorker();
@@ -35,16 +91,12 @@ export async function process(sourceCanvas, options = {}, onProgress) {
     const isSameModel = modelId === lastModelId;
     lastModelId = modelId;
 
-    // Performance Optimization: Cache Signaling
-    // Fingerprint based on dimensions should be sufficient for session-level caching
     const currentFingerprint = `${sourceCanvas.width}x${sourceCanvas.height}`;
     const isSameImage = currentFingerprint === lastImageFingerprint && isSameModel;
     lastImageFingerprint = currentFingerprint;
 
     let bitmap = null;
     if (!isSameImage) {
-        // Performance Optimization: Input Capping
-        // 1024px provides enough detail for professional segmentation while staying WebGPU-safe
         const MAX_DIM = 1024;
         let bridgeCanvas = sourceCanvas;
 
@@ -58,11 +110,7 @@ export async function process(sourceCanvas, options = {}, onProgress) {
             offscreen.getContext('2d').drawImage(sourceCanvas, 0, 0, w, h);
             bridgeCanvas = offscreen;
         }
-
-        // Zero-copy transfer: Create ImageBitmap and send as transferable
         bitmap = await createImageBitmap(bridgeCanvas);
-    } else {
-        console.log('[Processor] Cache hit: Skipping image transfer');
     }
 
     w.onmessage = ({ data }) => {
@@ -74,26 +122,13 @@ export async function process(sourceCanvas, options = {}, onProgress) {
         const { options: results, mode } = result;
         console.log('[Processor] Worker complete', { maskCount: results.length, mode });
 
-        // Generate options for each mask
-        const resultOptions = results.map((opt, idx) => {
-           console.log(`[Processor] Applying ${mode} for mask ${idx}...`);
-           if (mode === 'remove') {
-              return applyRemoval(sourceCanvas, opt);
-           } else {
-              return applyExtraction(sourceCanvas, opt);
-           }
-        });
-
-        resolve({ options: resultOptions });
+        // Optimization: Return Lazy Candidates instead of full-res canvases
+        const candidates = results.map(opt => new MaskCandidate(opt));
+        resolve({ options: candidates, mode });
       } else if (type === 'error') {
-        console.error('[Processor] Worker reported error:', error);
-
-        // Cache Recovery: If worker lost its cache (e.g. after crash), force re-upload next time
         if (error.includes('No image loaded') || error.includes('cached embeddings')) {
-           console.warn('[Processor] Cache desync detected. Invalidating fingerprint.');
            lastImageFingerprint = null;
         }
-
         reject(new Error(error));
       }
     };
@@ -115,21 +150,21 @@ export function clear() {
 }
 
 /**
- * Create transparent extraction
+ * Create transparent extraction (GPU Optimized)
  */
-function applyExtraction(sourceCanvas, result) {
-  const { maskData, maskWidth, maskHeight } = result;
+function applyExtraction(sourceCanvas, candidate) {
+  const { maskData, maskWidth, maskHeight } = candidate;
 
   const resultCanvas = document.createElement('canvas');
   resultCanvas.width = sourceCanvas.width;
   resultCanvas.height = sourceCanvas.height;
   const ctx = resultCanvas.getContext('2d');
 
-  // Create low-res mask canvas (Optimized)
-  const maskOverlay = document.createElement('canvas');
-  maskOverlay.width = maskWidth;
-  maskOverlay.height = maskHeight;
-  const moCtx = maskOverlay.getContext('2d');
+  // Create low-res mask canvas
+  const maskCanvas = document.createElement('canvas');
+  maskCanvas.width = maskWidth;
+  maskCanvas.height = maskHeight;
+  const moCtx = maskCanvas.getContext('2d');
   const moImageData = moCtx.createImageData(maskWidth, maskHeight);
   const moData = moImageData.data;
 
@@ -143,64 +178,57 @@ function applyExtraction(sourceCanvas, result) {
   }
   moCtx.putImageData(moImageData, 0, 0);
 
-  // Draw original and use GPU-accelerated scaling for the mask
+  // GPU-accelerated scaling and compositing
   ctx.drawImage(sourceCanvas, 0, 0);
   ctx.globalCompositeOperation = 'destination-in';
-  // Scaling the 768px mask to 4K+ happens on the GPU here
-  ctx.drawImage(maskOverlay, 0, 0, resultCanvas.width, resultCanvas.height);
+  ctx.drawImage(maskCanvas, 0, 0, resultCanvas.width, resultCanvas.height);
   ctx.globalCompositeOperation = 'source-over';
 
   return resultCanvas;
 }
 
 /**
- * Apply AI removal (stub for inpaint)
+ * Apply AI removal (Surgical Inpaint)
  */
-function applyRemoval(sourceCanvas, result) {
-    const { maskData, maskWidth, maskHeight } = result;
-    console.log(`[Processor] Applying Removal (Surgical Inpaint)...`);
+function applyRemoval(sourceCanvas, candidate) {
+    const { maskData, maskWidth, maskHeight } = candidate;
 
-    // 1. Create original copy
     const resultCanvas = document.createElement('canvas');
     resultCanvas.width = sourceCanvas.width;
     resultCanvas.height = sourceCanvas.height;
     const ctx = resultCanvas.getContext('2d');
     ctx.drawImage(sourceCanvas, 0, 0);
 
-    // 2. Create the mask canvas for the inpaint utility
     const maskCanvas = document.createElement('canvas');
     maskCanvas.width = resultCanvas.width;
     maskCanvas.height = resultCanvas.height;
     const mCtx = maskCanvas.getContext('2d');
 
-    const maskOverlay = document.createElement('canvas');
-    maskOverlay.width = maskWidth;
-    maskOverlay.height = maskHeight;
-    const moCtx = maskOverlay.getContext('2d');
+    const lowResMask = document.createElement('canvas');
+    lowResMask.width = maskWidth;
+    lowResMask.height = maskHeight;
+    const moCtx = lowResMask.getContext('2d');
     const moData = moCtx.createImageData(maskWidth, maskHeight);
     const data = moData.data;
     for(let i=0; i<maskData.length; i++) {
         const val = maskData[i];
         const offset = i * 4;
-        data[offset] = val; // red
-        data[offset+3] = val; // alpha
+        data[offset] = val;
+        data[offset+1] = val;
+        data[offset+2] = val;
+        data[offset+3] = val;
     }
     moCtx.putImageData(moData, 0, 0);
 
-    // Mask Dilation & GPU Scaling (Optimized)
-    // We dilate on the low-res version (faster) then scale.
+    // Dilation & Scaling
     mCtx.save();
-    mCtx.shadowBlur = 2; // Reduced for low-res domain
-    mCtx.shadowColor = 'red';
-    // Single draw to low-res mask container (mCtx is the full-res container)
-    // Actually, let's dilate on the low-res and then draw to mCtx
-    mCtx.drawImage(maskOverlay, 0, 0, maskCanvas.width, maskCanvas.height);
+    mCtx.shadowBlur = 4; // Adjusted for better subject separation
+    mCtx.shadowColor = 'black';
+    mCtx.drawImage(lowResMask, 0, 0, maskCanvas.width, maskCanvas.height);
     mCtx.restore();
 
-    // 3. Apply Surgical Inpaint
     surgicalInpaint(resultCanvas, maskCanvas);
-
     return resultCanvas;
 }
 
-export default { process };
+export default { process, clear };

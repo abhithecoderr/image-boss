@@ -14,6 +14,8 @@ let gpuFailed = false;
 // Raw mask data (Float32Array) for instant refinement
 let lastMask = null;
 let lastImage = null; // Store for refinement (RawImage)
+let lastMaskWidth = 0;
+let lastMaskHeight = 0;
 
 
 /**
@@ -224,7 +226,6 @@ async function loadModel(modelId, onProgress) {
       });
       segmenters[modelId] = { segmenter, device: segmenter.device, processor: null, isManual: false };
     }
-
     console.log(`✓ ${modelId} loaded (${segmenters[modelId].device}, ${dtype})`);
     return segmenters[modelId];
 
@@ -249,6 +250,7 @@ async function loadModel(modelId, onProgress) {
     throw err;
   }
 }
+
 
 self.onmessage = async ({ data }) => {
   const { type, payload } = data;
@@ -292,87 +294,18 @@ self.onmessage = async ({ data }) => {
 
         // Store raw probabilities for refinement
         lastMask = new Float32Array(mask.data);
+        lastMaskWidth = maskWidth;
+        lastMaskHeight = maskHeight;
 
-        // Compose RGBA output (image + mask as alpha)
-        const width = image.width;
-        const height = image.height;
-        const channels = image.channels || 3;
-        const imgData = image.data;
-        const rgba = new Uint8Array(width * height * 4);
-
-        // Scale mask to image dimensions if needed
-        const scaleX = maskWidth / width;
-        const scaleY = maskHeight / height;
-
-        for (let y = 0; y < height; y++) {
-          for (let x = 0; x < width; x++) {
-            const i = y * width + x;
-            const idx = i * 4;
-            const srcIdx = i * channels;
-
-            // Sample mask with bilinear interpolation for much smoother edges
-            const gx = x * scaleX;
-            const gy = y * scaleY;
-            const gxi = Math.floor(gx);
-            const gyi = Math.floor(gy);
-            const gxf = gx - gxi;
-            const gyf = gy - gyi;
-
-            const x0 = gxi;
-            const x1 = Math.min(gxi + 1, maskWidth - 1);
-            const y0 = gyi;
-            const y1 = Math.min(gyi + 1, maskHeight - 1);
-
-            const c00 = lastMask[y0 * maskWidth + x0];
-            const c10 = lastMask[y0 * maskWidth + x1];
-            const c01 = lastMask[y1 * maskWidth + x0];
-            const c11 = lastMask[y1 * maskWidth + x1];
-
-            const rawAlpha = c00 * (1 - gxf) * (1 - gyf) +
-                             c10 * gxf * (1 - gyf) +
-                             c01 * (1 - gxf) * gyf +
-                             c11 * gxf * gyf;
-
-            // Sharpen edges to reduce fuzziness from upscaling
-            const alpha = sharpenEdgeValue(rawAlpha) * 255;
-
-            rgba[idx] = imgData[srcIdx];
-            rgba[idx + 1] = imgData[srcIdx + 1];
-            rgba[idx + 2] = imgData[srcIdx + 2];
-            rgba[idx + 3] = alpha;
-          }
-        }
-
-        res = { data: rgba, width, height, channels: 4 };
-
-        // Store a properly interpolated mask for refinement (bilinear, matching alpha)
-        const resizedMask = new Float32Array(width * height);
-        for (let y = 0; y < height; y++) {
-          for (let x = 0; x < width; x++) {
-            const gx = x * scaleX;
-            const gy = y * scaleY;
-            const gxi = Math.floor(gx);
-            const gyi = Math.floor(gy);
-            const gxf = gx - gxi;
-            const gyf = gy - gyi;
-
-            const x0 = gxi;
-            const x1 = Math.min(gxi + 1, maskWidth - 1);
-            const y0 = gyi;
-            const y1 = Math.min(gyi + 1, maskHeight - 1);
-
-            const c00 = lastMask[y0 * maskWidth + x0];
-            const c10 = lastMask[y0 * maskWidth + x1];
-            const c01 = lastMask[y1 * maskWidth + x0];
-            const c11 = lastMask[y1 * maskWidth + x1];
-
-            resizedMask[y * width + x] = c00 * (1 - gxf) * (1 - gyf) +
-                                          c10 * gxf * (1 - gyf) +
-                                          c01 * (1 - gxf) * gyf +
-                                          c11 * gxf * gyf;
-          }
-        }
-        lastMask = resizedMask;
+        // Note: We no longer compose RGBA here to save CPU/transfer time.
+        // We return the raw mask at its native resolution.
+        res = {
+            data: lastMask, // Use the raw probabilities
+            width: maskWidth,
+            height: maskHeight,
+            channels: 1,
+            isRaw: true
+        };
 
         disposeTensors(pixel_values);
         if (mask !== rawOutput) disposeTensors(mask); // BiRefNet sigmoid result
@@ -382,9 +315,13 @@ self.onmessage = async ({ data }) => {
         const output = await segmenter(image); // Get soft mask without thresholding
         res = output[0];
         lastMask = extractAlphaMask(res);
+        lastMaskWidth = res.width;
+        lastMaskHeight = res.height;
       }
 
       let finalData = res.data;
+      const maskWidth = res.width;
+      const maskHeight = res.height;
 
       // Only apply thresholding/binary mask if NOT using a manual soft-mask path
       if (!isManual) {
@@ -396,31 +333,29 @@ self.onmessage = async ({ data }) => {
         // If logit mask, use logit-style threshold.
         const t = isUint8 ? maskThreshold * 255 : (maskThreshold - 0.5) * 10.0;
 
-        // Apply initial manual thresholding to the alpha channel
-        for (let i = 0; i < res.width * res.height; i++) {
-            finalData[i * res.channels + (res.channels - 1)] = lastMask[i] > t ? 255 : 0;
+        // Apply initial manual thresholding
+        for (let i = 0; i < maskWidth * maskHeight; i++) {
+            finalData[i] = lastMask[i] > t ? 255 : 0;
         }
       }
 
       // Apply feathering if requested on first pass
       if (payload.feathering > 0) {
-          const width = res.width;
-          const height = res.height;
-          const channels = res.channels;
-          const mask = extractAlphaMask(res);
-          const feathered = applyFeathering(mask, width, height, payload.feathering);
-
-          // Update alpha channel in output
-          for (let i = 0; i < width * height; i++) {
-              finalData[i * channels + (channels - 1)] = feathered[i];
-          }
+          const feathered = applyFeathering(finalData, maskWidth, maskHeight, payload.feathering);
+          finalData.set(feathered);
       }
 
-      payload.bitmap.close(); // Important: Release memory promptly
+      payload.bitmap.close();
       self.postMessage({
         type: 'complete',
-        result: { pixelData: res.data.buffer, width: res.width, height: res.height }
-      }, [res.data.buffer]);
+        result: {
+            pixelData: finalData.buffer,
+            width: maskWidth,
+            height: maskHeight,
+            channels: 1, // Significant optimization: Returning 1-channel mask only
+            isRaw: true
+        }
+      }, [finalData.buffer]);
     }
 
     if (type === 'refine') {
@@ -428,24 +363,21 @@ self.onmessage = async ({ data }) => {
         throw new Error('No image loaded to refine.');
       }
 
-      const { threshold = 0.5, maskThreshold = 0.5, feathering = 0 } = payload;
-      const { width, height, channels = 3, data: imgData } = lastImage;
+      const { maskThreshold = 0.5, feathering = 0 } = payload;
+      const width = lastMaskWidth;
+      const height = lastMaskHeight;
 
-      const rgba = new Uint8Array(width * height * 4);
       let mask = new Uint8Array(width * height);
 
-      // 1. Thresholding (Scale threshold based on data type)
+      // 1. Thresholding
       const isUint8 = lastMask instanceof Uint8Array;
-
-      // Determine if this is a probability mask [0-1] or a logit mask (SAM 2)
-      // Usually logits are strongly negative/positive, while probabilities are 0-1.
-      const isProbability = !isUint8 && lastMask[0] >= 0 && lastMask[0] <= 1 && lastMask[lastMask.length - 1] <= 1;
+      const isProbability = !isUint8 && lastMask[0] >= 0 && lastMask[0] <= 1;
 
       let t;
       if (isUint8) {
         t = maskThreshold * 255;
       } else if (isProbability) {
-        t = maskThreshold; // [0-1]
+        t = maskThreshold;
       } else {
         t = (maskThreshold - 0.5) * 10.0; // SAM 2 Logits
       }
@@ -459,22 +391,16 @@ self.onmessage = async ({ data }) => {
         mask = applyFeathering(mask, width, height, feathering);
       }
 
-      // 3. Assemble RGBA
-      for (let i = 0; i < width * height; i++) {
-        const idx = i * 4;
-        const srcIdx = i * channels;
-        const alpha = mask[i];
-
-        rgba[idx] = imgData[srcIdx];
-        rgba[idx + 1] = imgData[srcIdx + 1];
-        rgba[idx + 2] = imgData[srcIdx + 2];
-        rgba[idx + 3] = alpha;
-      }
-
       self.postMessage({
         type: 'complete',
-        result: { pixelData: rgba.buffer, width, height }
-      }, [rgba.buffer]);
+        result: {
+            pixelData: mask.buffer,
+            width,
+            height,
+            channels: 1,
+            isRaw: true
+        }
+      }, [mask.buffer]);
     }
 
     if (type === 'clear') {
