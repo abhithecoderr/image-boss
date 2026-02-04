@@ -1,40 +1,54 @@
 # Context Map: chat/processor.js
 
-## Purpose
-Main-thread controller for the AI Chat service. Manages the lifecycle of a persistent Web Worker running a Large Language Model (LiquidAI/LFM). Implements a singleton worker pattern with a static callback registry to ensure seamless token streaming and initialization feedback.
+## 1. Purpose
+Management layer for the local AI chat service. Orchestrates the Liquid LFM worker lifecycle, manages token streaming callbacks, and provides a singleton bridge for the main thread.
 
-## Imports
-- **worker.js**: Loaded as a module-style Web Worker (L1)
+## 2. Imports
+- **worker.js?worker**: The background thread implementation.
 
-## Dependencies
-- **Used by**:
-  - `main.js`: Primary interface for the conversational AI feature
+## 3. Dependencies
 - **Uses**:
-  - `chat/worker.js`: Handles heavy LLM inference and token-by-token streaming
+  - [worker.js](file:///c:/projects/bg/my-ai-app/src/services/chat/worker.js): Background LLM thread.
+- **Used by**:
+  - `main.js`: Primary UI orchestrator for the chat feature.
 
-## Project Flow Connection
-- **Worker Initialization**: `getWorker` (L16-50) attaches a permanent `onmessage` listener to prevent message drops during state transitions between loading and generating.
-- **State Management**: Uses a centralized `callbacks` object (L5-10) to map worker IPC events (`token`, `loaded`, `complete`) to the currently active UI Promise.
-- **Lifecycle**: `dispose` (L84-88) explicitly signals the worker to release GPU/RAM resources when the user leaves the chat interface.
+## 4. State Management
 
-## File Code Structure
+- **worker (Variable/Worker)**
+  - **Syntax**: `let worker = null`
+  - **Purpose**: Lazy-loaded singleton for the chat thread.
 
-**`callbacks` registry** (L5-10): Static object holding current `onProgress`, `onToken`, `resolve`, and `reject` functions.
+- **callbacks (Variable/Object)**
+  - **Syntax**: `const callbacks = { ... }`
+  - **Purpose**: Router for asynchronous worker events (Progress, Tokens, Resolve/Reject).
 
-**`getWorker()`** (L16-50): Singleton instantiator.
-- **Message Router** (L21-47): Switch statement that routes IPC data based on `type`.
-- **Stream Support** (L33-37): Immediately forwards individual tokens to the `onToken` callback for "typewriter" effects in the UI.
+## 5. Project Flow
+1. **Bootstrap**: `load()` is called to initialize the LLM.
+2. **Registration**: The processor implements a **Permanent Message Listener** (L21). Unlike other processors that attach/detach listeners per-call, the chat processor maintains a single listener that routes messages to the specialized `callbacks` object.
+3. **Execution**: When `generate()` is called, the processor routes the prompt to the worker.
+4. **Synthesis (Streaming)**:
+   - As tokens arrive from the worker, the `onToken` callback is triggered.
+   - This allows `main.js` to update the chat bubble character-by-character.
+5. **Collection**: Once generation is complete, the `resolve` callback returns the full string for final archival.
 
-**`load(options, onProgress)`** (L52-62): Async function to trigger model downloading and WebGPU compilation.
+## 6. Code Structure
 
-**`generate(prompt, onToken, options)`** (L65-82): Primary prompt interface. Sets up the token callback and resolves with the final clean text output.
+- **`getWorker` (Function)**
+  - **Name (Type)**: getWorker (Singleton Helper)
+  - **Syntax**: `function getWorker()`
+  - **Working**: Implements the permanent listener strategy. This is a critical design decision to prevent "orphaned tokens" during the transition between the `load` and `generate` operations.
 
-**`dispose()`** (L84-88): Sends a `dispose` message to the worker for resource cleanup.
+- **`load` (Function)**
+  - **Name (Type)**: load (Lifecycle)
+  - **Syntax**: `export function load(options = {}, onProgress)`
+  - **Working**: Triggers the 700MB model download. Returns a Promise that resolves when the model is in VRAM.
 
-## Code Details
+- **`generate` (Function)**
+  - **Name (Type)**: generate (Inference Trigger)
+  - **Syntax**: `export function generate(prompt, onToken, options = {})`
+  - **Working**: The bridge for the auto-regressive generation loop. Subscribes the UI's `onToken` handler to the internal worker message stream.
 
-**`getWorker()` singleton listener** (L20): Attaches a permanent `onmessage` callback using a `switch` statement once per application session.
-
-**`callbacks[type](data.content)` call** (L35-36): Event dispatcher. Routes streaming `token` messages directly to the UI-bound generator without pending a `generate` Promise.
-
-**`new Promise((res, rej) => ...)` wrapper** (L57-59, L70-72): Bridging logic in `load` and `generate` methods. Maps anonymous worker responses back to localized async controls.
+## 7. Points To Consider
+- **Listener Uniqueness**: Consider attaching the listener only once (L52) to prevent double-typing bugs and duplicated token output in the UI.
+- **Worker Recycling**: Note that calling `load` with a new `modelId` (L53) will automatically replace the previous instance, managing memory efficiently.
+- **Main Thread Smoothness**: Consider using `requestAnimationFrame` for rendering token updates (L54) if high-frequency IPC messages start to cause UI lag.

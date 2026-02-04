@@ -490,6 +490,13 @@ function renderControls(serviceId) {
             <option value="birefnet" selected>RMBG Pro (BiRefNet)</option>
           </select>
         </div>
+        <div id="inspyrenet-accuracy-group" class="control-group hidden">
+          <label class="control-label">RMBG Ultra Accuracy</label>
+          <select id="bg-accuracy" class="control-select">
+            <option value="normal" selected>Normal (512px - Stable)</option>
+            <option value="high">High (768px - Detailed)</option>
+          </select>
+        </div>
         <div class="control-group">
           <label class="control-label">Output Format</label>
           <select id="bg-format" class="control-select">
@@ -538,6 +545,22 @@ function renderControls(serviceId) {
           </div>
         </div>
       `;
+
+      const modelSelect = document.getElementById('bg-model');
+      const accuracyGroup = document.getElementById('inspyrenet-accuracy-group');
+
+      const updateAccuracyVisibility = () => {
+        if (modelSelect && modelSelect.value === 'inspyrenet') {
+          accuracyGroup?.classList.remove('hidden');
+        } else {
+          accuracyGroup?.classList.add('hidden');
+        }
+      };
+
+      if (modelSelect) {
+        modelSelect.addEventListener('change', updateAccuracyVisibility);
+        updateAccuracyVisibility();
+      }
 
       // Update range values dynamically and refine
       const refineDebounced = debounce(async () => {
@@ -1374,6 +1397,7 @@ function getControlValues() {
       options.threshold = parseFloat(document.getElementById('bg-threshold')?.value || 0.5);
       options.maskThreshold = parseFloat(document.getElementById('bg-mask-threshold')?.value || 0.5);
       options.feathering = parseInt(document.getElementById('bg-feathering')?.value || 0);
+      options.accuracyMode = document.getElementById('bg-accuracy')?.value || 'normal';
       break;
 
     case 'compression':

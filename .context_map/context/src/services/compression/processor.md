@@ -1,35 +1,36 @@
 # Context Map: compression/processor.js
 
-## Purpose
-Main-thread interface for the smart image compression service. Leverages the `browser-image-compression` library to reduce file size while maintaining visual quality. Orchestrates the conversion between Canvas, Blob, and File objects required for the compression pipeline.
+## 1. Purpose
+Management layer for the image compression service. Provides an interface to reduce image file size via iterative quality and resolution scaling. Utilizes the browser-image-compression library for thread-safe execution.
 
-## Imports
-- **browser-image-compression**: Third-party library for efficient client-side compression.
-- **../../core/canvas-utils.js**: `loadImage`, `imageToCanvas`, `canvasToBlob` - Data format conversion utilities.
+## 2. Imports
+- **browser-image-compression**: Third-party library for the compression engine.
+- **../../core/canvas-utils.js**: `loadImage`, `imageToCanvas`, `canvasToBlob` - helpers for data type interop.
 
-## Dependencies
-- **Used by**:
-  - `main.js`: Provides compression features in the UI
+## 3. Dependencies
 - **Uses**:
-  - `browser-image-compression`: Executes the actual compression logic in a background worker (L32).
+  - Browser Workers (via the library).
+- **Used by**:
+  - `main.js`: Main UI orchestrator.
 
-## Project Flow Connection
-- **In-take Serialization**: `canvasToBlob` (L22) and `new File` (L23) prepare the image for the library's input requirements.
-- **Transformation Phase**: `imageCompression` (L39) runs the core algorithm with user-defined constraints (max size/initial quality).
-- **Result Re-conversion**: `loadImage` (L45) and `imageToCanvas` (L46) transform the compressed Blob back into a display-ready `HTMLCanvasElement`.
+## 4. State Management
+(Empty - Stateless utility service)
 
-## File Code Structure
+## 5. Project Flow
+1. **Preparation**: Converts the `sourceCanvas` into a JPEG `Blob` (L22) to satisfy the library's file-based API.
+2. **Configuration**: Maps UI quality and size presets to the library's configuration object.
+3. **Execution**: Triggers the `imageCompression` worker pass. Tracks progress percentage for the main status bar.
+4. **Resynthesis**: Converts the compressed `Blob` back into an `HTMLImageElement` and finally back to a `Canvas` for workspace display.
 
-**`process(sourceCanvas, options, onProgress)`** (L16-53):
-- **Option Extraction** (L17): Defaults to 1MB max size and 80% quality.
-- **Library Configuration** (L29-37): Sets `maxWidthOrHeight` (L31) to match original dimensions and enables multi-threaded processing via `useWebWorker: true` (L32).
-- **Progress Feedback** (L34-36): Maps the library's internal progress percentage into the application's granular status updates.
-- **Metrics Calculation** (L48-50): Determines the percentage reduction in file size (L48) for the final UI toast.
+## 6. Code Structure
 
-## Code Details
+- **`process` (Function)**
+  - **Name (Type)**: process (Primary Entry Point)
+  - **Syntax**: `export async function process(sourceCanvas, options, onProgress)`
+  - **Working**:
+    - **Resolution Invariant**: Always preserves the original aspect ratio by setting `maxWidthOrHeight` to the source dimensions (L31).
+    - **Reduction Reporting**: Calculates final byte-savings percentage (L48) to provide meaningful feedback to the user.
 
-**`new File([blob], 'image.jpg')` conversion** (L22-23): Prepares the raw `sourceCanvas` blob for the library's `imageCompression` entry point.
-
-**`onProgress: (p) => ...` lambda** (L35): Callback defined inside the options object. Multiplies raw library values by `0.006` to align with the global progress bar mapping.
-
-**`loadImage(resultBlob)` sequence** (L44-47): Executes after compression. Re-hydrates the byte-optimized result into a visible `HTMLCanvasElement` using `canvas-utils.js` helpers.
+## 7. Points To Consider
+- **Intermediate Format**: Consider that the processor utilizes a JPEG intermediate (L22) for the compression pass because it provides the most predictable size reduction across different source types.
+- **Progress Scaling**: Note that the library's 0-100% progress is scaled to the 0.2-0.8 app range (L35) to prevent the status bar from jumping during pre- and post-processing steps.

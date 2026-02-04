@@ -10,6 +10,14 @@ let worker = null;
 let lastProgressTime = 0;
 let lastProcessedCanvas = null;
 const PROGRESS_THROTTLE = 100; // ms
+let resultCanvas = null;
+let resultCtx = null;
+let maskCanvas = null;
+let maskCtx = null;
+let maskImageData = null;
+let maskData32 = null;
+let cachedMaskWidth = 0;
+let cachedMaskHeight = 0;
 
 function getWorker() {
   if (!worker) {
@@ -56,6 +64,7 @@ export async function predict(points, labels) {
     const w = getWorker();
 
     const handler = ({ data }) => {
+      const { type, result, error } = data;
       if (type === 'complete') {
         resolve(applyMaskToCanvas(lastProcessedCanvas, result));
       } else if (type === 'error') {
@@ -127,6 +136,7 @@ export async function process(sourceCanvas, options = {}, onProgress) {
         threshold: options.threshold,
         maskThreshold: options.maskThreshold,
         feathering: options.feathering,
+        accuracyMode: options.accuracyMode,
       }
     }, [bitmap]);
   });
@@ -184,38 +194,44 @@ function applyMaskToCanvas(sourceCanvas, maskResult) {
   if (!sourceCanvas) return null;
   const { pixelData, width: maskWidth, height: maskHeight } = maskResult;
 
-  // Create high-res result container (matching processed resolution)
-  const resultCanvas = document.createElement('canvas');
-  resultCanvas.width = sourceCanvas.width;
-  resultCanvas.height = sourceCanvas.height;
-  const ctx = resultCanvas.getContext('2d');
-
-  // Create low-res mask canvas
-  const maskCanvas = document.createElement('canvas');
-  maskCanvas.width = maskWidth;
-  maskCanvas.height = maskHeight;
-  const mCtx = maskCanvas.getContext('2d');
-
-  // Convert 1-channel result to RGBA grayscale for masking
-  const maskData = new Uint8ClampedArray(maskWidth * maskHeight * 4);
-  const rawMask = new Uint8Array(pixelData);
-  for (let i = 0; i < rawMask.length; i++) {
-      const val = rawMask[i];
-      const offset = i * 4;
-      // We only strictly need the alpha channel for destination-in,
-      // but setting RGB to match ensures visibility if debugging.
-      maskData[offset] = val;
-      maskData[offset + 1] = val;
-      maskData[offset + 2] = val;
-      maskData[offset + 3] = val;
+  // Create result canvas at source resolution to avoid additional scaling
+  if (!resultCanvas || resultCanvas.width !== sourceCanvas.width || resultCanvas.height !== sourceCanvas.height) {
+    resultCanvas = document.createElement('canvas');
+    resultCanvas.width = sourceCanvas.width;
+    resultCanvas.height = sourceCanvas.height;
+    resultCtx = resultCanvas.getContext('2d');
   }
-  mCtx.putImageData(new ImageData(maskData, maskWidth, maskHeight), 0, 0);
 
-  // Composite: Copy original and mask it via GPU-accelerated drawImage
-  ctx.drawImage(sourceCanvas, 0, 0);
-  ctx.globalCompositeOperation = 'destination-in';
-  ctx.drawImage(maskCanvas, 0, 0, resultCanvas.width, resultCanvas.height);
-  ctx.globalCompositeOperation = 'source-over';
+  // Draw original image first
+  resultCtx.setTransform(1, 0, 0, 1, 0, 0);
+  resultCtx.clearRect(0, 0, resultCanvas.width, resultCanvas.height);
+  resultCtx.drawImage(sourceCanvas, 0, 0);
+
+  // Create mask canvas at the lower resolution to reduce memory usage
+  if (!maskCanvas || cachedMaskWidth !== maskWidth || cachedMaskHeight !== maskHeight) {
+    maskCanvas = document.createElement('canvas');
+    maskCanvas.width = maskWidth;
+    maskCanvas.height = maskHeight;
+    maskCtx = maskCanvas.getContext('2d');
+    maskImageData = maskCtx.createImageData(maskWidth, maskHeight);
+    maskData32 = new Uint32Array(maskImageData.data.buffer);
+    cachedMaskWidth = maskWidth;
+    cachedMaskHeight = maskHeight;
+  }
+
+  // Convert 1-channel result to ImageData for the mask
+  const rawMask = pixelData instanceof Uint8Array ? pixelData : new Uint8Array(pixelData);
+  for (let i = 0; i < rawMask.length; i++) {
+    maskData32[i] = (rawMask[i] << 24) | 0x00ffffff;
+  }
+  maskCtx.putImageData(maskImageData, 0, 0);
+
+  // Apply the mask using globalCompositeOperation
+  resultCtx.globalCompositeOperation = 'destination-in';
+  // Scale the mask canvas to fit the full result canvas dimensions
+  resultCtx.drawImage(maskCanvas, 0, 0, resultCanvas.width, resultCanvas.height);
+  // Reset composite operation to default
+  resultCtx.globalCompositeOperation = 'source-over';
 
   return resultCanvas;
 }

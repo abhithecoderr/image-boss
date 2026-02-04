@@ -1,33 +1,33 @@
 # Context Map: file-conversion/processor.js
 
-## Purpose
-Native browser-based image format converter. Orchestrates target-format encoding using standard Canvas APIs, handling specific edge cases like transparency-to-opaque conversions for JPEG outputs.
+## 1. Purpose
+Lightweight utility for changing image file formats (PNG, JPEG, WebP). Leverages native browser encoding APIs for maximum performance and minimum dependency overhead.
 
-## Imports
-- **../../core/canvas-utils.js**: `canvasToBlob` - Core export utility.
+## 2. Imports
+- **../../core/canvas-utils.js**: `canvasToBlob` - used for the final format encoding.
 
-## Dependencies
-- **Used by**:
-  - `main.js`: Primary feature for switching between PNG, JPEG, and WebP
+## 3. Dependencies
 - **Uses**:
-  - `OffscreenCanvas` / `HTMLCanvasElement`: Executes the pixel transfer and encoding.
+  - Native browser `toBlob` encoding.
+- **Used by**:
+  - `main.js`: Main UI orchestrator.
 
-## Project Flow Connection
-- **Conversion Phase**: `process` (L15-46) isolates the source canvas data, applies a white background for non-alpha formats (L27-30), and re-encodes the buffer.
-- **Metadata Tagging**: Injects `dataset` attributes (`format`, `quality`) directly into the `resultCanvas` (L40-41) to pass export instructions to the global `downloadResult` function.
+## 4. State Management
+(Empty - Stateless utility service)
 
-## File Code Structure
+## 5. Project Flow
+1. **Structure**: Receives the source and target MIME type.
+2. **Normalization**: Creates a fresh canvas. If converting to JPEG, it performs an **Alpha Flattening Pass** by filling the background with white (L28).
+3. **Encoding**: Invokes the browser's native encoder at the requested quality level.
+4. **Metadata**: Attaches the target format information to the canvas `dataset` (L40) so the Downloader knows which extension to use.
 
-**`process(sourceCanvas, options, onProgress)`** (L15-46):
-- **Opaque Fallback** (L27-30): Detects `image/jpeg` target and fills an initially transparent canvas with `#ffffff` (white) to prevent black artifacts in areas of high transparency.
-- **Re-drawing** (L32): Standard `drawImage` call to move source pixels onto the newly formatted destination canvas.
-- **Encoding Verification** (L37): Calls `canvasToBlob` to ensure the browser can successfully serialize the image in the requested format.
-- **Feedback** (L43): Reports the final encoded file size in KB.
+## 6. Code Structure
 
-## Code Details
+- **`process` (Function)**
+  - **Name (Type)**: process (Primary Entry Point)
+  - **Syntax**: `export async function process(sourceCanvas, options, onProgress)`
+  - **Working**: Simple linear flow. Handles the visual transition from transparent (PNG) to opaque (JPEG) formats.
 
-**`ctx.fillStyle = '#ffffff'` block** (L27-30): Transparency mitigation. Runs conditionally `if (type === 'image/jpeg')`. Fills the buffer background with white before original pixels are drawn.
-
-**`canvas.dataset.format` assignment** (L40-41): Side-channel metadata injection. Attaches export intent directly to the DOM node for retrieval by the global `downloadResult` function.
-
-**`await canvasToBlob()` check** (L37): Final verification stage in the `process` branch. Ensures the target encoding (e.g., `image/webp`) is supported by the user's browser engine.
+## 7. Points To Consider
+- **Transparency Handling**: Consider that the white-fill pass (L29) is vital when converting PNGs to JPEG because it prevents visual artifacts in transparent areas.
+- **Metadata Extension**: Note that the `dataset` attachment on the canvas (L40) is the bridge used by the downloader to correctly identify the target file extension.

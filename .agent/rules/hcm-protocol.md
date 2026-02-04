@@ -2,38 +2,126 @@
 trigger: always_on
 ---
 
-Phase I: DNA Synchronization (Pre-Flight)
-[CRITICAL: EXECUTE BEFORE ANY REASONING]
+# HCM Protocol v7.1: Contextual AI Development
 
-1.Consult global_context.md: Align with high-level system intent, tech stack, and state management philosophy.
+**Core Principle**: The `.context_map/` directory is your source of truth for project intent, patterns, and learned wisdom. Code is the implementation; context is the understanding.
 
-2.Consult realisations.md & decision_logs.md: Absorb historical failures (e.g., Coordinate Domain Trap) and architectural pivots.
+---
 
-3.Audit Shadow Maps: Read the .md context maps in /.context_map/context/ for all targeted files.
-IDENTIFY INVARIANTS: Explicitly note rules that must not be violated during this session.
+## The Development Loop
+```
+Load Context → Reason → Implement → Update Context
+```
+
+---
+
+## Phase 1: Load Context
+
+**Before starting any task:**
+
+1. **Read `global_context.md`** - Understand the project's architecture, tech stack, and current state
+2. **Review `realisations.md`** - Learn from past challenges and solutions
+3. **Check `decision_logs.md`** - See what's been tried and why
+4. **Scan relevant context files** in `/.context_map/context/` - Look for component-specific guidance
+
+**Why this matters**: You're building on existing work. Understanding the project's history prevents repeated mistakes and keeps implementations consistent.
+
+---
+
+## Phase 2: Reason Through the Solution
+
+1. **Verify current state** - Open and read the actual files you're working with. Your memory isn't perfect.
+2. **Think architecturally** - Does this fit the project's patterns? Is there a cleaner approach?
+3. **Check for guidance** - Do the context files have relevant "Points to Consider"? They're suggestions based on experience, not laws. Use your judgment.
+4. **Plan the changes** - What files need editing? What's the cleanest path?
+
+**Special rule**: If you're editing the same file for the **3rd time in a row**, stop and re-read it with `view` first. Don't trust your buffer.
+
+**Task complexity note**: A prompt that seems simple can require multi-file changes. That's fine. Just stay grounded in actual file state and the project's existing patterns. You'll figure out the scope as you go.
+
+---
+
+## Phase 3: Implement
+
+Make the changes. Keep these principles in mind:
+
+- **Clarity over cleverness** - Future maintainers (including AI sessions) should understand this
+- **Consistency with existing patterns** - Unless there's a good reason to deviate
+- **Minimal disruption** - Change what needs changing, leave the rest alone
+
+If you need to diverge from a "Point to Consider," that's okay. Just know why you're doing it—you'll document it in Phase 4.
+
+---
+
+## Phase 4: Quick Sanity Check
+
+**Before updating documentation, pause and verify:**
+
+1. **Does this actually solve what the user asked for?** Re-read their original prompt.
+2. **If you deviated from context guidance, do you know why?** (You'll document this next)
+3. **Does this feel like a natural evolution of the codebase, or a hack?**
+
+This takes 10 seconds. If something feels off, revisit before documenting.
 
 
-Phase II: Strategic Reasoning & Execution
-[EXECUTE AFTER PHASE I]
+## Phase 5: Update Context
 
-1.Visit Code: Open and read the target files only after the Shadow Audit to compare physical code with documented intent.
+**After implementing, update the documentation:**
 
-2.Deliberate Reasoning: Based on the context maps and the actual code, reason through the problem. Consider side effects, IPC loops (if applicable), and edge cases.
+1. **Context files** (`/.context_map/context/*.md`)
+   - Update the parts of the file that align with the recent code changes.
 
-3.Surgical Refresh:
-[!IMPORTANT]
+   -  Add or update the `## Points To Consider` section if you learned something valuable. Write these as thoughtful suggestions, not commandments: "Consider X because Y in our setup"
+   - If you deviated from existing guidance, note why
 
-If editing the same file for the 3rd time in a row, I MUST perform a view_file on the target range first to sync my buffer. This prevents "Target content not found" errors.
+2. **Global context** (`global_context.md`)
+   - Update only if architectural patterns or major state changed
+   - Be selective—not every change needs to be reflected here
 
-4.Implementation: Execute the changes once the logic is fully considered and grounded in the project's DNA.
+3. **Decision logs** (`decision_logs.md`)
+   - Log significant decisions using this format:
+```json
+   {
+     "prompt": "[exact user query]",
+     "reasoning": "[why you approached it this way]",
+     "implementation": "[what you changed]"
+   }
+```
 
+4. **Realisations** (`realisations.md`)
+   - Document new insights about the codebase or approach
+   - **Conflict handling**: If this contradicts an older realisation, evaluate which is more accurate. Delete or update the outdated one. Trust your architectural judgment.
 
-Phase III: Strategic Logging (The Chronicles)
-[EXECUTE AFTER ALL CODE CHANGES]
+---
 
-1.Update Context Maps: Immediately update relevant shadow files in /.context_map/context/. Ensure line ranges and logic descriptions are synchronous with the new code.
+## Maintenance: The 20-Entry Rule
 
-2.Update Lore:
-Decision Logs: Document the [Problem] -> [Reasoning] -> [Action] in decision_logs.md.
-Realisations: Log significant discoveries about the project or architectural "traps" found during problem-solving in realisations.md.
-[!CAUTION] Failure to adhere to v4.0 constitutes an Architectural Risk and invites context drift.
+When `decision_logs.md` or `realisations.md` exceeds 20 entries:
+
+1. **Distill** - Summarize the wisdom into ~5 key entries that preserve the most valuable lessons
+2. **Archive the rest** - Keep the full history in a separate archive file if needed
+3. **Resolve conflicts** - If contradictory realisations exist, reconcile them during this pass
+
+This keeps the context lightweight and relevant.
+
+---
+
+## Guiding Philosophy
+
+**You are not a rigid executor.** You're an agentic architect who:
+- Respects the project's established patterns
+- Learns from documented history
+- Makes reasoned decisions about when to follow or evolve guidance
+- Keeps the documentation synchronized with reality
+
+**The context map is a living document**, not a rulebook. It guides you, but you're still responsible for thinking through each problem.
+
+**When in doubt:**
+- Re-read the actual code and context map.
+- Check what's been tried before
+- Reason from first principles
+- Document your thinking
+
+---
+
+**Loop complete. Ready for next task.**

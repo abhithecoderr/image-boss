@@ -1,41 +1,65 @@
 # Context Map: object-segmentation/processor.js
 
-## Purpose
-Main-thread orchestrator for the interactive object segmentation feature. Manages the communication with a SlimSAM worker, handles multi-point coordinate mapping (refinement dots), and implements a result-grid system for selecting between multiple extraction or removal variations. Integrates `surgicalInpaint` for the removal path.
+## 1. Purpose
+Management layer for interactive object segmentation. Orchestrates the two-stage SAM lifecycle (Encoding/Decoding) and provides specialized rendering modes for Object Extraction (transparent PNG) and Object Removal (Inpainting).
 
-## Imports
-- **worker.js**: Loaded as a dedicated Web Worker (L6)
-- **surgicalInpaint**: Utility for removal mode (L7)
+## 2. Imports
+- **worker.js?worker**: The background thread implementation.
+- **../../core/canvas-utils.js**: `surgicalInpaint` - used for the removal workflow.
 
-## Dependencies
-- **Used by**:
-  - `main.js`: Primary interface for the "Object Select" tool
+## 3. Dependencies
 - **Uses**:
-  - `object-segmentation/worker.js`: Executes SlimSAM inference and mask generation
-  - `core/canvas-utils.js`: For inpainting and extraction compositing
+  - [worker.js](file:///c:/projects/bg/my-ai-app/src/services/object-segmentation/worker.js): Background AI thread.
+- **Used by**:
+  - `main.js`: Main UI orchestrator.
 
-## Project Flow Connection
-- **In-take Serialization**: Uses `createImageBitmap` (L101) for zero-copy transfer. Implements **1024px Input Capping** (L83) to support higher-fidelity SAM-2 inference.
-- **Model-Aware Fingerprinting**: Cache logic now incorporates `modelId` to prevent cross-model embedding collisions.
-- **Cache Signaling**: Tracks `lastImageFingerprint` (L77) to skip expensive bitmap transfers on refinement hits.
-- **Workflow Phase**: Passes an array of coordinate objects (`{x, y, label}`) to the worker for multi-point prompting.
-- **Lazy Candidate Pattern (NEW)**: Returns `MaskCandidate` instances instead of canvases. This prevents blocking the main thread with three sequential extraction/inpainting operations.
-- **GPU-Accelerated Scaling**: `applyExtraction` (L161) and `applyRemoval` (L195) receive 768px mask buffers and project them to the original resolution using `ctx.drawImage`, bypassing the memory/CPU wall of high-res JS loop processing.
+## 4. State Management
 
-## File Code Structure
+- **worker (Variable/Worker)**
+  - **Syntax**: `let worker = null`
+  - **Purpose**: Lazy-loaded singleton for the SAM worker thread.
 
-**`MaskCandidate` Class** (L22-80):
-- **Lazy Wrapper**: Encapsulates 1-channel mask data and metadata.
-- **`getThumbnail()`** (L43-69): Generates a 120px picker preview instantly using canvas scaling on the low-res mask.
-- **`render(sourceCanvas, mode)`** (L75-80): Orchestrates the heavy rendering only when selected by the user.
+- **lastImageFingerprint (Variable/String)**
+  - **Syntax**: `let lastImageFingerprint = null`
+  - **Purpose**: Tracks image dimensions to avoid redundant 2-second Encoding passes on the same image.
 
-**`process(sourceCanvas, options, onProgress)`** (L88-147):
-- **Return Type**: Now returns `options: MaskCandidate[]`.
-- **IPC Listener** (L128-142): Converts worker results into `MaskCandidate` instances.
+## 5. Project Flow
+1. **Identification**: `main.js` delivers a click-point coordinate (normalized 0-1).
+2. **Analysis (The Fingerprint Check)**: The processor checks if the image has changed. If so, it triggers the "Heavy Encoder" in the worker.
+3. **Delegation**: Point data is sent to the worker via IPC.
+4. **Synthesis (Interaction Loop)**:
+   - Worker returns a triplet of **MaskCandidates**.
+   - These are "Lazy" objects—they generate fast 120px thumbnails for the sidecar UI (Layer Picker) without the overhead of full-res rendering.
+5. **Execution (The Render Mode)**:
+   - **Extraction**: Applies `destination-in` masking to create a cutout.
+   - **Removal**: Injects the mask into `surgicalInpaint` to "heal" the background.
+6. **Return**: The final result canvas is returned to the workspace.
 
-**`applyExtraction(sourceCanvas, candidate)`** (L161-190):
-- **Compositing**: Draws the original image first, then uses `destination-in` with the scaled binary mask to "cut out" the object.
+## 6. Code Structure
 
-**`applyRemoval(sourceCanvas, candidate)`** (L195-230):
-- **Mask Dilation**: Uses `shadowBlur` (L225) to expand the AI mask slightly, eliminating halos.
-- **Inpainting Loop**: Passes the dilated mask to `surgicalInpaint` for background synthesis.
+- **`MaskCandidate` (Class)**
+  - **Name (Type)**: MaskCandidate (Data Object)
+  - **Purpose**: Wraps a single AI mask result for lazy rendering.
+  - **Methods**:
+    - `getThumbnail()`: Low-res preview generation.
+    - `render()`: Full-res final synthesis.
+
+- **`process` (Function)**
+  - **Name (Type)**: process (Primary Entry Point)
+  - **Syntax**: `export async function process(sourceCanvas, options = {}, onProgress)`
+  - **Working**: Orchestrates the fingerprinting and worker communication. Includes an internal downscaling step (1024px) for the AI bridge to prevent encoder timeouts.
+
+- **`applyExtraction` (Function)**
+  - **Name (Type)**: applyExtraction (Visual Core)
+  - **Syntax**: `function applyExtraction(sourceCanvas, candidate)`
+  - **Working**: Performs high-speed binary masking. Uses a low-res mask canvas upscaled via GPU `drawImage` to fit the source.
+
+- **`applyRemoval` (Function)**
+  - **Name (Type)**: applyRemoval (Advanced Synthesis)
+  - **Syntax**: `function applyRemoval(sourceCanvas, candidate)`
+  - **Working**: Implements **Dilation Pre-Pass**. It applies a small shadow blur to the mask before inpainting to ensure the "Edge Halos" of the removed object are completely consumed by the diffusion algorithm.
+
+## 7. Points To Consider
+- **Lazy Candidate Strategy**: Consider waiting for a user selection before rendering full-resolution canvases (L63) to prevent unnecessary RAM spikes from the SAM triplet.
+- **Fingerprint Hygiene**: Note that correctly nullifying `lastImageFingerprint` (L64) after an error is important to ensure subsequent calls can successfully re-initialize embeddings.
+- **Bleed Prevention**: Consider using a dilation pre-pass in `applyRemoval` (L65) to ensure object "halos" are fully consumed by the inpainting algorithm.

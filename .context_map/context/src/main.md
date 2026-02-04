@@ -1,136 +1,116 @@
 # Context Map: main.js
 
-## Purpose
-Main application controller for Image Boss - orchestrates the entire user interface, service navigation, image processing workflows, and feature coordination. Acts as the central hub connecting user interactions with service processors, managing the complete lifecycle from file upload through processing to download.
+## 1. Purpose
+Main application controller for Image Boss. Orchestrates the user interface, service navigation, image processing workflows, and high-level feature coordination. Acts as a Hub-and-Spoke orchestrator connecting user events with specialized workers.
 
-## Imports
-- **config.js**: `SERVICES`, `SERVICE_ORDER` - Service definitions and navigation order
-- **core/canvas-utils.js**: `loadImage`, `imageToCanvas`, `downloadCanvas`, `canvasToBlob` - Image manipulation utilities
-- **core/ui-utils.js**: `showToast`, `updateProgress` - User feedback functions
-- **Dynamic imports**: Service processors loaded on-demand via `./services/${serviceId}/processor.js`
+## 2. Imports
+- **config.js**: `SERVICES`, `SERVICE_ORDER` - Registry of available AI tools and UI ordering.
+- **core/canvas-utils.js**: `loadImage`, `imageToCanvas`, etc. - Fundamental pixel tools.
+- **core/ui-utils.js**: `showToast`, `updateProgress` - User feedback and status reporting.
 
-## Dependencies
-- **Used by**: Entry point - no files import this (initialized on page load)
-- **Uses**: All service processor modules (background-removal, compression, file-conversion, upscaling, blur, chat)
-- **DOM elements**: Manages all UI elements via `elements` object
-- **Connects**: Coordinates between config, canvas utils, UI utils, and dynamically loaded service processors
+## 3. Dependencies
+- **Uses**:
+  - All sub-processors in `src/services/*/processor.js`.
+  - Core utility modules in `src/core/`.
+  - DOM APIs for event handling and workspace rendering.
+- **Used by**:
+  - Entry point - Bootstrapped by `init()` on page load within `index.html`.
 
-## Project Flow Connection
-- **Entry point**: Initializes on page load via `init()`
-- **Service coordinator**: Loads appropriate processor modules based on user service selection
-- **UI orchestrator**: Manages workspace visibility, control panels, canvas displays, and user interactions
-- **Processing pipeline**: Original image → Service processor → Result canvas → Download
-- **State manager**: Maintains application state across service switches and processing operations
+## 4. State Management
 
-## State Management
+- **state (Object)**
+  - **Syntax**: `const state = { ... }`
+  - **Purpose**: Centralized application state.
+  - **Namespace Details**:
+    - `currentService`: Active service config from `config.js`.
+    - `originalImage`/`originalCanvas`: Reference to the intake source.
+    - `resultCanvas`: Pointer to the final processed output.
+    - `processor`: Instance of the dynamically loaded service processor.
+    - `isProcessing`: Mutex flag to block concurrent AI tasks.
+    - `editing`: Sub-state for manual brush tools (masking).
+    - `comparison`: Sub-state for before/after slider position.
+    - `samPoints`: Array of coordinates for interactive segmenters.
 
-**`state` object** - Centralized application state tracking all runtime data
-- `currentService`: Active service configuration from SERVICES
-- `originalImage`/`originalCanvas`: Source image references (HTMLImageElement and Canvas)
-- `resultCanvas`: Processed output canvas
-- `processor`: Currently loaded service module instance
-- `isProcessing`: Boolean flag preventing concurrent operations
-- `editing`: Manual refinement state object
-  - `activeTool`: Current tool ('none', 'erase', 'restore')
-  - `brushSize`: Pixel size for manual editing
-  - `isDrawing`: Mouse down tracking
-  - `manualMaskCanvas`/`manualMaskCtx`: Editable mask layer
-  - `lastSavedMask`: Snapshot for undo operations
-- `originalFile`: File metadata (name, type)
-- `comparison`: Upscaling slider state (active flag, position percentage)
-- `samPoints`: Array of `{x, y, label}` refinement coordinates
-- `samPointLabel`: Active tool mode for SAM (1=Positive/Green, 0=Negative/Red)
+- **elements (Object)**
+  - **Syntax**: `const elements = { ... }`
+  - **Purpose**: Static and dynamic DOM element cache to minimize `document.getElementById` calls.
 
-**`elements` object** - DOM element references for all interactive components
-- Navigation and upload containers
-- Canvas elements (original, result, placeholder)
-- Control panels, buttons, and action elements
-- Overlay elements (SAM selection, layer picker)
+## 5. Project Flow
+1. **Bootstrap**: `init()` triggers navigation rendering and sets up global listeners (drag-and-drop, service switching).
+2. **Intake Pipeline**: User uploads a file; `handleFile` validates the type, loads the image via `canvas-utils`, and initializes the side-by-side workspace.
+3. **Service Logic**:
+   - `selectService` triggers a UI layout refresh based on `config.js`.
+   - `loadProcessor` performs a dynamic `import()` of the required service code.
+4. **Processing Loop**: `processImage` gathers UI parameters, invokes the processor's async `process()` method, and channels progress callbacks to the status bar.
+5. **Synthesis & Feedback**: The processor returns a result buffer; `updateResultDisplay` synchronizes the UI, handles specific display modes (like captions or grids), and enables the download interface.
+6. **Export**: `downloadResult` applies service-specific file naming and quality optimizations before triggering the browser's download prompt.
 
-## File Code Structure
+## 6. Code Structure
 
-**Imports** (L6-8)
+- **`debounce` (Function)**
+  - **Syntax**: `function debounce(func, timeout = 300)`
+  - **Purpose**: Limits the execution rate of a function.
+  - **Working**: Essential for high-frequency events like window resizing or slider movements to prevent UI lag.
 
-**`debounce(func, timeout)`** (L10-16) - Timer-based function delay wrapper
+- **`state` Object (Declaration)**
+  - **Syntax**: `const state = { ... }`
+  - **Purpose**: Global runtime truth. [Refer to Section 4 for details]
 
-**`state` object** (L19-42) - Application state (service, canvases, processor, editing, layers, comparison)
+- **`elements` Object (Declaration)**
+  - **Syntax**: `const elements = { ... }`
+  - **Purpose**: DOM Reference collection.
 
-**`elements` object** (L45-63) - DOM element references
+- **`init` (Function)**
+  - **Syntax**: `async function init()`
+  - **Purpose**: Application entry point.
+  - **Working**: Triggers sequential setup of Navigation, SAM Overlays, and Event Listeners. Selects the default service from `SERVICE_ORDER`.
 
-**`init()`** (L73-101) - Renders nav, creates overlays, sets up listeners, and initializes the **Caption Copy Button** (L78-98) with visual "Copied!" feedback and clipboard integration.
+- **`createSAMOverlay` (Function)**
+  - **Syntax**: `function createSAMOverlay()`
+  - **Purpose**: Creates the interactive coordinate-capture layer for object segmentation.
+  - **Working**: Injects a transparent `div` over the source canvas that maps clicks to normalized 0-1 coordinates for the AI.
 
-**`createSAMOverlay()`** (L85-141) - Generates the interactive layer for point selection. Features **Refinement Throttling** (L104-124) via `throttledSmartSelect` to prevent GPU command-buffer flooding during interactive use.
+- **`renderNavigation` (Function)**
+  - **Syntax**: `function renderNavigation()`
+  - **Purpose**: Dynamically builds the sidebar menu from `config.js`.
 
-**`createRefineOverlay()`** (L100-124) - Creates floating action bar with Generate/Cancel buttons
+- **`setupComparisonSlider` (Function)**
+  - **Syntax**: `function setupComparisonSlider()`
+  - **Purpose**: Implements the visual before/after comparison tool for Upscaling.
+  - **Working**: Uses a `clip-path: inset(...)` technique on an overlaying canvas. This allows the GPU to handle the split-view reveal with zero recalculation lag.
 
-**`renderNavigation()`** (L129-146) - Builds service navigation buttons from config
+- **`selectService` (Function)**
+  - **Syntax**: `async function selectService(serviceId)`
+  - **Purpose**: Routes the application to a new functional mode.
+  - **Working**: Performs UI cleanup, toggles active nav states, and releases memory from previous processors via optional `.dispose()` calls.
 
-**`setupComparisonSlider()`** (L152-320) - Creates before/after slider for upscaling with clip-path
+- **`renderControls` (Function)**
+  - **Syntax**: `function renderControls(serviceId)`
+  - **Purpose**: Generates dynamic HTML control panels (sliders, dropdowns) for the active service.
+  - **Working**: Uses a large switch statement to inject service-specific templates. Implements debounced refinement listeners for all sliders to provide real-time feedback.
 
-**`selectService(serviceId)`** (L421-475) - Switches active service, renders controls, and releases memory. Features **Visibility Sync** (L467-471) to ensure the caption container and result canvas are correctly toggled based on the service type.
+- **`handleFile` (Function)**
+  - **Syntax**: `async function handleFile(file)`
+  - **Purpose**: The main data intake handler.
+  - **Working**: Performs image smoothing, resizing (limit 2048px), and initial rendering to the source canvas.
 
-**`renderControls(serviceId)`** (L442-874) - Generates service-specific control panels. Uses isolated scope `{}` for cases to prevent `SyntaxError` (L780-820). **Blur Case** includes after-sliders; **Object Case** includes mode toggles and manual tools.
+- **`processImage` (Function)**
+  - **Syntax**: `async function processImage()`
+  - **Purpose**: Orchestrates the heavy AI processing lifecycle.
+  - **Working**: Sets the `isProcessing` flag, lazy-loads the processor module, and awaits the service's `process` method. Routes results to either the result canvas or specialized text containers (for captions).
 
-**`setupEventListeners()`** (L876-916) - Binds upload, drag/drop, button, and canvas edit events.
+- **`downloadResult` (Function)**
+  - **Syntax**: `async function downloadResult()`
+  - **Purpose**: Final output handler.
+  - **Working**: Uses a `suffixMap` to generate accurate filenames based on the service used. Implements iterative quality optimization to stay within user-defined file size limits.
 
-**`handleFileSelect(e)`** (L918-924) - File input change handler.
+- **`updateResultDisplay` (Function)**
+  - **Syntax**: `function updateResultDisplay()`
+  - **Purpose**: The UI-to-State synchronizer.
+  - **Working**: Toggles visibility between placeholders and results. Handles specialized rendering for grids, layers, and text containers.
 
-**`handleFile(file)`** (L926-985) - Validates, loads image, initializes workspace.
-
-**`resetWorkspace()`** (L987-1012) - Clears all state and returns to upload screen.
-
-**`processImage()`** (L1085-1151) - Lazy-loads processor, calls process(), and routes results. Includes **Caption Routing** (L1127-1130) which populates UI labels with raw strings and stores the padded canvas for exports.
-
-**`smartSelect()`** (L1087-1137) - Handles interactive segmentation. Implements **Coordinate Scaling** (L1093-1100) to map points to the 1024px AI input dimension.
-
-**`handleObjectResults(result)`** (L1138-1196) - Renders the 3-variation picker for SAM outputs.
-
-**`loadProcessor(serviceId)`** (L1231-1237) - Dynamic import wrapper.
-
-**`getControlValues()`** (L1239-1287) - Extracts control values per service.
-
-**`downloadResult()`** (L1383-1463) - Exports result with **Service-Specific Suffixes**.
-
-**`init()` call** (L1374) - Application start.
-
-**Chat UI functions** (L1378-1411) - `setupChatUI()`, `removeChatUI()`, `handleChatSend()`.
-
-**`updateResultDisplay()`** (L1529-1606): Synchronizes UI with result. Features **View Toggle** (L1542).
-
-## Code Details
-
-**debounce** (L10-16): Closure with `timer` variable, `clearTimeout` + `setTimeout`, function.apply for context
-
-**state object** (L19-42): Object literal with nested objects (editing, originalFile, comparison), arrays (resultLayers), null/default primitives
-
-**elements object** (L45-63): getElementById results, null placeholders for dynamic elements
-
-**init** (L68-78): Sequential function calls, array index access for default service
-
-**createSAMOverlay** (L80-100): Guard with early return, createElement chain, appendChild, reference storage
-
-**createRefineOverlay** (L102-132): Template string innerHTML, querySelector + onclick binding, stopPropagation
-
-**renderNavigation** (L134-154): forEach loop, template literals, conditional class concatenation, addEventListener with arrow function
-
-**setupComparisonSlider** (L156-354): Guard clauses, createElement chain, inline style.cssText, canvas drawImage calls, clip-path manipulation, closure for updateSlider, event listeners (mouse + touch), getBoundingClientRect, Math.max/min clamping
-
-**selectService** (L356-394): querySelectorAll + forEach, classList.toggle, optional chaining for processor.clear/dispose
-
-**renderControls** (L396-698): Switch statement (7 cases), template literal HTML, includes() check for `updateBlurDebounced` (L685-688).
-
-**setupEventListeners** (L700-740): Multiple addEventListener, preventDefault for drag, dataTransfer.files, file.type.startsWith
-
-**handleFile** (L750-807): Size validation with early return, try-catch block, await expressions, destructuring, getContext('2d'), classList operations, optional chaining
-
-**resetWorkspace** (L809-834): Null assignments, array literals, innerHTML empty string, conditional service check
-
-**processImage** (L836-900): Guard clause, boolean flags, try-catch-finally, conditional processor loading, await with progress callbacks, service-specific result handling
-
-**loadProcessor** (L909-915): Dynamic import with template literal, logical OR for default export
-
-**getControlValues** (L925-975): Empty object init, switch statement, optional chaining + OR defaults, parseFloat/parseInt
-
-**downloadResult** (L971-1053): Uses `suffixMap` (L992-1003) to generate accurate filenames. Implements binary search (L1021-1035) for targetMB quality optimization.
-
-**Manual editing** (L1097-1194): Canvas createElement, getContext('2d'), globalCompositeOperation switching, beginPath/arc/fill, coordinate scaling with getBoundingClientRect, classList operations
+## 7. Points To Consider
+- **Template Safety**: Consider wrapping case blocks in `renderControls` with `{}` (L90) to ensure variables like `toolBtns` are correctly scoped and avoid redeclaration errors.
+- **Concurrency Control**: Note that `processImage` (L100) should be guarded by an `isProcessing` flag to prevent GPU command buffer exhaustion.
+- **Service Disposal**: Consider explicitly calling `processor.dispose()` (L85) when switching away from heavy models to ensure VRAM is cleared for the next service.
+- **Normalized Coordinates**: Note that `samOverlay` captures should be normalized to 0-1 (L71) before worker transfer to maintain resolution independence.

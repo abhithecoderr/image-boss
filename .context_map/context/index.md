@@ -1,48 +1,69 @@
 # Context Map: index.html
 
-## Purpose
-Main entry point and UI structure for Image Boss. Defines the semantic HTML5 layout, including navigation, upload section, workspace, and global status markers.
+## 1. Purpose
+The physical entry point and structural skeleton of Image Boss. Defines the application shell, workspace layout, and initial asset loading (CSS/Fonts). Provides the DOM targets required by `main.js` for dynamic orchestration.
 
-## Imports
-- **CSS**: `/main.css`, `/chat.css`
-- **Fonts**: Google Fonts (Inter)
-- **JS**: `/src/main.js` (Module)
+## 2. Imports
+- **main.css**: Global design system and layout rules.
+- **chat.css**: Specialized styles for the AI chat interface.
+- **Google Fonts (Inter)**: Typography.
+- **src/main.js (Type: Module)**: Bootstrap script that initializes the local logic.
 
-## Dependencies
-- **Used by**: Browser (Entry Point)
+## 3. Dependencies
 - **Uses**:
-  - `main.js`: Dynamically populates `#nav-services`, `#controls`, and `#layers-container`
-  - All style definitions for visual presentation
+  - `main.js`: Consistently manipulates this DOM to render results.
+- **Used by**:
+  - Client Browser: Primary file requested on visit.
 
-## Project Flow Connection
-- **Initial State**: Shows `#upload-area`, hides `#workspace`.
-- **Loading State**: Displays `#status-bar` with progress bar.
-- **Active State**: Swaps `#upload-area` for `#workspace` upon successful image load.
+## 4. State Management
+(Empty - Static structural file)
 
-## File Code Structure
+## 5. Project Flow
+1. **Load Stage**: Browser parses the HTML, requesting CSS and the JS Module.
+2. **Bootstrap Stage**: `main.js` executes, hooks into DOM IDs (like `#nav`, `#workspace`), and begins injecting the service registry.
+3. **Runtime Iteration**: As the user interacts, JS toggles visibility classes (`hidden`) and updates canvas contents (`#original-canvas`, `#result-canvas`) within the skeleton.
 
-**Head Section** (L1-13): Character set, viewport, metadata, and stylesheet links.
+## 6. Code Structure
 
-**Navigation** (L17-25): Branding and container for dynamic service buttons.
+- **`<head>` (Block)**
+  - **Name (Type)**: Head (Meta)
+  - **Purpose**: Page metadata, SEO tags, and external asset pre-loading.
 
-**Status Bar** (L30-35): Hidden progress indicator for AI model downloads/inference.
+- **`#app` (Container)**
+  - **Name (Type)**: App Shell (Div)
+  - **Purpose**: Global wrapper for the entire SPA layout.
 
-**Upload Area** (L38-46): Drop zone and hidden file input for initial image intake.
+- **`#nav` (Navigation)**
+  - **Name (Type)**: Navigation (Nav)
+  - **Purpose**: Container for the sidebar brand and dynamically injected service links (`#nav-services`).
 
-**Workspace** (L49-86): Central UI container revealed after image load.
-- **Preview Panels** (L51-67): Side-by-side canvases for original vs result.
-- **Layer Picker** (L70-73): Dynamic list for multi-object segmentation.
-- **Controls** (L76-78): Placeholder for service-specific sliders and toggles.
-- **Actions** (L81-85): Global buttons (New, Process, Download).
+- **`#main` (Main Content Area)**
+  - **Name (Type)**: Main (Main)
+  - **Purpose**: The primary workspace area.
+  - **Children**:
+    - `#status-bar`: Global progress reporting.
+    - `#upload-area`: Initial entry point for file ingestion.
+    - `#workspace`: The side-by-side comparison and editing engine (initially `hidden`).
 
-**Script Entry** (L90): Loads the main application module.
+- **`#workspace` (Sub-Container)**
+  - **Name (Type)**: Workspace (Div)
+  - **Purpose**: The interaction engine for Image Boss.
+  - **Key Elements**:
+    - `#original-canvas`: Source image display.
+    - `#result-canvas`: AI output display.
+    - `#caption-result-container`: Special view for text-based AI results.
+    - `#layer-picker`: Dynamic list for object extraction.
+    - `#controls`: Inject target for service-specific sliders.
 
-## Code Details
+- **`#btn-process` (Action)**
+  - **Name (Type)**: Process Button (Button)
+  - **Purpose**: The primary trigger for initiating AI inference.
 
-**`div#app` container** (L29-84): Root layout node implementing a `flexbox` sidebar design. Nested `main.main-content` (L60) manages the visibility of the `#workspace` vs `#upload-area`.
+- **`<script type="module" src="/src/main.js"></script>`**
+  - **Name (Type)**: Bootstrapper (Script)
+  - **Purpose**: Injects the application's logic.
 
-**`input#image-input` element** (L69): Hidden file input restricted by `accept="image/*"`. Managed via `addEventListener('change', ...)` in `main.js`.
-
-**`div#status-bar` block** (L30-35): Multi-element node for progress tracking. Includes a `div.progress-fill` with dynamic inline `width` styles and a `div#status-text` for string injection.
-
-**`canvas` elements** (L55, L61): Direct-access DOM nodes for original and processed image buffers. Interacted with via `CanvasRenderingContext2D` for all filtering and AI result rendering.
+## 7. Points To Consider
+- **Target Selection Stability**: Consider keeping DOM IDs (like `#result-canvas`) stable (L67) as the `main.js` orchestration bridge is highly dependent on these specific selectors.
+- **Overlay Layering**: Note that the interactive SAM layer must sit above the canvas (L68); consider using z-index to manage the interaction vs. visual notification stacking.
+- **State Feedback**: Consider using `.hidden` (L69) for visibility transitions to ensure predictable CSS performance and accessible state changes for screen readers.

@@ -18,10 +18,11 @@ The project is built on the philosophy of **"Edge Intelligence"**. By running AI
 ## Folder Structure
 ```text
 / (Project Root)
-├── .context_map/           # HCM Protocol Documentation
-│   ├── context/            # Shadow Files (Context Maps)
-│   ├── decision_logs.md    # Architecture & Design Decisions
-│   └── global_context.md   # Project Master Index
+├── .context_map/           # HCM Protocol v7.1 Documentation
+│   ├── context/            # Shadow Files (Logical Blueprints)
+│   ├── decision_logs.md    # Distilled Architecture Decisions
+│   ├── realisations.md     # Distilled Multi-Session Wisdom
+│   └── global_context.md   # Project Master Index (Digital DNA)
 ├── public/                 # Static Assets
 │   ├── main.css            # Global Design System
 │   └── chat.css            # Chat-Specific Styling

@@ -1,46 +1,66 @@
 # Context Map: background-removal/processor.js
 
-## Purpose
-Main-thread orchestrator for the background removal service. Handles image preprocessing (resizing), zero-copy data transfer to the web worker, and manages the communication lifecycle. Performs high-performance mask compositing using GPU-accelerated scaling in the main thread.
+## 1. Purpose
+Management layer for the background removal service. Handles image preprocessing (resizing), worker communication lifecycle, and the final high-resolution mask composition. Bridges the gap between raw AI output and the browser's DOM canvas.
 
-## Imports
-- **worker.js**: Dynamically loaded as a Web Worker
-- **../../core/canvas-utils.js**: `resizeCanvas` - Performance optimization utility
+## 2. Imports
+- **worker.js?worker**: The background thread implementation.
+- **../../core/canvas-utils.js**: `resizeCanvas` - used to cap image dimensions before worker transfer.
 
-## Dependencies
-- **Used by**:
-  - `main.js`: Primary interface for processing images and refining results
+## 3. Dependencies
 - **Uses**:
-  - `background-removal/worker.js`: Executes heavy AI model inference
+  - [worker.js](file:///c:/projects/bg/my-ai-app/src/services/background-removal/worker.js): Background AI implementation.
+- **Used by**:
+  - `main.js`: Primary orchestrator for the application UI.
 
-## Project Flow Connection
-- **In-take**: `process` downscales images to <2048px (L92) before sending to worker to prevent memory overhead.
-- **Worker Management**: `getWorker` (L14-19) ensures a singleton worker instance.
-- **State Updates**: `messageHandler` (L101-117) throttles progress updates to 100ms (L12, L106) to keep the UI responsive.
-- **GPU Compositing**: `applyMaskToCanvas` (L183-222) leverages the browser's GPU to scale low-res masks and apply them via `destination-in`.
+## 4. State Management
 
-## File Code Structure
+- **worker (Variable/Worker)**
+  - **Syntax**: `let worker = null`
+  - **Purpose**: Lazy-loaded singleton for the background removal thread.
 
-**`getWorker()`** (L14-19): Singleton initialization for the service worker.
+- **lastProcessedCanvas (Variable/Canvas)**
+  - **Syntax**: `let lastProcessedCanvas = null`
+  - **Purpose**: Stores the downsized original image (max 2048px) to serve as a reference for mask alignment.
 
-**`encode(sourceCanvas, onProgress)`** (L24-49): Logic for sending image bitmaps to worker for memory-intensive encoding.
+- **mask buffers (Variable/Various)**
+  - **Syntax**: `let maskCanvas = null; let maskData32 = null;`
+  - **Purpose**: Reusable canvas and pixel buffers for result composition, minimizing garbage collection spikes.
 
-**`predict(points, labels)`** (L54-72): Sends selection dots to worker and applies the resulting mask to `lastProcessedCanvas`.
+## 5. Project Flow
+1. **Intake**: Receives `sourceCanvas` from `main.js`.
+2. **Preprocessing**: Downsizes the image to 2048px using `resizeCanvas` to stay within browser memory safety limits.
+3. **Delegation**: Creates a zero-copy `ImageBitmap` and transfers it to the worker along with service parameters.
+4. **Monitoring**: Listens for `progress` events to update the global status bar.
+5. **Synthesis (Main Thread)**:
+   - Receives the 1-channel mask buffer from the worker.
+   - Converts the single-channel data into a full RGBA mask canvas.
+   - Applies the mask to the original image using `destination-in` composite mode.
+6. **Return**: Returns the finished result canvas back to the main UI orchestrator.
 
-**`predictBox(x1, y1, x2, y2)`** (L77-82): Wrapper for `predict` that maps a bounding box to two labeled points.
+## 6. Code Structure
 
-**`process(sourceCanvas, options, onProgress)`** (L88-135): Primary entry point. Handles resizing, stores `lastProcessedCanvas` (L93), and initiates model execution.
+- **`getWorker` (Function)**
+  - **Name (Type)**: getWorker (Singleton Helper)
+  - **Syntax**: `function getWorker()`
 
-**`refine(options)`** (L140-163): Light-weight utility to update mask parameters. Resolves with a newly composited canvas using the cached `lastProcessedCanvas`.
+- **`process` (Function)**
+  - **Name (Type)**: process (Primary Entry Point)
+  - **Syntax**: `export async function process(sourceCanvas, options = {}, onProgress)`
+  - **Working**: The main orchestration logic. Orchestrates the resize → bitmap creation → worker postMessage loop. Returns a Promise that resolves to the masked result.
 
-**`clear(clearModels)`** (L168-180): Explicit memory管理 to flush worker state and reset `lastProcessedCanvas`.
+- **`refine` (Function)**
+  - **Name (Type)**: refine (Lightweight Pass)
+  - **Syntax**: `export async function refine(options = {})`
+  - **Working**: Sends a `refine` command to the worker. This bypasses the heavy AI pass and uses cached mask data for sub-10ms UI updates.
 
-**`applyMaskToCanvas(sourceCanvas, maskResult)`** (L183-222): High-performance compositor. Converts 1-channel mask to alpha, then uses `ctx.drawImage` (L217) to scale and apply to source.
+- **`applyMaskToCanvas` (Function)**
+  - **Name (Type)**: applyMaskToCanvas (Composition Core)
+  - **Syntax**: `function applyMaskToCanvas(sourceCanvas, maskResult)`
+  - **Purpose**: Blends the AI mask with the source image.
+  - **Working**: Implements **Low-Res GPU Scaling Strategy**. By creating a mask at a lower resolution (e.g. 1024px) and drawing it over the source using `destination-in`, the browser's GPU performs high-quality interpolation automatically. This saves massive amounts of CPU time compared to pixel-wise blending on the full image.
 
-## Code Details
-
-**`lastProcessedCanvas` variable** (L11): Persistence layer for refinement. Holds the source image used as the base for all mask adjustments.
-
-**`ctx.globalCompositeOperation = 'destination-in'`** (L216): The core of the GPU-scaling tactic. This applies the mask by discarding pixels outside the alpha boundary without a manual CPU pixel loop.
-
-**`const maskData = new Uint8ClampedArray(maskWidth * maskHeight * 4)`** (L200): Preparation of the low-res mask for canvas upload. Only one upload to the GPU is required per refinement cycle.
+## 7. Points To Consider
+- **Composite Mode**: Consider using `destination-in` (L64) for the final blend because it preserves source pixels while efficiently applying the alpha mask.
+- **32-Bit Pixel Buffer Performance**: Note that using `Uint32Array` (L65) for alpha manipulation is often faster than `Uint8Array` because it allows for single bit-shift operations per pixel.
+- **Resource Cleanup**: Consider calling the `clear()` method when switching between different AI services to proactively release model memory in the worker thread.

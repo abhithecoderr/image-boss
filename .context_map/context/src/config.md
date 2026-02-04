@@ -1,39 +1,60 @@
 # Context Map: config.js
 
-## Purpose
-Central configuration hub for Image Boss. Defines global application settings, service availability, model aliases, and shared constants for UI-driven workflows.
+## 1. Purpose
+Central configuration for and service registry for Image Boss. Defines model identifiers, pipeline types, hardware preferences, and UI ordering for all AI tools. Acts as the "Brain" of the application's service architecture.
 
-## Imports
-- No external imports (pure data export file)
+## 2. Imports
+- No external imports (Static data export).
 
-## Dependencies
+## 3. Dependencies
+- **Uses**:
+  - Hugging Face Hub (Reference IDs).
 - **Used by**:
-  - `main.js`: Core orchestration logic and UI rendering
-  - All service processors: For looking up model names and hardware preferences
-- **Uses**: None
+  - `main.js`: Primary consumer for dynamic service loading and UI generation.
 
-## Project Flow Connection
-- **Static Ground Truth**: Provides the data structure used to generate the main navigation.
-- **Service Registration**: Each key in `SERVICES` represents a feature available in the app.
-- **Warmup Management**: Includes flags for pre-loading models.
+## 4. State Management
+(Empty - Static configuration module)
 
-## File Code Structure
+## 5. Project Flow
+1. **Declaration Stage**: Exports immutable configuration objects during the application's bootstrap phase.
+2. **UI Mapping**: `main.js` iterates through `SERVICE_ORDER` to build the navigation sidebar.
+3. **Execution Routing**: When a service is selected, `main.js` looks up the `model` and `pipeline` type in `SERVICES` to decide which processor and weights to initialize.
 
-**`APP_CONFIG`** (L6-9): Basic application metadata (name, version).
+## 6. Code Structure
 
-**`SERVICES`** (L12-124): Exhaustive map of all available tools.
-- Each service includes `id`, `name`, `icon`, `description`, `model`, `pipeline`, `dtype`, `device`, `usesWorker`, and `warmup`.
+- **`APP_CONFIG` (Object)**
+  - **Name (Type)**: APP_CONFIG (Constant)
+  - **Syntax**: `export const APP_CONFIG = { ... }`
+  - **Purpose**: General metadata for the application (name, version).
 
-**`SERVICE_ORDER`** (L127-137): Array defining the sequence of services in the sidebar.
+- **`SERVICES` (Object)**
+  - **Name (Type)**: SERVICES (Registry)
+  - **Syntax**: `export const SERVICES = { ... }`
+  - **Purpose**: Orchestration registry for all AI tools.
+  - **Working**: Defines the complete metadata for each tool:
+    - `id`: Unique identifier used for routing.
+    - `model`: Repository ID or library name.
+    - `pipeline`: 'custom', 'native', or 'disabled' execution strategy.
+    - `dtype`: precision preference ('fp16', 'fp32', 'q4').
+    - `device`: Hardware target ('webgpu').
+    - `usesWorker`: Boolean flag for thread isolation.
 
-**`OUTPUT_FORMATS`** (L140-144): Standard export options for file conversion.
+- **`SERVICE_ORDER` (Array)**
+  - **Name (Type)**: SERVICE_ORDER (Array/String)
+  - **Syntax**: `export const SERVICE_ORDER = [ ... ]`
+  - **Purpose**: Controls the sequence of appearance in the UI navigation bar.
 
-**`COMPRESSION_PRESETS`** (L147-151): Quality/Size profiles for the compression service.
+- **`OUTPUT_FORMATS` (Array)**
+  - **Name (Type)**: OUTPUT_FORMATS (Array/Object)
+  - **Syntax**: `export const OUTPUT_FORMATS = [ ... ]`
+  - **Purpose**: Registry of supported image export types (MIME types).
 
-## Code Details
+- **`COMPRESSION_PRESETS` (Object)**
+  - **Name (Type)**: COMPRESSION_PRESETS (Object)
+  - **Syntax**: `export const COMPRESSION_PRESETS = { ... }`
+  - **Purpose**: Quality vs Size settings for the compression service.
 
-**`const SERVICES` object** (L12-124): Primary registry where each key maps to a service configuration. Entries include `dtype: 'fp32'` (full precision) or `q8` (quantized) and `device: 'webgpu'` hardware preferences for `Transformers.js` / `ONNX` loaders.
-
-**`const SERVICE_ORDER` array** (L127-137): Array of strings that determines the layout order of service cards in the `main.js` UI generator.
-
-**`const COMPRESSION_PRESETS` object** (L147-151): Configuration profiles for the `compression/processor.js`. Maps names like `light` to a `{ maxSizeMB, quality }` parameter set.
+## 7. Points To Consider
+- **Model Registry Sync**: Note that Hugging Face IDs in `SERVICES` (L36) must remain accurate to prevent loading errors; consider verifying these after any model hub maintenance.
+- **Pipeline Strategy**: Consider that `pipeline: 'custom'` services (L37) require manual tensor mapping in their processors, unlike 'native' or 'disabled' ones.
+- **UI Blocking**: Note that if `usesWorker` is false (L40), the operation must be extremely lightweight to avoid freezing the browser interface.

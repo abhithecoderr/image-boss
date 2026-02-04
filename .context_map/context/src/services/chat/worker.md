@@ -1,40 +1,65 @@
 # Context Map: chat/worker.js
 
-## Purpose
-Off-thread execution for the local LLM (LiquidAI LFM 1.2B). Leverages Transformers.js to perform causal language modeling with WebGPU acceleration. Implements chat template application, streaming token generation, and safety-focused output cleaning.
+## 1. Purpose
+Local Large Language Model (LLM) engine utilizing the Liquid LFM 1.2B model. Provides a private, browser-native chat interface. Orchestrates the auto-regressive generation loop with real-time token streaming and instruction-following templates.
 
-## Imports
-- **@huggingface/transformers**: `AutoModelForCausalLM`, `AutoTokenizer`, `TextStreamer`, `env`
+## 2. Imports
+- **@huggingface/transformers**:
+  - `AutoModelForCausalLM`: The core transformer model for text generation.
+  - `AutoTokenizer`: Handles text-to-token encoding and Template application.
+  - `TextStreamer`: Facilitates real-time token-by-token UI updates.
 
-## Dependencies
-- **Used by**: `processor.js` (Worker IPC)
+## 3. Dependencies
 - **Uses**:
-  - `LiquidAI/LFM2.5-1.2B` model weights
-  - Transformers.js runtime for tokenization and inference
+  - Hugging Face Hub (`LiquidAI/LFM2.5-1.2B-Instruct-ONNX`).
+  - WebGPU (Primary) + WASM runtime.
+- **Used by**:
+  - [processor.js](file:///c:/projects/bg/my-ai-app/src/services/chat/processor.js) (IPC) - Routes prompts and accumulates streamed fragments.
 
-## Project Flow Connection
-- **Setup Phase**: `loadModel` (L32-65) handles tokenizer and model loading, scaling progress from 20% to 100% (L51).
-- **Inference Phase**: `generate` (L67-126) executes the chat loop. It applies "Instruct" templates (L81) and creates high-priority `TextStreamer` instances for real-time feedback.
-- **Resource Recovery**: `onmessage` (L11-30) routes the `dispose` command to nullify references and free up large model buffers.
+## 4. State Management
 
-## File Code Structure
+- **model/tokenizer (Variables/Objects)**
+  - **Syntax**: `let model = null; let tokenizer = null;`
+  - **Purpose**: Global singletons for the LLM session. Pre-loaded to avoid the ~30 second Cold Start lag for 1.2B parameter models.
 
-**`self.onmessage` handler** (L11-30): Central router for `load`, `generate`, and `dispose` lifecycle events.
+- **currentModelId (Variable/String)**
+  - **Syntax**: `let currentModelId = null`
+  - **Purpose**: Verification flag to prevent redundant model weights re-downloads.
 
-**`loadModel(options)`** (L32-65):
-- **WebGPU Deployment** (L44-56): Attempts to load the `q4` (4-bit) quantized model on the GPU.
-- **Progress Tracking** (L47-55): Reports download intensity back to the UI.
+## 5. Project Flow
+1. **Bootstrap (Load)**: Downloads the `q4` (4-bit quantized) ONNX model.
+2. **Contextualization (Template)**:
+   - User input is wrapped in a **Chat Template** (L81).
+   - Injects `<|user|>` and `<|assistant|>` markers required by the Liquid baseline to maintain role-play stability.
+3. **Generation Pass (Auto-Regressive)**:
+   - The model predicts the next token based on the prompt features.
+   - The `TextStreamer` intercepts each token as it's predicted and forwards it back to the UI via IPC.
+4. **Decoding (Synthesis)**:
+   - Converts token IDs back into human-readable characters.
+   - Implements **Prompt Leakage Prevention** (L113) by stripping the echoed prompt from the final result.
+5. **Teardown**: Explicitly releases model resources on `dispose` command.
 
-**`generate(payload)`** (L67-126):
-- **System Prompting** (L74-77): Injects the assistant identity.
-- **Chat Templating** (L81-85): Uses the model's tokenizer to wrap user/system inputs in expected architectural markers.
-- **Token Streaming** (L88-95): Hooks a `callback_function` into the generate loop for per-token IPC messages (L93).
-- **Text Finalization** (L110-120): Performs a final decode and cross-compares with inputs to remove accidental prompt leakage (L116-118).
+## 6. Code Structure
 
-## Code Details
+- **`loadModel` (Function)**
+  - **Name (Type)**: loadModel (Lifecycle)
+  - **Syntax**: `async function loadModel({ modelId, dtype, device })`
+  - **Working**: Orchestrates the Int4 session creation. Uses **q4 Quantization** (L32) which is the critical theory allowing a 1.2B model to run in a browser's ~1GB memory limit.
 
-**`loadModel()` configuration** (L32): Explicitly targets `LiquidAI/LFM2.5-1.2B` using `dtype: 'q4'` (4-bit quantization). Reduces the LLM weight footprint to ~700MB for browser-local execution.
+- **`generate` (Function)**
+  - **Name (Type)**: generate (Inference Core)
+  - **Syntax**: `async function generate({ prompt, max_new_tokens, temperature })`
+  - **Working**:
+    - **System Alignment**: Injects a static "helpful assistant" system prompt (L75) to steer model behavior.
+    - **Streaming Hook**: Instantiates the `TextStreamer` with `skip_prompt: true`. This ensures the UI only receives new tokens, not the internal markers.
 
-**`new TextStreamer()` instance** (L89-90): Configured with `skip_prompt: true`. This prevents the `AutoTokenizer` applied chat template from leaking into the final output.
+- **Generation Loop (Block)**
+  - **Name (Type)**: model.generate (Inference)
+  - **Syntax**: `const output = await model.generate({ ...inputs, max_new_tokens, streamer });`
+  - **Working**: The heavy lifting of the model. Iteratively consumes and produces tokens using the GPU's KV-cache.
 
-**`if (full_response.startsWith(text))` sanitation** (L113-118): Safety check inside `generate`. Strips the echoed prompt from the response in case of architectural mismatch.
+## 7. Points To Consider
+- **Quantization Requirements**: Note that `dtype` must be `"q4"` (L62) for the 1.2B model to fit within browser memory limits; higher-precision versions will likely trigger OOM.
+- **UI Update Frequency**: Consider that the streamer callback can fire rapidly (L63); ensure the main-thread logic is optimized for high-frequency text updates.
+- **Prompt Templates**: Note that `apply_chat_template` is vital (L64) for maintaining coherent role-play and preventing model hallucinations.
+- **KV-Cache Management**: Consider that longer conversations consume more GPU memory; note that a worker reset may be needed (L65) if the system hangs after many rounds.

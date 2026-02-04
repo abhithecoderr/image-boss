@@ -1,48 +1,78 @@
 # Context Map: blur/processor.js
 
-## Purpose
-Main-thread controller for the Face Blur service. Manages the lifecycle of a dedicated YOLO26-pose worker, handles multi-variant model initialization (Nano to XLarge), and coordinates face detection and surgical blurring workflows.
+## 1. Purpose
+Management layer for the face blurring service. Orchestrates the YOLO26 worker lifecycle, manages model variants (Nano to XLarge), and provides the API for detection and visual modification. Bridges the gap between raw AI pose coordinates and the browser's Canvas API.
 
-## Imports
-- **worker.js**: Loaded as a module-style Web Worker (L47)
-- **MODEL_VARIANTS**: Definition object for speed/accuracy trade-offs
+## 2. Imports
+- **worker.js**: The background thread implementation.
 
-## Dependencies
-- **Used by**:
-  - `main.js`: Triggers face detection and blurring based on UI controls
+## 3. Dependencies
 - **Uses**:
-  - `blur/worker.js`: Runs YOLOpose inference and localized blur logic
+  - [worker.js](file:///c:/projects/bg/my-ai-app/src/services/blur/worker.js): Background AI thread.
+- **Used by**:
+  - `main.js`: Primary UI orchestrator.
 
-## Project Flow Connection
-- **Initial Setup**: `init` (L34-80) handles worker instantiation and model variant switching.
-- **Workflow Routing**: Supports both isolation detection (`detectFaces`) and full modification (`process`).
-- **Data Conversion**: `getImageData` (L188-222) acts as a polyfill to extract raw pixel arrays from `HTMLCanvasElement`, `ImageBitmap`, or `HTMLImageElement`.
-- **Result Reintegration**: `process` (L134-183) reconstructs a visible canvas from the worker’s raw buffer result (L157-162).
+## 4. State Management
 
-## File Code Structure
+- **worker (Variable/Worker)**
+  - **Syntax**: `let worker = null`
+  - **Purpose**: Singleton reference for the face-blur thread.
 
-**`MODEL_VARIANTS`** (L20-26): Metadata for UI menus, describing file sizes and use-cases.
+- **isReady (Variable/Boolean)**
+  - **Syntax**: `let isReady = false`
+  - **Purpose**: Tracks model load state to prevent premature `process()` calls.
 
-**`init(variant, onProgress)`** (L28-80): Singleton-pattern initializer with re-entrancy protection via `pendingInit` promise (L40).
+- **pendingInit (Variable/Promise)**
+  - **Syntax**: `let pendingInit = null`
+  - **Purpose**: Initialization mutex. Ensures that multiple calls to `init()` during a rapid service switch do not spawn redundant worker instances or trigger multiple driver loads.
 
-**`detectFaces(source, options, onProgress)`** (L82-125): IPC wrapper that resolves with a list of bounding boxes and keypoints.
+- **lastDetections (Variable/Array)**
+  - **Syntax**: `let lastDetections = []`
+  - **Purpose**: "Hot-Refinement" Cache. Stores the results of the last `detectFaces` run, allowing for instantaneous blur radius/shape adjustments (`updateBlurTransform`) without re-running the AI.
 
-**Cache State** (L126-131): Maintains `lastDetections`, `lastImageData`, `lastWidth`, and `lastHeight` for interactive refinement.
+## 5. Project Flow
+1. **Bootstrap**: `init()` is called to spawn the module worker and load the selected YOLO variant (default: 'nano').
+2. **Analysis Stage**: `detectFaces()` transfers the image buffer to the worker. The worker returns raw 51-keypoint pose coordinates.
+3. **Execution Stage**: `process()` combines detection with visual modification. It receives the blurred pixels from the worker and renders them back to a canvas.
+4. **Interaction Loop**: If the user adjusts the blur radius or feathering, `updateBlurTransform()` is called. This sends only the cached detections and the new parameters back to the worker, bypassing the AI inference entirely for 60fps responsiveness.
+5. **Teardown**: `dispose()` gracefully terminates the worker and clears GPU memory.
 
-**`process(source, options, onProgress)`** (L132-192): Primary transformation function. Communicates with worker to execute detection + surgical blur. Populate cache state on success.
+## 6. Code Structure
 
-**`updateBlurTransform(options)`** (L194-233): Fast-path re-rendering that bypasses detection. Uses cached data to update blur geometry (Radius, Strength, Feathering).
+- **`MODEL_VARIANTS` (Object)**
+  - **Syntax**: `export const MODEL_VARIANTS = { ... }`
+  - **Purpose**: Defines the available model scales and their memory profiles.
 
-**`getImageData(source)`** (L235-272): Unified extractor for `Uint8ClampedArray` data. Uses internal temporary canvases for translation.
+- **`init` (Function)**
+  - **Name (Type)**: init (Lifecycle)
+  - **Syntax**: `export async function init(variant = 'nano', onProgress)`
+  - **Working**: Implements the **Singleton Init Mutex**. It creates a persistent Promise (`pendingInit`) that subsequent callers wait on, ensuring a synchronized bootstrap.
 
-**`dispose()`** (L274-295): Graceful teardown of the worker and internal pointers.
+- **`detectFaces` (Function)**
+  - **Name (Type)**: detectFaces (Analysis)
+  - **Syntax**: `export async function detectFaces(source, options = {}, onProgress)`
+  - **Working**: Performs a one-way analysis. Returns only the structured detection metadata (boxes and keypoints).
 
-## Code Details
+- **`process` (Function)**
+  - **Name (Type)**: process (Primary Entry Point)
+  - **Syntax**: `export async function process(source, options = {}, onProgress)`
+  - **Working**: The main tool orchestration logic. Converts the source image to a 32-bit pixel array for worker transfer and returns the final blurred result.
 
-**`async function init()`** (L34-80): Re-entrancy guard using `if (pendingInit) return pendingInit`. Ensures only one worker is spawned by caching the initialization `Promise`.
+- **`updateBlurTransform` (Function)**
+  - **Name (Type)**: updateBlurTransform (Refinement)
+  - **Syntax**: `export async function updateBlurTransform(options = {})`
+  - **Working**: The "Fast Path". Re-uses `lastImageData` and `lastDetections` to trigger a non-AI visual pass in the worker.
 
-**`Uint8ClampedArray` wrapper** (L161): Executes inside the `process` branch. Reconstructs a `new ImageData` object from the worker's `ArrayBuffer` without intermediate memory copies.
+- **`getImageData` (Function)**
+  - **Name (Type)**: getImageData (Internal Utility)
+  - **Syntax**: `async function getImageData(source)`
+  - **Purpose**: Extracts raw pixel buffers from Canvases, Bitmaps, or Image elements.
 
-**`switch (message.type)` block** (L54-70, L104-116, L149-174): Unified IPC router. Manages `progress` updates and `complete` / `error` handlers for detection and blurring tasks.
+- **`dispose` (Function)**
+  - **Name (Type)**: dispose (Cleanup)
+  - **Syntax**: `export async function dispose()`
 
-**`worker.terminate()` call** (L234): Executes inside `function dispose()`. Essential for releasing WebGPU compute pipelines and flushing the background module's RAM.
+## 7. Points To Consider
+- **Initialization State**: Consider checking `isReady` (L76) before calling `detect` or `process` to prevent race conditions during async model loading.
+- **Memory Pressure**: Note that 4K `ImageData` transfers are large; consider resizing images via `canvas-utils` (L77) before passing them to the worker if performance degrades.
+- **Variant Sync**: Consider keeping `currentVariant` (L78) synchronized between the processor and worker to prevent parameter mismatches during model switches.

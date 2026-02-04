@@ -1,31 +1,54 @@
 # Context Map: captioning/processor.js
 
-## Purpose
-Main-thread interface for the Florence-2 image captioning service. Manages a background worker for running the vision-language model and implements a custom Canvas overlay system to render generated text directly onto the image result.
+## 1. Purpose
+Management layer for image description services. Orchestrates the Florence-2 worker lifecycle and implements a specialized canvas generator for rendering descriptive overlays at high resolutions.
 
-## Imports
-- **worker.js**: Loaded as a dedicated Web Worker (L6)
+## 2. Imports
+- **worker.js?worker**: The background thread implementation.
 
-## Dependencies
-- **Used by**:
-  - `main.js`: Main UI component for generating image descriptions
+## 3. Dependencies
 - **Uses**:
-  - `captioning/worker.js`: Handles heavy image-to-text inference
+  - [worker.js](file:///c:/projects/bg/my-ai-app/src/services/captioning/worker.js): Background AI implementation.
+- **Used by**:
+  - `main.js`: Primary UI orchestrator.
 
-## Project Flow Connection
-- **In-take**: Uses `createImageBitmap` (L31) for zero-copy memory transfer to the worker.
-- **IPC Payload**: Passes `modelId` and `task` (e.g. `<MORE_DETAILED_CAPTION>`) to the worker (L59).
-- **Rendering**: `createCaptionOverlay` (L72-119) expands the canvas and draws a custom text bar at the bottom.
-- **Data Persistence**: Stores the raw caption in `resultCanvas.dataset.caption` (L116) for easier copying.
+## 4. State Management
 
-## File Code Structure
+- **worker (Variable/Worker)**
+  - **Syntax**: `let worker = null`
+  - **Purpose**: Lazy-loaded singleton for the captioning thread.
 
-**`getWorker()`** (L10-15): Singleton worker instance provider.
+## 5. Project Flow
+1. **Intake Stage**: Receives a `sourceCanvas` and task parameters from the main UI.
+2. **Transfer Stage**: Converts the canvas into an `ImageBitmap` for zero-copy worker ingestion.
+3. **Execution Stage**: The worker performs the Florence-2 generative pass.
+4. **Synthesis (Rendering Loop)**:
+   - Receives the final caption string.
+   - Invokes `createCaptionOverlay`.
+   - This function performs a manual **Word-Wrap Pass** using canvas `measureText` (L89) to calculate the required vertical space.
+   - It appends a dark "Letterbox" to the bottom of the image and renders the description text.
+5. **Return Stage**: Returns both the raw caption string (for the UI) and the result canvas (for downloads).
 
-**`process(sourceCanvas, options, onProgress)`** (L24-68): Main async entry point.
-- **Zero-Copy Transfer**: Invokes `createImageBitmap` and transfers the bitmap to the worker context.
-- **Result Return**: Resolves with `{ canvas, caption }` (L49) to support both UI display and downloads.
+## 6. Code Structure
 
-**`createCaptionOverlay(sourceCanvas, caption)`** (L72-119):
-- **Typography**: Uses **24px Inter Bold** (L76).
-- **Dynamic Layout**: Calculates lines via `ctx.measureText` (L84-96) and computes `bottomBarHeight` dynamically (L97-101) based on text length.
+- **`getWorker` (Function)**
+  - **Name (Type)**: getWorker (Singleton Helper)
+  - **Syntax**: `function getWorker()`
+
+- **`process` (Function)**
+  - **Name (Type)**: process (Primary Entry Point)
+  - **Syntax**: `export async function process(sourceCanvas, options = {}, onProgress)`
+  - **Working**: Orchestrates the IPC loop. Returns a combined object containing the `canvas` and the descriptive `caption` text.
+
+- **`createCaptionOverlay` (Function)**
+  - **Name (Type)**: createCaptionOverlay (Visual Synth)
+  - **Syntax**: `function createCaptionOverlay(sourceCanvas, caption)`
+  - **Purpose**: Generates a high-quality "Captioned" version of the original image.
+  - **Working**:
+    - **Dynamic Letterboxing**: Calculates the height of a black bar based on the length of the caption and the font size (L105).
+    - **Centered Typography**: Renders the multi-line caption centered within the new letterbox area using the "Inter" system font.
+
+## 7. Points To Consider
+- **Context Preservation**: Consider re-applying `ctx.font` after any canvas resize (L52) to prevent the context from reverting to browser defaults and breaking the layout.
+- **IPC Efficiency**: Note that `createImageBitmap` (L53) is used to ensure the large model can process frames without blocking the main event loop.
+- **Extended Metadata**: Consider that `result.raw` contains detection coordinates (L54) which could be used for future bounding-box visualization features.
