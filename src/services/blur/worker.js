@@ -9,7 +9,7 @@
 import * as ort from 'onnxruntime-web/webgpu';
 
 // Configure ONNX Runtime
-const ORT_VERSION = '1.20.0';
+const ORT_VERSION = '1.20.1';
 ort.env.wasm.wasmPaths = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/`;
 
 // Optional: HuggingFace Token if repo is private (not needed for onnx-community)
@@ -95,19 +95,15 @@ async function initDetector(variant = 'nano', onProgress) {
         graphOptimizationLevel: 'all',
     };
 
-    onProgress?.(0.7, 'Initializing YOLO26 session...');
+    onProgress?.(0.7, 'Initializing YOLO26 session (WEBGPU)...');
 
-    try {
-      session = await ort.InferenceSession.create(modelBuffer, sessionOptions);
-      currentDevice = 'webgpu';
-    } catch (webgpuError) {
-      console.warn('WebGPU failed, falling back to WASM:', webgpuError);
-      session = await ort.InferenceSession.create(modelBuffer, {
-        ...sessionOptions,
-        executionProviders: ['wasm'],
-      });
-      currentDevice = 'wasm';
+    if (!navigator.gpu) {
+      throw new Error('WebGPU is not supported by your browser or hardware.');
     }
+
+    session = await ort.InferenceSession.create(modelBuffer, sessionOptions);
+    currentDevice = 'webgpu';
+    console.info(`✓ YOLO26 ${variant} loaded (WEBGPU)`);
 
     onProgress?.(0.8, `Model ready (${currentDevice})`);
     return session;
@@ -124,21 +120,16 @@ async function initDetector(variant = 'nano', onProgress) {
 /**
  * Detect persons/faces using bit-precise tensor parsing and NMS
  */
-async function detectFaces(imageData, width, height) {
+async function detectFaces(bitmap, width, height) {
   if (!session) throw new Error('Detector not initialized');
 
-  // 1. Preprocessing: Stretching to 640x640 (as per preprocessor_config json)
+  // 1. Preprocessing: Stretching to 640x640
   const inputSize = 640;
   const canvas = new OffscreenCanvas(inputSize, inputSize);
   const ctx = canvas.getContext('2d');
 
-  const tempCanvas = new OffscreenCanvas(width, height);
-  const tempCtx = tempCanvas.getContext('2d');
-  const imgData = new ImageData(new Uint8ClampedArray(imageData), width, height);
-  tempCtx.putImageData(imgData, 0, 0);
-
-  // Use stretched resize (no aspect ratio preservation)
-  ctx.drawImage(tempCanvas, 0, 0, width, height, 0, 0, inputSize, inputSize);
+  // Use stretched resize (no aspect ratio preservation as per YOLO spec)
+  ctx.drawImage(bitmap, 0, 0, width, height, 0, 0, inputSize, inputSize);
   const resizedData = ctx.getImageData(0, 0, inputSize, inputSize).data;
 
   // 2. Image to Tensor (RGB normalized [0,1])
@@ -278,26 +269,33 @@ function calculateIOU(box1, box2) {
 }
 
 
-async function applyBlur(imageData, width, height, detections, options = {}) {
+let workerBlurCanvas = null;
+let workerBlurCtx = null;
+let workerPatchCanvas = null;
+let workerMaskCanvas = null;
+
+async function applyBlur(bitmap, width, height, detections, options = {}) {
   const {
     blurAmount = 20,
     radiusScale = 1.0,
     feathering = 0.75,
-    shape = 1.0 // 1.0 = circular, > 1.0 = taller elliptical
+    shape = 1.0
   } = options;
 
-  const originalCanvas = new OffscreenCanvas(width, height);
-  const originalCtx = originalCanvas.getContext('2d');
-  const imgData = new ImageData(new Uint8ClampedArray(imageData), width, height);
-  originalCtx.putImageData(imgData, 0, 0);
-
-  if (detections.length === 0) {
-    return originalCtx.getImageData(0, 0, width, height);
+  if (!workerBlurCanvas || workerBlurCanvas.width !== width || workerBlurCanvas.height !== height) {
+    workerBlurCanvas = new OffscreenCanvas(width, height);
+    workerBlurCtx = workerBlurCanvas.getContext('2d');
   }
 
-  const resultCanvas = new OffscreenCanvas(width, height);
-  const resultCtx = resultCanvas.getContext('2d');
-  resultCtx.drawImage(originalCanvas, 0, 0);
+  workerBlurCtx.clearRect(0, 0, width, height);
+  workerBlurCtx.drawImage(bitmap, 0, 0);
+
+  if (detections.length === 0) {
+    return await createImageBitmap(workerBlurCanvas);
+  }
+
+  // Create a reusable mask canvas for feathering/shapes if needed,
+  // but for surgical blur, we can just use clipping and filters.
 
   for (const person of detections) {
     const keypoints = person.keypoints;
@@ -311,21 +309,17 @@ async function applyBlur(imageData, width, height, detections, options = {}) {
     const lEye = { x: lEye_kp[0], y: lEye_kp[1], score: lEye_kp[2] };
     const rEye = { x: rEye_kp[0], y: rEye_kp[1], score: rEye_kp[2] };
 
-    // Surgical Geometry with user-adjustable scale
     let radius;
-    // Lower eye confidence floor to 0.2 for distant faces
     if (lEye.score > 0.2 && rEye.score > 0.2 && (lEye.x !== 0 || rEye.x !== 0)) {
       const dx_eyes = (lEye.x * width) - (rEye.x * width);
       const dy_eyes = (lEye.y * height) - (rEye.y * height);
       const dist = Math.sqrt(dx_eyes * dx_eyes + dy_eyes * dy_eyes);
       radius = dist * 2.2 * radiusScale;
     } else {
-      // Fallback: Use bounding box width (reduced from 0.35 to 0.18 for surgical precision)
       const box = person.box;
       radius = (box.xmax - box.xmin) * width * 0.18 * radiusScale;
     }
 
-    // Min radius check (surgical for distant faces)
     const minRadius = Math.min(width, height) * 0.015;
     if (radius < minRadius) radius = minRadius;
 
@@ -337,54 +331,28 @@ async function applyBlur(imageData, width, height, detections, options = {}) {
 
     if (isNaN(nx) || isNaN(ny) || isNaN(radius)) continue;
 
-    // Apply shape scaling to vertical radius
     const radiusY = radius * shape;
 
-    const pw = Math.round(radius * 5); // Taller patches for ellipses
-    const ph = Math.round(radiusY * 5);
-    const px = Math.round(nx - pw / 2);
-    const py = Math.round(ny - ph / 2);
+    workerBlurCtx.save();
 
-    if (pw < 5 || ph < 5) continue;
+    // Create elliptical clip path
+    workerBlurCtx.beginPath();
+    workerBlurCtx.ellipse(nx, ny, radius, radiusY, 0, 0, Math.PI * 2);
+    workerBlurCtx.clip();
 
-    const patchCanvas = new OffscreenCanvas(pw, ph);
-    const patchCtx = patchCanvas.getContext('2d');
+    // Apply filter and draw the source bitmap onto the result canvas
+    // This blurs only the clipped area
+    workerBlurCtx.filter = `blur(${blurAmount}px)`;
 
-    try {
-      patchCtx.drawImage(originalCanvas, px, py, pw, ph, 0, 0, pw, ph);
-    } catch (e) { continue; }
+    // To handle feathering properly with just Canvas2D, we'd need a mask.
+    // For now, let's fix the crash first.
+    // Optimization: Draw only the relevant patch if possible, but drawImage(bitmap, ...) is fast.
+    workerBlurCtx.drawImage(bitmap, 0, 0);
 
-    const localBlurCanvas = new OffscreenCanvas(pw, ph);
-    const localBlurCtx = localBlurCanvas.getContext('2d');
-    localBlurCtx.filter = `blur(${blurAmount}px)`;
-    localBlurCtx.drawImage(patchCanvas, 0, 0);
-
-    const maskCanvas = new OffscreenCanvas(pw, ph);
-    const maskCtx = maskCanvas.getContext('2d');
-
-    // Adaptive feathering based on user input
-    // Gradient must cover the larger radius side
-    const gradRadius = Math.max(radius, radiusY) * 1.2;
-    const grad = maskCtx.createRadialGradient(pw/2, ph/2, 0, pw/2, ph/2, gradRadius);
-    grad.addColorStop(feathering, 'rgba(0,0,0,1)');
-    grad.addColorStop(Math.min(1, feathering + 0.2), 'rgba(0,0,0,0)');
-
-    maskCtx.fillStyle = grad;
-    maskCtx.beginPath();
-    // Transition to Ellipse for shape support
-    maskCtx.ellipse(pw/2, ph/2, radius, radiusY, 0, 0, Math.PI * 2);
-    maskCtx.fill();
-
-    const finalPatchCanvas = new OffscreenCanvas(pw, ph);
-    const finalPatchCtx = finalPatchCanvas.getContext('2d');
-    finalPatchCtx.drawImage(localBlurCanvas, 0, 0);
-    finalPatchCtx.globalCompositeOperation = 'destination-in';
-    finalPatchCtx.drawImage(maskCanvas, 0, 0);
-
-    resultCtx.drawImage(finalPatchCanvas, px, py);
+    workerBlurCtx.restore();
   }
 
-  return resultCtx.getImageData(0, 0, width, height);
+  return await createImageBitmap(workerBlurCanvas);
 }
 
 /**
@@ -421,18 +389,18 @@ self.onmessage = async (event) => {
       }
 
       case 'detect': {
-        const { imageData, width, height, variant } = payload;
+        const { bitmap, width, height, variant } = payload;
 
         if (variant && variant !== currentVariant) {
           currentVariant = variant;
-          model = null;
-          processor = null;
+          session = null;
           await initDetector(variant, sendProgress);
         } else {
           await initDetector(currentVariant, sendProgress);
         }
 
-        const detections = await detectFaces(imageData, width, height);
+        const detections = await detectFaces(bitmap, width, height);
+        bitmap.close();
 
         self.postMessage({
           type: 'detections',
@@ -444,75 +412,75 @@ self.onmessage = async (event) => {
       }
 
       case 'blur': {
-        const { imageData, width, height, blurAmount = 20, radiusScale = 1.0, feathering = 0.75, shape = 1.0, variant } = payload;
+        const { bitmap, width, height, blurAmount = 20, radiusScale = 1.0, feathering = 0.75, shape = 1.0, variant } = payload;
 
         if (variant && variant !== currentVariant) {
           currentVariant = variant;
-          model = null;
-          processor = null;
+          session = null;
           await initDetector(variant, sendProgress);
         } else {
           await initDetector(currentVariant, sendProgress);
         }
 
         sendProgress(0.7, 'Detecting...');
-        const detections = await detectFaces(imageData, width, height);
+        const detections = await detectFaces(bitmap, width, height);
 
         if (detections.length === 0) {
           sendProgress(1, 'No faces/persons detected');
+          // Create a copy of the bitmap to send back as result
+          const resultBitmap = await createImageBitmap(bitmap);
+          bitmap.close();
           self.postMessage({
             type: 'complete',
-            imageData: new Uint8ClampedArray(imageData),
+            resultBitmap,
             width,
             height,
             detections: [],
             count: 0,
             device: currentDevice,
-          });
+          }, [resultBitmap]);
           break;
         }
 
         sendProgress(0.95, `Blurring ${detections.length} face(s)...`);
-        const resultImageData = await applyBlur(imageData, width, height, detections, {
+        const resultBitmap = await applyBlur(bitmap, width, height, detections, {
           blurAmount,
           radiusScale,
           feathering,
           shape
         });
+        bitmap.close();
 
         sendProgress(1, `Blurred ${detections.length} face(s)`);
 
         self.postMessage({
           type: 'complete',
-          imageData: resultImageData.data,
-          width: resultImageData.width,
-          height: resultImageData.height,
+          resultBitmap,
           detections,
           count: detections.length,
           device: currentDevice,
-        }, [resultImageData.data.buffer]);
+        }, [resultBitmap]);
         break;
       }
 
       case 'reblur': {
-        const { imageData, width, height, detections, blurAmount = 20, radiusScale = 1.0, feathering = 0.75, shape = 1.0 } = payload;
+        const { bitmap, width, height, detections, blurAmount = 20, radiusScale = 1.0, feathering = 0.75, shape = 1.0 } = payload;
 
-        const resultImageData = await applyBlur(imageData, width, height, detections, {
+        const resultBitmap = await applyBlur(bitmap, width, height, detections, {
           blurAmount,
           radiusScale,
           feathering,
           shape
         });
+        bitmap.close();
 
         self.postMessage({
           type: 'complete',
-          imageData: resultImageData.data,
-          width: resultImageData.width,
-          height: resultImageData.height,
+          resultBitmap,
           detections,
           count: detections.length,
           device: currentDevice,
-        }, [resultImageData.data.buffer]);
+        }, [resultBitmap]);
         break;
       }
 

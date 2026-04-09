@@ -1,60 +1,91 @@
 # Context Map: config.js
 
+
 ## 1. Purpose
-Central configuration for and service registry for Image Boss. Defines model identifiers, pipeline types, hardware preferences, and UI ordering for all AI tools. Acts as the "Brain" of the application's service architecture.
+
+The central manifest and registry for the entire application. It defines the identity, hardware requirements (WebGPU/WASM), model paths, and UI configuration for every AI service. It acts as the "source of truth" that drives dynamic UI generation in the Sidebar and ControlPanel.
+
 
 ## 2. Imports
-- No external imports (Static data export).
+
+- **Non-Standard**: This is a static configuration module and does not contain external imports. It serves as a pure constant registry.
+
 
 ## 3. Dependencies
-- **Uses**:
-  - Hugging Face Hub (Reference IDs).
+
 - **Used by**:
-  - `main.js`: Primary consumer for dynamic service loading and UI generation.
+  - `AppContext.jsx` (For default service initialization).
+  - `Sidebar.jsx` (For rendering the navigation list).
+  - `ControlPanel.jsx` (For mapping service IDs to display labels and tools).
+  - `useProcessor.js` (For retrieving model paths and hardware dtypes).
+
 
 ## 4. State Management
-(Empty - Static configuration module)
+
+- **APP_CONFIG (Constant/Object)**:
+  - Syntax: `export const APP_CONFIG = { name: 'Image Boss', version: '1.0.0' };`
+  - Purpose: Stores top-level metadata for the application branding and versioning.
+
+- **SERVICES (Constant/Object)**:
+  - Syntax: `export const SERVICES = { ... };`
+  - Purpose: The master dictionary of AI tools. Each key is a unique service ID containing model hashes, pipeline types (native/custom), and hardware targets (`dtype: 'fp16'`, `device: 'webgpu'`).
+
+- **SERVICE_ORDER (Constant/Array)**:
+  - Syntax: `export const SERVICE_ORDER = [ ... ];`
+  - Purpose: Defines the sequential order of services as they should appear in the navigation sidebar.
+
+- **OUTPUT_FORMATS (Constant/Array)**:
+  - Syntax: `export const OUTPUT_FORMATS = [ ... ];`
+  - Purpose: A registry of supported MIME types for the image conversion service.
+
+- **COMPRESSION_PRESETS (Constant/Object)**:
+  - Syntax: `export const COMPRESSION_PRESETS = { ... };`
+  - Purpose: Maps semantic quality labels (light, medium, heavy) to technical quality floats and file size targets.
+
 
 ## 5. Project Flow
-1. **Declaration Stage**: Exports immutable configuration objects during the application's bootstrap phase.
-2. **UI Mapping**: `main.js` iterates through `SERVICE_ORDER` to build the navigation sidebar.
-3. **Execution Routing**: When a service is selected, `main.js` looks up the `model` and `pipeline` type in `SERVICES` to decide which processor and weights to initialize.
+
+1. **Bootstrap**: Upon application load, `main.jsx` and `AppContext.jsx` import the registries.
+
+2. **UI Generation**: The `Sidebar` iterates over `SERVICE_ORDER` to build the navigation links.
+
+3. **Runtime Configuration**: When a service is selected, the application looks up the `SERVICES` object to determine if a Worker is needed and which model to fetch.
+
+4. **Hardware Selection**: AI Processors query the `dtype` and `device` fields to initialize the WebGPU or WASM inference session correctly.
+
 
 ## 6. Code Structure
 
-- **`APP_CONFIG` (Object)**
-  - **Name (Type)**: APP_CONFIG (Constant)
-  - **Syntax**: `export const APP_CONFIG = { ... }`
-  - **Purpose**: General metadata for the application (name, version).
+- **APP_CONFIG (Export)**:
+  - Syntax: `export const APP_CONFIG = { ... };`
+  - Purpose: Branding metadata.
+  - Working: Static object holding the app name and version string.
 
-- **`SERVICES` (Object)**
-  - **Name (Type)**: SERVICES (Registry)
-  - **Syntax**: `export const SERVICES = { ... }`
-  - **Purpose**: Orchestration registry for all AI tools.
-  - **Working**: Defines the complete metadata for each tool:
-    - `id`: Unique identifier used for routing.
-    - `model`: Repository ID or library name.
-    - `pipeline`: 'custom', 'native', or 'disabled' execution strategy.
-    - `dtype`: precision preference ('fp16', 'fp32', 'q4').
-    - `device`: Hardware target ('webgpu').
-    - `usesWorker`: Boolean flag for thread isolation.
+- **SERVICES (Export)**:
+  - Syntax: `export const SERVICES = { ... };`
+  - Purpose: The primary data structure for the app's capability mapping.
+  - Working: Organizes services into a flat map where each entry specifies technical requirements like `pipeline`, `usesWorker`, and `warmup` status. This structure allows new services to be added without changing the core React logic.
 
-- **`SERVICE_ORDER` (Array)**
-  - **Name (Type)**: SERVICE_ORDER (Array/String)
-  - **Syntax**: `export const SERVICE_ORDER = [ ... ]`
-  - **Purpose**: Controls the sequence of appearance in the UI navigation bar.
+- **SERVICE_ORDER (Export)**:
+  - Syntax: `export const SERVICE_ORDER = [ ... ];`
+  - Purpose: UI layout management.
+  - Working: A simple array of strings used as keys to iterate over the `SERVICES` object in a specific visual sequence.
 
-- **`OUTPUT_FORMATS` (Array)**
-  - **Name (Type)**: OUTPUT_FORMATS (Array/Object)
-  - **Syntax**: `export const OUTPUT_FORMATS = [ ... ]`
-  - **Purpose**: Registry of supported image export types (MIME types).
+- **OUTPUT_FORMATS (Export)**:
+  - Syntax: `export const OUTPUT_FORMATS = [ ... ];`
+  - Purpose: Format support registry.
+  - Working: Maps human-readable labels to browser-native MIME types for usage in `<select>` elements.
 
-- **`COMPRESSION_PRESETS` (Object)**
-  - **Name (Type)**: COMPRESSION_PRESETS (Object)
-  - **Syntax**: `export const COMPRESSION_PRESETS = { ... }`
-  - **Purpose**: Quality vs Size settings for the compression service.
+- **COMPRESSION_PRESETS (Export)**:
+  - Syntax: `export const COMPRESSION_PRESETS = { ... };`
+  - Purpose: Optimization parameter mapping.
+  - Working: Provides the `browser-image-compression` library with target metrics based on user selection.
+
 
 ## 7. Points To Consider
-- **Model Registry Sync**: Note that Hugging Face IDs in `SERVICES` (L36) must remain accurate to prevent loading errors; consider verifying these after any model hub maintenance.
-- **Pipeline Strategy**: Consider that `pipeline: 'custom'` services (L37) require manual tensor mapping in their processors, unlike 'native' or 'disabled' ones.
-- **UI Blocking**: Note that if `usesWorker` is false (L40), the operation must be extremely lightweight to avoid freezing the browser interface.
+
+- **The Pipeline Invariant**: The `pipeline` field ('native' vs 'custom') is critical. 'Native' services run on the main thread using Canvas/JS, while 'custom' services almost always require a dedicated `worker.js` and `processor.js`.
+
+- **Warmup Control**: The `warmup` flag is provided to trigger shader compilation during model load. This is essential for WebGPU models to prevent the "First-Run Freeze."
+
+- **Device/Dtype Coupling**: Models listed with `device: 'webgpu'` should ideally use `dtype: 'fp16'` for performance, unless the model architecture explicitly requires `fp32` for precision.

@@ -1,11 +1,4 @@
-/**
- * Canvas Utilities
- * Common canvas/image manipulation functions
- */
 
-/**
- * Load an image from file or URL into an HTMLImageElement
- */
 export async function loadImage(source) {
   return new Promise((resolve, reject) => {
     const img = new Image();

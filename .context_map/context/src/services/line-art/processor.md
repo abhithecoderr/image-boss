@@ -1,32 +1,55 @@
 # Context Map: line-art/processor.js
 
+
 ## 1. Purpose
-Visual filter for extracting edges from images to create "Line Art." Orchestrates the CPU-based Sobel convolution pass defined in core utilities.
+
+The specialized processor for extracting high-contrast line art from images. Unlike AI-based services, this module utilizes a deterministic WebGL-accelerated Sobel filter to identify pixel discontinuities and convert them into clean black-and-white strokes.
+
 
 ## 2. Imports
-- **../../core/canvas-utils.js**: `applySobelFilter` - The core convolution algorithm.
 
-## 3. Dependencies
-- **Uses**:
-  - [canvas-utils.js](file:///c:/projects/bg/my-ai-app/src/core/canvas-utils.js)
-- **Used by**:
-  - `main.js`: Main UI orchestrator.
+- **applySobelFilter**:
+  - Syntax: `import { applySobelFilter } from '../../core/canvas-utils.js';`
+  - Purpose: Invokes the high-performance shader-based edge detection utility.
+
 
 ## 4. State Management
-(Empty - Stateless utility service)
+
+- **Non-Standard**: This processor is stateless and deterministic. It does not maintain a worker or internal cache.
+
+
+## 3. Dependencies
+
+- **Used by**:
+  - `useProcessor.js` (Primary service path).
+
+- **External APIs**:
+  - **Canvas 2D Context**: For cloning and rendering the final edge map.
+
 
 ## 5. Project Flow
-1. **Intake**: Receives the source canvas and a sensitivity threshold.
-2. **Buffer Preparation**: Clones the source canvas to avoid mutating the original workspace view.
-3. **Execution**: Invokes the `applySobelFilter`.
-4. **Return**: Delivers the black-and-white line art result.
+
+1. **Replication**: Creates a fresh canvas clone of the source image to avoid mutating the workspace buffers.
+
+2. **Transformation**: Invokes the `applySobelFilter` with the user-defined `threshold`.
+
+3. **Feedback**: Signals progress at 20% (start) and 100% (finish).
+
+4. **Resolution**: Returns the modified canvas directly to the UI.
+
 
 ## 6. Code Structure
 
-- **`process` (Function)**
-  - **Name (Type)**: process (Primary Entry Point)
-  - **Syntax**: `export async function process(sourceCanvas, options, onProgress)`
-  - **Working**: Routes the request to the shared `applySobelFilter` utility.
+- **process (Function)**:
+  - Syntax: `export async function process(sourceCanvas, options = {}, onProgress) { ... }`
+  - Purpose: The edge extraction orchestrator.
+  - Working: Simply acts as a wrapper around the `applySobelFilter` utility. It handles the canvas instantiation and progress broadcasting required by the global `useProcessor` hook.
+
 
 ## 7. Points To Consider
-- **Main Thread Latency**: Consider that the Sobel filter (L32) uses pixel-wise CPU loops; for 4K+ images, notice that this may cause temporary UI freezes and is a candidate for worker migration.
+
+- **The Threshold Factor**: The `threshold` option determines the sensitivity of the edge detection. Higher values result in cleaner, minimalist line-art, while lower values preserve more background noise and texture.
+
+- **Synchronous vs Async Trap**: While the function is `async` (to match the service interface), the underlying Sobel filter is currently a blocking CPU operations on the main thread (or a synchronous WebGL call). This represents a potential UI stutter point for 8K+ images.
+
+- **Visual Consistency**: The resulting canvas is always a high-contrast binary-style image (black strokes on white or transparent background depending on the utility implementation).

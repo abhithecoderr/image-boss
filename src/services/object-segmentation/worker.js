@@ -1,6 +1,6 @@
 /**
- * Object Segmentation Worker
- * Runs SlimSAM model in a separate thread
+ * Object Segmentation Worker (Transformers.js v4)
+ * Runs SlimSAM / SAM-2 model in a separate thread
  */
 
 import { SamModel, Sam2Model, AutoProcessor, RawImage, env } from '@huggingface/transformers';
@@ -18,23 +18,54 @@ let cachedRawImage = null;
 
 function clearCache() {
   console.log('[Worker] Clearing memory cache...');
-  if (cachedRawImage) {
-    // No explicit close() on RawImage usually, but we can nullify
-    cachedRawImage = null;
-  }
+  cachedRawImage = null;
   cachedEmbeddings = null;
   lastImageInputs = null;
 }
 
 /**
- * Convert ImageBitmap to OffscreenCanvas for RawImage compatibility
+ * Detect WebGPU and fp16 support — mirrors bg-removal pattern
  */
-function bitmapToCanvas(bitmap) {
-  const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(bitmap, 0, 0);
-  return canvas;
+async function getGPUConfig() {
+  if (!navigator.gpu) return { supported: false, fp16: false };
+  try {
+    const adapter = await navigator.gpu.requestAdapter();
+    if (!adapter) return { supported: false, fp16: false };
+    const hasFP16 = adapter.features.has('shader-f16');
+    return { supported: true, fp16: hasFP16 };
+  } catch (_) {
+    return { supported: false, fp16: false };
+  }
 }
+
+/**
+ * Convert mask tensor to ImageBitmap
+ */
+let workerMaskCanvas = null;
+let workerMaskCtx = null;
+
+async function extractMaskBitmap(data, width, height) {
+  if (!workerMaskCanvas || workerMaskCanvas.width !== width || workerMaskCanvas.height !== height) {
+    workerMaskCanvas = new OffscreenCanvas(width, height);
+    workerMaskCtx = workerMaskCanvas.getContext('2d', { alpha: true });
+  }
+
+  const imageData = workerMaskCtx.createImageData(width, height);
+  const data32 = new Uint32Array(imageData.data.buffer);
+
+  // High-performance thresholding and pixel packing
+  // Most modern browsers are Little Endian (RGBA in memory order)
+  for (let i = 0; i < data.length; i++) {
+    const val = data[i] > 0 ? 255 : 0;
+    // Pack as AABBGGRR (Little Endian maps to [R, G, B, A] in memory)
+    data32[i] = (val << 24) | 0x00ffffff;
+  }
+
+  workerMaskCtx.putImageData(imageData, 0, 0);
+  return await createImageBitmap(workerMaskCanvas);
+}
+
+
 
 self.onmessage = async ({ data }) => {
   const { type, payload } = data;
@@ -42,7 +73,6 @@ self.onmessage = async ({ data }) => {
 
   if (type === 'process') {
     try {
-      // Initialize model if needed
       const modelId = payload.modelId || 'Xenova/slimsam-77-uniform';
 
       if (!model || !processor || modelId !== currentModelId) {
@@ -50,21 +80,32 @@ self.onmessage = async ({ data }) => {
 
         // Clear cache if switching models
         if (modelId !== currentModelId) {
-            clearCache();
-            currentModelId = modelId;
+          clearCache();
+          currentModelId = modelId;
         }
 
         const modelClass = modelId.includes('sam2') ? Sam2Model : SamModel;
 
+        // v4: dynamic device/dtype with fp16 guard (no longer hardcoded)
+        const hw = await getGPUConfig();
+        const device = hw.supported ? 'webgpu' : 'wasm';
+        const dtype = (hw.supported && hw.fp16) ? 'fp16' : 'fp32';
+
+        console.info(`[Worker] Loading ${modelId} on ${device} (${dtype})`);
+
         model = await modelClass.from_pretrained(modelId, {
-          device: 'webgpu',
-          dtype: 'fp16',
+          device,
+          dtype,
           progress_callback: (p) => {
-            if (p.status === 'progress' && p.progress) {
+            // v4: primary fields are loaded/total; legacy p.progress kept as fallback
+            if (p.status === 'progress') {
+              const pct = p.total
+                ? ((p.loaded ?? 0) / p.total) * 100
+                : (p.progress ?? 0);
               self.postMessage({
                 type: 'progress',
-                progress: 0.1 + p.progress * 0.3,
-                message: `Downloading model... ${Math.round(p.progress)}%`
+                progress: 0.1 + (pct / 100) * 0.3,
+                message: `Downloading model... ${Math.round(pct)}%`
               });
             }
           },
@@ -72,57 +113,71 @@ self.onmessage = async ({ data }) => {
 
         self.postMessage({ type: 'progress', progress: 0.45, message: 'Loading processor...' });
         processor = await AutoProcessor.from_pretrained(modelId);
+
       }
 
       self.postMessage({ type: 'progress', progress: 0.5, message: 'Processing image...' });
 
       let inputs = {};
       if (payload.bitmap) {
-          // New image: Clear old heavy assets first to prevent memory peak
-          clearCache();
+        // New image: Clear old heavy assets first to prevent memory peak
+        clearCache();
 
-          // New image: Run the heavy Encoder
-          console.log('[Worker] New image detected. Encoding...');
-          const canvas = bitmapToCanvas(payload.bitmap);
-          cachedRawImage = await RawImage.fromCanvas(canvas);
+        // New image: Run the heavy Encoder
+        console.log('[Worker] New image detected. Encoding...');
+        // Reuse an internal canvas for the bitmap-to-RawImage conversion
+        const canvas = new OffscreenCanvas(payload.bitmap.width, payload.bitmap.height);
+        canvas.getContext('2d').drawImage(payload.bitmap, 0, 0);
+        cachedRawImage = await RawImage.fromCanvas(canvas);
 
-          // Pre-process image metadata
-          lastImageInputs = await processor(cachedRawImage);
+        // Pre-process image metadata
+        lastImageInputs = await processor(cachedRawImage);
 
-          // Generate and cache embeddings
-          self.postMessage({ type: 'progress', progress: 0.55, message: 'Encoding image features...' });
-          cachedEmbeddings = await model.get_image_embeddings(lastImageInputs);
-          console.log('[Worker] Image encoded and cached.');
+        // Generate and cache embeddings
+        self.postMessage({ type: 'progress', progress: 0.55, message: 'Encoding image features...' });
+        cachedEmbeddings = await model.get_image_embeddings(lastImageInputs);
+        console.log('[Worker] Image encoded and cached.');
 
-          payload.bitmap.close();
+        payload.bitmap.close();
       }
 
       if (!cachedRawImage || !cachedEmbeddings) {
-          throw new Error('No image loaded and no cached embeddings found.');
+        throw new Error('No image loaded and no cached embeddings found.');
       }
 
-      // Map normalized coordinates (0..1) back to the actual AI input domain
-      const isSam2 = currentModelId.includes('sam2');
+      // Build processor options
+      const processorOpts = {};
 
-      // SAM-1 (SlimSAM) expects [ [[x, y], ...] ] (batch, point, coord)
-      // SAM-2 expects [ [ [[x, y], ...] ] ] (batch, object, point, coord)
-      const input_points = isSam2
-        ? [ [ payload.points.map(p => [p.x * cachedRawImage.width, p.y * cachedRawImage.height]) ] ]
-        : [ payload.points.map(p => [p.x * cachedRawImage.width, p.y * cachedRawImage.height]) ];
+      if (payload.points && payload.points.length > 0) {
+        const mappedPoints = payload.points.map(p => [p.x * cachedRawImage.width, p.y * cachedRawImage.height]);
+        const mappedLabels = payload.points.map(p => p.label);
 
-      const input_labels = isSam2
-        ? [ [ payload.points.map(p => p.label) ] ]
-        : [ payload.points.map(p => p.label) ];
+        // SAM / SAM-2 unified API requires a 4D tensor: [batch_size, point_batch_size, nb_points_per_image, 2]
+        processorOpts.input_points = [ [ mappedPoints ] ];
+        processorOpts.input_labels = [ [ mappedLabels ] ];
+      }
+
+      // Add bounding box if provided (from brush painting)
+      // Format: [[[x1, y1, x2, y2]]] in raw pixel coordinates -> shape [batch, box_batch_size, 4]
+      if (payload.box) {
+        const [nx1, ny1, nx2, ny2] = payload.box;
+        processorOpts.input_boxes = [[ [
+          nx1 * cachedRawImage.width,
+          ny1 * cachedRawImage.height,
+          nx2 * cachedRawImage.width,
+          ny2 * cachedRawImage.height
+        ] ]];
+      }
 
       self.postMessage({ type: 'progress', progress: 0.6, message: 'Preparing refinement inputs...' });
-      const currentInputs = await processor(cachedRawImage, { input_points, input_labels });
+      const currentInputs = await processor(cachedRawImage, processorOpts);
 
       self.postMessage({ type: 'progress', progress: 0.65, message: 'Running decoder...' });
 
       // Run Decoder (Fast Pass)
       const outputs = await model({
-          ...currentInputs,
-          image_embeddings: cachedEmbeddings
+        ...currentInputs,
+        image_embeddings: cachedEmbeddings
       });
 
       console.log('[Worker] Model outputs keys:', Object.keys(outputs));
@@ -138,8 +193,8 @@ self.onmessage = async ({ data }) => {
 
       const masks = await processor.post_process_masks(
         predMasks,
-        currentInputs.reshaped_input_sizes, // Optimization: Post-process to AI domain (1024px) instead of Original (4K)
-        currentInputs.reshaped_input_sizes
+        currentInputs.reshaped_input_sizes,
+        currentInputs.original_sizes // Upscale masks to original image resolution for precise edges
       );
 
       console.log('[Worker] Post-processed masks count:', masks?.length);
@@ -159,24 +214,18 @@ self.onmessage = async ({ data }) => {
 
       for (let i = 0; i < numMasks; i++) {
         const data = maskTensor.data.subarray(i * maskSize, (i + 1) * maskSize);
-
-        // Optimization: Pre-convert to Uint8Array (0/255) in worker
-        // This offloads work from the main thread and allows Transferable use
-        const uint8Mask = new Uint8Array(maskSize);
-        for(let j=0; j < maskSize; j++) {
-            uint8Mask[j] = data[j] > 0 ? 255 : 0;
-        }
+        const maskBitmap = await extractMaskBitmap(data, W, H);
 
         results.push({
-          maskData: uint8Mask,
+          maskBitmap,
           maskWidth: W,
           maskHeight: H,
           scaleIndex: i
         });
-        transferables.push(uint8Mask.buffer);
+        transferables.push(maskBitmap);
       }
 
-      console.log('[Worker] Inference complete, sending results');
+      console.log('[Worker] Inference complete, sending ImageBitmaps');
       self.postMessage({
         type: 'complete',
         result: {
@@ -185,22 +234,18 @@ self.onmessage = async ({ data }) => {
         }
       }, transferables);
 
-      // Transformers.js manages tensor lifecycles internally.
-      // Aggressive disposal of all output values was causing "Device Lost"
-      // when refinement loops were fast, as the model was losing its decoder state.
-      // We only close the bitmap here.
-      // Note: we keep cachedEmbeddings preserved for refinement
-
+      // Note: cachedEmbeddings is intentionally preserved for hot-refinement loop.
+      // Aggressive disposal was causing "Device Lost" on fast refinement cycles.
       payload.bitmap?.close();
     } catch (error) {
       console.error('[Worker] Error:', error);
 
       // Hardware Recovery: If WebGPU device is lost, force reload on next call
       if (error.message.includes('lost') || error.message.includes('GPUBuffer') || error.message.includes('AbortError')) {
-          console.warn('[Worker] Fatal WebGPU error detected. Invalidating model/processor.');
-          model = null;
-          processor = null;
-          clearCache();
+        console.warn('[Worker] Fatal WebGPU error detected. Invalidating model/processor.');
+        model = null;
+        processor = null;
+        clearCache();
       }
 
       self.postMessage({ type: 'error', error: error.message });

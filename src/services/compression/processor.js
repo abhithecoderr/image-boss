@@ -14,7 +14,19 @@ import { loadImage, imageToCanvas, canvasToBlob } from '../../core/canvas-utils.
  * @returns {HTMLCanvasElement} Result canvas
  */
 export async function process(sourceCanvas, options = {}, onProgress) {
-  const { maxSizeMB = 1, quality = 0.8 } = options;
+  let { maxSizeMB = 1, quality = 0.8, preset } = options;
+
+  // Map presets to values
+  if (preset === 'light') {
+    maxSizeMB = 2;
+    quality = 0.9;
+  } else if (preset === 'medium') {
+    maxSizeMB = 1;
+    quality = 0.8;
+  } else if (preset === 'heavy') {
+    maxSizeMB = 0.5;
+    quality = 0.6;
+  }
 
   onProgress?.(0.1, 'Preparing image...');
 

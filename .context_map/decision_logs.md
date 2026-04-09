@@ -1,31 +1,80 @@
 # Decision Logs (Distilled)
 
 ## [Phase I: The Detection & Coordination Crucible]
-- **Issue**: YOLO/Blur models returned unstable coordinates due to "Coordinate Domain Traps" (Pixel vs Normalized) and Transformers.js v3 incompatibilities.
-- **Decision**: Pivoted to raw `onnxruntime-web` (ORT) for surgical control. Implemented Auto-Domain detection in the parser to normalize all outputs to [0-1] before scaling.
-- **Implementation**: Refactored `blur/worker.js` with a robust YOLOv10-style parser and IoU-based NMS.
+- **Issue**: YOLO/Blur models returned unstable coordinates due to "Coordinate Domain Traps" (Pixel vs Normalized) and Transformers.js inconsistencies.
+- **Decision**: Pivoted to raw `onnxruntime-web` for surgical control. Implemented Auto-Domain detection in the parser to normalize all outputs to [0-1] before scaling.
 
-## [Phase II: Architectural Resync & Logic Guards]
-- **Issue**: UI race conditions (`isProcessing` locks) and uninitialized result pointers caused silent rendering failures.
-- **Decision**: Implemented strict whitelisting in `updateResultDisplay` and whitelast result pointers.
-- **Implementation**: Added `{}` scoping to `main.js` switch cases to prevent variable redeclaration; integrated `statusBar.classList.add('hidden')` in global `finally` blocks.
-
-## [Phase III: The Hot-Refinement Optimization Era]
+## [Phase II: The Hot-Refinement Era]
 - **Issue**: 4K image processing caused 10s+ UI freezes and "High-Res Mask Walls."
 - **Decision**: Implemented "Hot-Refinement" architecture. Split AI pipelines into heavy "Encoding" (cached) and fast "Decoding/Filter" (interactive) phases.
-- **Implementation**: (1) AI inputs capped at 1024px. (2) Worker-side embedding/result caching. (3) GPU-accelerated mask scaling via `ctx.drawImage` in processors.
+- **Implementation**: AI inputs capped at 1024px. Worker-side embedding/result caching. GPU-accelerated mask scaling via `ctx.drawImage` in processors.
 
-## [Phase IV: Subject-Centric Interaction Evolution]
-- **Issue**: Multi-point subject selection was confusing; rendering multiple high-res variations caused RAM spikes.
-- **Decision**: Implemented "Lazy Candidate" pattern and "Refine-with-Shift" interaction model.
-- **Implementation**: `MaskCandidate` objects defer high-res synthesis until selection. Integrated SAM-2 for precision while retaining SlimSAM for speed.
+## [Phase III: Transition to React Architecture]
+- **Issue**: Modular vanilla JS architecture became difficult to manage as state interactions (SAM points + Manual Refinement + Service switching) grew complex.
+- **Decision**: Refactored the entire application to React 18 / Vite.
+- **Reasoning**: React provides robust lifecycle management and a declarative way to handle complex UI states. Componentization allows for better isolation of features like the `ComparisonSlider` and `SAMOverlay`.
 
-## [Phase V: Multimodal Foundation & UI Partitioning]
-- **Issue**: Legacy captioning and chat models were underpowered and UI-cluttered.
-- **Decision**: Migrated to Florence-2 (Vision) and Liquid LFM (LLM) with Int4/fp16 quantization. Partitioned viewports to separate visual artifacts from textual results.
-- **Implementation**: Zero-copy `ImageBitmap` transfers for Florence-2; `TextStreamer` integration for real-time local chat.
+## [Phase IV: Persistence & Model-Switching Fixes]
+- **Issue**: Switching services lost previous results. Switching models *within* a service caused old results to linger on the canvas.
+- **Decision**:
+  1. Implemented `serviceResults` map in `AppContext` for persistence.
+  2. Modified `useProcessor` and `Workspace` to explicitly clear rendering contexts when the result state is reset.
+- **Implementation**: `useProcessor.process` now clears result state at start; `Workspace.jsx` watches for `null` state and clears the DOM canvas context immediately.
 
-## [Current]
-- **Prompt**: "Move to phase 2: Summarizing lore and updating Section 7."
-- **Reasoning**: To maintain context density and prevent token bloat while transitioning to the advisory HCM Protocol v7.1.
-- **Implementation**: Standardized all shadow files to "Points To Consider" and archived last 50+ logs into 5 architectural distillations.
+## [Phase V: InSPyReNet & BiRefNet Precision]
+- **Issue**: High-end background removal models lost precision at small resolutions.
+- **Decision**: Implemented model-specific target resolutions (Up to 1024px) and custom edge-sharpening parameters.
+- **Implementation**: Added `modelSizes` registry in processors. Integrated GPU-accelerated `blur(1.2px)` during compositing to smooth AI upscaling artifacts.
+
+## [Phase VII: Florence-2 Text-Grounded Segmentation]
+- **Issue**: Standard segmentation requires manual points (SAM). Users wanted a way to segment objects via text description alone.
+- **Decision**: Implemented Microsoft Florence-2 `<REFERRING_EXPRESSION_SEGMENTATION>` task.
+- **Implementation**:
+  1. Updated `worker.js` with 1024-token limit for complex polygons.
+  2. Implemented "Mask Stack" rendering in `processor.js` (B&W Mask + Colorful Overlay).
+  3. Added text-prompt UI in `ControlPanel.jsx` for text-to-mask conversion.
+
+## [Phase VIII: Florence-2 Token & Prompt Fixes]
+- **Issue**: Segmentation mode returned a black screen/raw string instead of polygons.
+- **Root Cause**:
+  1. Transformers.js v3 post-processor requires a space between the task tag and prompt text.
+  2. The model outputs `<loc_XXX>` (with underscore), but the processor expects `<locXXX>` (no underscore) for parsing.
+- **Decision**:
+  1. Implemented prompt-spacing enforcement in `worker.js`.
+  2. Implemented `<loc_` -> `<loc` sanitization in worker.
+  3. Added a manual regex-based polygon parser in `processor.js` as a "Safety Net" fallback.
+
+## [Phase IX: Brush-Based SAM Segmentation]
+- **Issue**: Single-dot click gives SAM ambiguous context, leading to poor mask quality.
+- **Decision**: Replaced dot-click with brush painting approach.
+- **Implementation**:
+  1. User paints over object → system derives bounding box + 8 sampled positive points.
+  2. Both `input_boxes` and `input_points` are sent to SAM together.
+  3. Added brush size slider in ControlPanel, replacing positive/negative toggle.
+  4. Fixed `post_process_masks` bug: was using AI resolution instead of original image size.
+
+ ## [Phase XI: Transformers.js v4 Upgrade]
+ - **Issue**: BiRefNet triggered `concat`/`split`/`max buffers 8` WebGPU errors and cryptic `597685352` (DXGI_ERROR_DEVICE_RESET) crashes due to missing `GatherND`/`ScatterND` WebGPU kernels in v3's JS runtime, forcing CPU fallback that caused buffer-binding-limit overflow and GPU command queue exhaustion.
+ - **Decision**: Upgraded `@huggingface/transformers` to the v4 `@next` preview tag. v4 ships a C++ WebGPU runtime co-developed with Microsoft's ONNX Runtime team, providing native `GatherND`, `ScatterND`, `Concat`, `Split` WebGPU kernels, eliminating the root cause.
+ - **Implementation**:
+   1. `package.json`: `"^3.8.1"` → `"next"`.
+   2. `background-removal/worker.js`: Removed deprecated `env.useCustomValues`. Added post-load model warmup pass (compile shaders silently). Kept `graphCapture = false` as catch-and-retry guard.
+   3. `object-segmentation/worker.js`: Added `getGPUConfig()` fp16 detection. Dynamic `device`/`dtype` selection (no longer hardcoded). Added warmup pass.
+   4. `captioning/worker.js`: Promoted Florence-2 from `fp32` → `fp16` (guarded by fp16 check). Removed v3-specific `wasm.proxy = false`. Added `progress_callback` to model load.
+
+ ## [Phase X: LaMa Inpainting Integration]
+ - **Issue**: LaMa model failed in `lama.html` due to CORS errors, missing `SharedArrayBuffer` (threading), and "JSEP kernel" failures on WebGPU.
+ - **Decision**: Implemented a custom ONNX Runtime Web integration with automatic WASM fallback.
+ - **Implementation**:
+   1. Upgraded to ORT 1.20.1 (`ort.all.min.js`) for `int64` support.
+   2. Implemented `[-1, 1]` normalization in manual image-to-tensor helpers.
+   3. Added `try-catch` wrapper around `session.run` to reload with the `wasm` provider if WebGPU fails during execution (handles FFC operator incompatibility).
+   4. Fixed CORS by using Hugging Face `resolve` raw links.
+
+## [Phase XII: Manual Mask-to-Result Synchronization]
+- **Issue**: Manual mask edits (via `useMaskEditor`) were visual-only and lost during download because they weren't synced back to the global `resultCanvas`.
+- **Decision**: Implement an explicit synchronization step at the end of drawing sessions to "bake" manual edits into `resultCanvas`.
+- **Implementation**:
+  1. Added `bakeMask` function to `useMaskEditor.js`.
+  2. Triggered bake on `onMouseUp`/`onMouseLeave` (brush sessions).
+  3. Ensured `resultCanvas` in `AppContext` is updated with a fresh canvas containing the composited result.

@@ -1,0 +1,365 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>LaMa Inpainting - Optimized</title>
+    <style>
+        body { font-family: sans-serif; text-align: center; background-color: #f0f0f0; margin: 0; padding: 20px; }
+        .container { display: flex; justify-content: center; gap: 20px; margin-top: 20px; flex-wrap: wrap; }
+        .canvas-wrapper { background: #fff; padding: 10px; border-radius: 8px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); }
+        canvas { border: 1px solid #ddd; cursor: crosshair; background-image:
+            linear-gradient(45deg, #eee 25%, transparent 25%),
+            linear-gradient(-45deg, #eee 25%, transparent 25%),
+            linear-gradient(45deg, transparent 75%, #eee 75%),
+            linear-gradient(-45deg, transparent 75%, #eee 75%);
+            background-size: 20px 20px;
+            background-position: 0 0, 0 10px, 10px -10px, -10px 0px;
+        }
+        .controls { margin: 20px; background: white; padding: 15px; border-radius: 8px; display: inline-block; }
+        button { font-size: 16px; padding: 10px 20px; margin: 5px; cursor: pointer; border: none; border-radius: 4px; background: #3498db; color: white; transition: 0.2s; }
+        button:hover { background: #2980b9; }
+        button:disabled { background: #bdc3c7; cursor: not-allowed; }
+        #status { margin-top: 10px; font-weight: bold; color: #555; height: 20px; }
+        .loader { border: 4px solid #f3f3f3; border-top: 4px solid #3498db; border-radius: 50%; width: 30px; height: 30px; animation: spin 2s linear infinite; display: none; margin: 20px auto; }
+        @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+    </style>
+</head>
+<body>
+    <h1>LaMa Image Inpainting (Optimized)</h1>
+    <p>Upload an image, brush over the area to remove, and click "Inpaint".</p>
+
+    <div class="controls">
+        <input type="file" id="imageUpload" accept="image/*">
+        <button id="clearMask">Clear Mask</button>
+        <button id="runInpaint" disabled>Inpaint</button>
+    </div>
+    <div id="status">Starting worker...</div>
+    <div class="loader" id="loader"></div>
+
+    <div class="container">
+        <div class="canvas-wrapper">
+            <h3>Input & Mask</h3>
+            <canvas id="inputCanvas" width="512" height="512"></canvas>
+        </div>
+        <div class="canvas-wrapper">
+            <h3>Result</h3>
+            <canvas id="resultCanvas" width="512" height="512"></canvas>
+        </div>
+    </div>
+
+    <script>
+        // --- State ---
+        let worker;
+        let isDrawing = false;
+        let originalImage = new Image();
+        let paddingInfo = null;
+        let workerReady = false;
+        let workerInitInProgress = false;
+        const DEBUG = false;
+
+        const inputCanvas = document.getElementById('inputCanvas');
+        const resultCanvas = document.getElementById('resultCanvas');
+        const inputCtx = inputCanvas.getContext('2d');
+        const resultCtx = resultCanvas.getContext('2d');
+
+        // Preserve a clean copy of the original image (no red mask overlay)
+        const originalCanvas = document.createElement('canvas');
+        originalCanvas.width = 512;
+        originalCanvas.height = 512;
+        const originalCtx = originalCanvas.getContext('2d', { willReadFrequently: true });
+
+        // Internal mask canvas to keep track of the removal area precisely
+        const maskCanvas = document.createElement('canvas');
+        maskCanvas.width = 512;
+        maskCanvas.height = 512;
+        const maskCtx = maskCanvas.getContext('2d', { willReadFrequently: true });
+
+        const statusDiv = document.getElementById('status');
+        const loader = document.getElementById('loader');
+        const runBtn = document.getElementById('runInpaint');
+
+        function log(...args) {
+            if (!DEBUG) return;
+            const ts = new Date().toISOString();
+            console.log(`[LaMa UI ${ts}]`, ...args);
+        }
+
+        // --- Initialize Worker ---
+        function initWorker(forceRestart = false) {
+            if (workerInitInProgress && !forceRestart) {
+                log('Worker init already in progress');
+                return;
+            }
+            if (worker && forceRestart) {
+                log('Terminating existing worker for restart');
+                try { worker.terminate(); } catch (e) { log('Worker terminate failed', e); }
+            }
+
+            log('Initializing worker...');
+            workerInitInProgress = true;
+            workerReady = false;
+            statusDiv.textContent = 'Starting worker...';
+            worker = new Worker('lama.worker.js');
+            worker.onmessage = (e) => {
+                const { type, payload, error, output, info } = e.data;
+                log('Worker message', { type, hasOutput: !!output, error, info });
+                if (type === 'init-status') {
+                    const msg = payload?.message || `Loading model (${payload?.provider || 'unknown'})...`;
+                    statusDiv.textContent = msg;
+                } else if (type === 'ready') {
+                    workerReady = true;
+                    workerInitInProgress = false;
+                    const shape = info && info.inputs && info.inputs[0] && Array.isArray(info.inputs[0].shape)
+                        ? info.inputs[0].shape.join('x')
+                        : 'unknown';
+                    statusDiv.innerHTML = `Model ready. <span style="font-size: 0.8em; opacity: 0.7;">(Input: ${shape})</span>`;
+                    if (DEBUG) console.log("Model Metadata:", info);
+                    if (originalImage.src) runBtn.disabled = false;
+                } else if (type === 'complete') {
+                    handleResult(output);
+                } else if (type === 'error') {
+                    statusDiv.textContent = 'Error: ' + error;
+                    loader.style.display = 'none';
+                    workerInitInProgress = false;
+                    // Keep button available so user can retry init
+                    runBtn.disabled = !originalImage.src;
+                }
+            };
+
+            worker.onerror = (e) => {
+                log('Worker error', { message: e.message, filename: e.filename, lineno: e.lineno, colno: e.colno });
+                statusDiv.textContent = 'Worker error: ' + e.message;
+                loader.style.display = 'none';
+                workerInitInProgress = false;
+                // Keep button available so user can retry init
+                runBtn.disabled = !originalImage.src;
+            };
+
+            worker.postMessage({
+                type: 'init',
+                payload: { modelURL: 'https://huggingface.co/TheGuy444/LaMa-Web/resolve/main/onnx/lama.onnx' }
+            });
+        }
+
+        // --- Image Handling & Padding ---
+        document.getElementById('imageUpload').addEventListener('change', (e) => {
+            const file = e.target.files[0];
+            if (!file) return;
+
+            const reader = new FileReader();
+            reader.onload = (event) => {
+                log('Image file loaded', { name: file.name, type: file.type, size: file.size });
+                originalImage.onload = () => {
+                    log('Image decoded', { width: originalImage.width, height: originalImage.height });
+                    setupCanvases();
+                    runBtn.disabled = false;
+                    statusDiv.textContent = 'Image loaded. Draw a mask.';
+                };
+                originalImage.onerror = (err) => {
+                    log('Image decode error', err);
+                    statusDiv.textContent = 'Error decoding image.';
+                };
+                originalImage.src = event.target.result;
+            };
+            reader.readAsDataURL(file);
+        });
+
+        function setupCanvases() {
+            const imgW = originalImage.width;
+            const imgH = originalImage.height;
+            const aspect = imgW / imgH;
+
+            let targetW, targetH, padX, padY;
+            if (aspect > 1) { // Landscape
+                targetW = 512;
+                targetH = Math.round(512 / aspect);
+                padX = 0;
+                padY = Math.floor((512 - targetH) / 2);
+            } else { // Portrait
+                targetH = 512;
+                targetW = Math.round(512 * aspect);
+                padY = 0;
+                padX = Math.floor((512 - targetW) / 2);
+            }
+
+            paddingInfo = { targetW, targetH, padX, padY };
+            log('Canvas setup', paddingInfo);
+
+            // Clear and draw padded original
+            inputCtx.clearRect(0, 0, 512, 512);
+            inputCtx.drawImage(originalImage, padX, padY, targetW, targetH);
+            originalCtx.clearRect(0, 0, 512, 512);
+            originalCtx.drawImage(originalImage, padX, padY, targetW, targetH);
+
+            resultCtx.clearRect(0, 0, 512, 512);
+            maskCtx.fillStyle = 'black';
+            maskCtx.fillRect(0, 0, 512, 512);
+        }
+
+        // --- Mask Drawing ---
+        inputCanvas.addEventListener('mousedown', () => {
+            isDrawing = true;
+            log('Mask draw start');
+        });
+        window.addEventListener('mouseup', () => {
+            if (isDrawing) log('Mask draw end');
+            isDrawing = false;
+        });
+
+        inputCanvas.addEventListener('mousemove', (e) => {
+            if (!isDrawing) return;
+            const rect = inputCanvas.getBoundingClientRect();
+            const x = (e.clientX - rect.left) * (512 / rect.width);
+            const y = (e.clientY - rect.top) * (512 / rect.height);
+
+            // Draw on visual canvas (RED)
+            inputCtx.fillStyle = 'rgba(255, 0, 0, 0.5)';
+            inputCtx.beginPath();
+            inputCtx.arc(x, y, 15, 0, Math.PI * 2);
+            inputCtx.fill();
+
+            // Draw on model mask canvas (WHITE)
+            maskCtx.fillStyle = 'white';
+            maskCtx.beginPath();
+            maskCtx.arc(x, y, 15, 0, Math.PI * 2);
+            maskCtx.fill();
+        });
+
+        document.getElementById('clearMask').addEventListener('click', () => {
+            if (!paddingInfo) return;
+            log('Mask cleared');
+            // Restore the visual canvas from the pristine original
+            inputCtx.clearRect(0, 0, 512, 512);
+            inputCtx.drawImage(originalCanvas, 0, 0);
+            maskCtx.fillStyle = 'black';
+            maskCtx.fillRect(0, 0, 512, 512);
+        });
+
+        // --- Inpainting ---
+        document.getElementById('runInpaint').addEventListener('click', async () => {
+            if (!originalImage.src) return;
+            if (!workerReady) {
+                if (workerInitInProgress) {
+                    log('Run blocked: worker still initializing');
+                    statusDiv.textContent = 'Model is still loading...';
+                } else {
+                    log('Run blocked: worker not ready, reinitializing');
+                    statusDiv.textContent = 'Worker not ready. Retrying init...';
+                    runBtn.disabled = true;
+                    initWorker(true);
+                }
+                return;
+            }
+
+            statusDiv.textContent = 'Inpainting...';
+            loader.style.display = 'block';
+            runBtn.disabled = true;
+            const t0 = performance.now();
+
+            // Use the pristine image for model input (no red overlay)
+            const imageData = originalCtx.getImageData(0, 0, 512, 512);
+            const maskImageData = maskCtx.getImageData(0, 0, 512, 512);
+
+            // Transfer buffers to worker. This is zero-copy and very efficient.
+            const imageBuffer = imageData.data.buffer;
+            const maskBuffer = maskImageData.data.buffer;
+
+            log('Sending to worker', {
+                imageBytes: imageData.data.length,
+                maskBytes: maskImageData.data.length
+            });
+
+            worker.postMessage({
+                type: 'inpaint',
+                payload: {
+                    image: imageData.data,
+                    mask: maskImageData.data
+                }
+            }, [imageBuffer, maskBuffer]);
+
+            const t1 = performance.now();
+            log('Buffers posted', { ms: (t1 - t0).toFixed(2) });
+        });
+
+        function handleResult(outputData) {
+            const t0 = performance.now();
+            const finalImageData = new ImageData(512, 512);
+
+            // OUTPUT EXPECTED RANGE: [0, 1]
+            // Sample instead of exhaustive scan (stride by 100) to find range cheaply
+            let min = 999, max = -999;
+            for(let i=0; i<outputData.length; i+=100) {
+                if(outputData[i] < min) min = outputData[i];
+                if(outputData[i] > max) max = outputData[i];
+            }
+            if (DEBUG) console.log(`Model output range: [${min.toFixed(3)}, ${max.toFixed(3)}]`);
+            log('Output received', { length: outputData.length, min, max });
+
+            const maskData = maskCtx.getImageData(0, 0, 512, 512).data;
+            const originalData = originalCtx.getImageData(0, 0, 512, 512).data;
+
+            const range = max - min;
+            let scaleMode = 0; // 0=unknown, 1=minus1_1, 2=zero1, 3=zero255, 4=minmax
+            if (min >= -1.05 && max <= 1.05) {
+                scaleMode = min < -0.1 ? 1 : 2;
+            } else if (min >= 0 && max <= 255.5) {
+                scaleMode = 3;
+            } else if (range > 0) {
+                scaleMode = 4;
+            }
+            log('Output scale mode', { scaleMode, min, max });
+
+            // Precalculate channel offsets
+            const ch2 = 262144; // 512 * 512
+            const ch3 = 524288; // 1024 * 512
+
+            for (let i = 0; i < ch2; i++) {
+                const pi = i * 4;
+                const maskActive = maskData[pi] > 128; // Binary mask optimization
+
+                if (maskActive) {
+                    let r, g, b;
+                    if (scaleMode === 1) {
+                        r = (outputData[i] + 1.0) * 127.5;
+                        g = (outputData[i + ch2] + 1.0) * 127.5;
+                        b = (outputData[i + ch3] + 1.0) * 127.5;
+                    } else if (scaleMode === 2) {
+                        r = outputData[i] * 255;
+                        g = outputData[i + ch2] * 255;
+                        b = outputData[i + ch3] * 255;
+                    } else if (scaleMode === 3) {
+                        r = outputData[i];
+                        g = outputData[i + ch2];
+                        b = outputData[i + ch3];
+                    } else {
+                        r = ((outputData[i] - min) / (range || 1)) * 255;
+                        g = ((outputData[i + ch2] - min) / (range || 1)) * 255;
+                        b = ((outputData[i + ch3] - min) / (range || 1)) * 255;
+                    }
+
+                    // Uint8ClampedArray handles [0, 255] max/min clamping automatically natively
+                    finalImageData.data[pi] = r;
+                    finalImageData.data[pi + 1] = g;
+                    finalImageData.data[pi + 2] = b;
+                } else {
+                    finalImageData.data[pi] = originalData[pi];
+                    finalImageData.data[pi + 1] = originalData[pi + 1];
+                    finalImageData.data[pi + 2] = originalData[pi + 2];
+                }
+                finalImageData.data[pi + 3] = 255;
+            }
+
+            resultCtx.putImageData(finalImageData, 0, 0);
+
+            loader.style.display = 'none';
+            runBtn.disabled = false;
+            statusDiv.textContent = 'Inpainting complete!';
+            const t1 = performance.now();
+            log('Render complete', { ms: (t1 - t0).toFixed(2) });
+        }
+
+        initWorker();
+    </script>
+</body>
+</html>

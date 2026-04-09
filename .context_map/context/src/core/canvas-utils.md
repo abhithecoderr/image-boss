@@ -1,93 +1,87 @@
 # Context Map: canvas-utils.js
 
+
 ## 1. Purpose
-Core image manipulation toolkit. Provides fundamental utilities for loading images, resizing canvases, applying masks/filters (Sobel/Blur), and handle exports. Designed to abstract browser-native canvas APIs into reusable async functions.
+
+The low-level pixel manipulation and image I/O engine for the application. It provides essential utilities for loading images from diverse sources (Blobs, Files, URLs), converting them into high-performance `ImageBitmaps`, scaling canvases while preserving aspect ratios, and applying specialized computer vision filters like Sobel edge detection and Surgical Inpainting.
+
 
 ## 2. Imports
-- No external imports (Browser native APIs only).
+
+- **Non-Standard**: This module is a pure utility library and does not depend on external JavaScript imports. It utilizes native browser APIs exclusively.
+
 
 ## 3. Dependencies
-- **Uses**:
-  - Native browser APIs: `Image`, `CanvasRenderingContext2D`, `Blob`, `FileReader`, `URL`.
+
 - **Used by**:
-  - `main.js`: Primary consumer for UI canvas updates and file handling.
-  - All service processors: For transforming model outputs back into visual elements.
+  - `AppContext.jsx` (For file ingestion processing).
+  - `useFileIngestion.js` (For loading and resizing user images).
+  - `useProcessor.js` (For converting results and creating bitmaps).
+  - All AI Processors (For masking, blurring, and filtering).
+
+- **External APIs**:
+  - **HTML5 Canvas API**: The primary rendering interface.
+  - **ImageBitmap API**: Used for zero-copy data transfer to Workers.
+  - **URL.createObjectURL**: Used for memory-efficient asset loading.
+
 
 ## 4. State Management
-(Empty - Stateless utility module)
+
+- **Non-Standard**: This is a stateless utility module. It operates on passed-in `HTMLCanvasElement`, `Blob`, or `Image` objects and returns new instances or modified buffers.
+
 
 ## 5. Project Flow
-1. **Intake Stage**: `loadImage` and `fileToDataURL` transform raw user uploads into manipulatable objects.
-2. **Processing Stage**: Functions like `applyMask`, `applyBlurToRegions`, and `applySobelFilter` execute visual transformations directly on the canvas buffers.
-3. **Advanced Synthesis**: `surgicalInpaint` manages multi-iterative diffusion to fill masked areas without subject-bleed.
-4. **Export Stage**: `canvasToBlob` and `downloadCanvas` facilitate saving results back to the local system.
+
+1. **Intake**: User-provided files are passed to `loadImage` or `fileToDataURL`.
+
+2. **Standardization**: The resulting image is converted via `imageToCanvas` to extract a drawable pixel buffer.
+
+3. **Inference Prep**: Large images are downscaled using `resizeCanvas` before being converted to `ImageBitmap` via `canvasToBitmap` for worker transfer.
+
+4. **Synthesis**: After AI processing, the results are applied back to canvases using `applyMask` or `applyBlurToRegions`.
+
+5. **Realization**: The final artistic or upscaled output is delivered to the user via `downloadCanvas`.
+
 
 ## 6. Code Structure
 
-- **`loadImage` (Function)**
-  - **Name (Type)**: loadImage (Utility)
-  - **Syntax**: `export async function loadImage(source)`
-  - **Purpose**: Asynchronous image loader.
-  - **Working**: Handles both URLs and Blob/File objects. Implements a Promise-based wrapper around `img.onload` and ensures proper memory cleanup via `URL.revokeObjectURL`.
+- **loadImage (Function)**:
+  - Syntax: `export async function loadImage(source) { ... }`
+  - Purpose: Promisified image loader with automatic memory cleanup.
+  - Working: Detects if the source is a `Blob` or `File`, creates an object URL, and returns a resolved `HTMLImageElement` upon completion. Crucially, it calls `URL.revokeObjectURL` in both success and error paths to prevent memory leaks.
 
-- **`fileToDataURL` (Function)**
-  - **Name (Type)**: fileToDataURL (Utility)
-  - **Syntax**: `export function fileToDataURL(file)`
-  - **Purpose**: Converts a File object to a Base64 string for previewing or storage.
+- **imageToCanvas (Function)**:
+  - Syntax: `export function imageToCanvas(img) { ... }`
+  - Purpose: Extracts a 2D context from an image.
+  - Working: Creates a new `<canvas>`, sets dimensions to the image's `naturalWidth/Height`, and performs a 1:1 `drawImage` transfer. Returns both the canvas and context.
 
-- **`imageToCanvas` (Function)**
-  - **Name (Type)**: imageToCanvas (Utility)
-  - **Syntax**: `export function imageToCanvas(img)`
-  - **Purpose**: Converts an `HTMLImageElement` into a canvas context pair.
-  - **Working**: Creates a new canvas matching the image's dimensions and draws the image onto it.
+- **resizeCanvas (Function)**:
+  - Syntax: `export function resizeCanvas(sourceCanvas, maxDimension = 2048) { ... }`
+  - Purpose: High-performance aspect-ratio scaling.
+  - Working: Calculates the scale factor based on the longest edge, creates a smaller buffer, and utilizes browser-native bilinear interpolation via `drawImage` to produce the resized output.
 
-- **`resizeCanvas` (Function)**
-  - **Name (Type)**: resizeCanvas (Utility)
-  - **Syntax**: `export function resizeCanvas(sourceCanvas, maxDimension = 2048)`
-  - **Purpose**: Downscales a canvas while maintaining aspect ratio.
-  - **Working**: Calculates the scale factor based on the largest dimension to ensure the image fits within the `maxDimension` cap.
+- **applyMask (Function)**:
+  - Syntax: `export function applyMask(imageCanvas, maskData) { ... }`
+  - Purpose: Composites an AI-generated alpha mask onto an image.
+  - Working: Extracts `ImageData` from the source, iterates through the `maskData` (Uint8Array), and overwrites the alpha channel (`data[i * 4 + 3]`) for every pixel before re-applying with `putImageData`.
 
-- **`canvasToBitmap` (Function)**
-  - **Name (Type)**: canvasToBitmap (Utility)
-  - **Syntax**: `export async function canvasToBitmap(source)`
-  - **Purpose**: Converts a canvas/image to a zero-copy `ImageBitmap` for worker transfers.
+- **downloadCanvas (Function)**:
+  - Syntax: `export async function downloadCanvas(canvas, filename = 'image.png', type = 'image/png') { ... }`
+  - Purpose: Triggers a browser-initiated file download.
+  - Working: Converts the canvas to a `Blob`, creates a temporary `<a>` element with the `download` attribute, and programmatically clicks it.
 
-- **`applyMask` (Function)**
-  - **Name (Type)**: applyMask (Visual Filter)
-  - **Syntax**: `export function applyMask(imageCanvas, maskData)`
-  - **Purpose**: Applies an alpha transparency mask to an image.
-  - **Working**: Directly manipulates the alpha channel index (`data[i * 4 + 3]`) of the canvas's `Uint8ClampedArray` based on the provided 1-channel mask buffer.
+- **surgicalInpaint (Function)**:
+  - Syntax: `export function surgicalInpaint(canvas, maskCanvas, iterations = 30) { ... }`
+  - Purpose: Theoretical "Fast Surgical Inpaint" via diffusion.
+  - Working: Identifies the average boundary color around a mask, initializes the masked area with that color, and performs iterative edge-averaging (Laplacian-like diffusion) across the pixels to "heal" the masked region by pulling colors from the surrounding area.
 
-- **`applyBlurToRegions` (Function)**
-  - **Name (Type)**: applyBlurToRegions (Visual Filter)
-  - **Syntax**: `export function applyBlurToRegions(canvas, regions, blurAmount = 20)`
-  - **Purpose**: Selectively blurs specific areas of a canvas.
-  - **Working**: Uses `ctx.clip()` combined with the native `ctx.filter = 'blur(...)'` API to apply localized softening.
-
-- **`canvasToBlob` (Function)**
-  - **Name (Type)**: canvasToBlob (Utility)
-  - **Syntax**: `export async function canvasToBlob(canvas, type = 'image/png', quality = 0.92)`
-  - **Purpose**: Promise-based wrapper for the native `toBlob()` callback.
-
-- **`downloadCanvas` (Function)**
-  - **Name (Type)**: downloadCanvas (IO)
-  - **Syntax**: `export async function downloadCanvas(canvas, filename = 'image.png', type = 'image/png')`
-  - **Purpose**: Triggers a programmatic browser download of a canvas.
-
-- **`applySobelFilter` (Function)**
-  - **Name (Type)**: applySobelFilter (Visual Filter)
-  - **Syntax**: `export function applySobelFilter(canvas, threshold = 50)`
-  - **Purpose**: Edge detection for line-art generation.
-  - **Working**: Performs a grayscale pre-pass followed by convolution using Sobel X and Y kernels. Inverts the magnitude to provide black edges on a white background.
-
-- **`surgicalInpaint` (Function)**
-  - **Name (Type)**: surgicalInpaint (Advanced Synthesis)
-  - **Syntax**: `export function surgicalInpaint(canvas, maskCanvas, iterations = 30)`
-  - **Purpose**: Fills masked areas by diffusing surrounding pixel colors.
-  - **Working**: Implements **Boundary Diffusion Theory**. It first calculates an average color from the boundary pixels to "pre-seed" the masked area (L233-255). It then executes a neighbor-averaging loop (Heat Equation solver) over several iterations to blend textures smoothly without bleeding the removed subject's colors.
 
 ## 7. Points To Consider
-- **Memory Hygiene**: Consider always using `URL.revokeObjectURL` (L31) after loading blobs to prevent browser memory bloat in long-running sessions.
-- **Resolution Capping**: Note that `resizeCanvas` (L48) should typically be used before heavy AI inference to stay within GPU/Browser memory limits (typically 2048px).
-- **Blocking Operations**: Consider that `getImageData`/`putImageData` loops (L59) can block the main thread; for 4K+ images, delegating to a worker is usually more performant.
-- **Inpainting Iterations**: Note that increasing iterations beyond 60 (L87) usually provides diminishing returns while increasing CPU latency.
+
+- **Zero-Copy Invariant**: The `canvasToBitmap` function is the preferred way to move image data to Workers because `ImageBitmap` is a "Transferable Object" that avoids the massive overhead of Cloning or JSON serialization for multi-megabyte buffers.
+
+- **Memory Hygiene**: Any function using `URL.createObjectURL` MUST have a corresponding `revokeObjectURL` call. Failure to do this in high-frequency sessions (like video frame processing) will crash the browser tab.
+
+- **Alpha Channel Trap**: When applying masks via `applyMask`, the function directly manipulates the 4th byte of every pixel. This must be done on a canvas context that supports transparency (default).
+
+- **Performance Bottleneck**: Functions using `getImageData` and `putImageData` (like `applyMask` and `applySobelFilter`) are CPU-bound. For real-time filters on 4K images, consider moving these operations to a WebGPU compute shader or a Worker.

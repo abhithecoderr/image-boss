@@ -1,102 +1,161 @@
-# Global Context - Image Boss
+# Global Context - Image Boss (Digital DNA)
 
-## Project Introduction
-**Image Boss** is a high-performance, browser-native AI image processing suite. It provides a specialized set of tools including background removal, smart upscaling, face blurring, and object segmentation, all executing locally within the user's browser environment.
+## 1. Introduction
 
-## Project Philosophy and Need
-The project is built on the philosophy of **"Edge Intelligence"**. By running AI models directly on the client side, Image Boss eliminates server-side processing costs, ensures $100\%$ user data privacy (no images ever leave the device), and provides a low-latency experience by utilizing the user's local GPU. It serves as a private, cost-free alternative to cloud-based image editing APIs.
+**Image Boss** is a browser-native AI image processing suite built with React 19 and Vite. All AI inference runs locally on the user's device via WebGPU-accelerated Web Workers — no server uploads, no cloud dependency. The app provides background removal, super-resolution upscaling, object segmentation, AI captioning, style transfer, and image compression through a unified single-page interface.
 
-## Tech Stack
-- **Runtime**: Vanilla JavaScript (ES6 Modules)
+
+## 2. Tech Stack & Dependencies
+
+- **Framework**: React 19 (Vite 6.0) — `react v19.0.0`, `react-dom v19.0.0`
+
+- **Styling**: Vanilla CSS with Modern CSS Variables
+
 - **AI Engines**:
-  - `Transformers.js` (Hugging Face) for Transformer-based models (SAM, ViT, BirefNet).
-  - `ONNX Runtime Web` (ORT) for specialized models (Real-ESRGAN, InSPyReNet) and surgical control over YOLO-Pose tensors.
-- **Acceleration**: `WebGPU` (Primary) with `WASM/CPU` Fallbacks.
-- **IO/Processing**: Native HTML5 `Canvas API`, `Web Workers`, and `OffscreenCanvas`.
-- **Third-Party Libraries**: `browser-image-compression` for smart resizing.
+  - `@huggingface/transformers v3.8.1` — Vision and LLM tasks (SAM, Florence-2, LFM)
+  - `onnxruntime-web v1.20.1` — Direct ONNX graph execution for YOLO-Pose, Real-ESRGAN
+  - `@mediapipe/tasks-vision v0.10.21` — Specialized vision tasks
+  - `upscaler v1.0.0-beta.19` — Super-resolution pipeline orchestration
 
-## Folder Structure
+- **Acceleration**: WebGPU (primary), multi-threaded WASM/CPU fallback
+
+- **Data Engineering**: Web Workers, `ImageBitmap` zero-copy transfers, `OffscreenCanvas`
+
+- **Utilities**: `browser-image-compression v2.0.2` — Client-side file size optimization
+
+
+## 3. Folder Structure
+
 ```text
 / (Project Root)
-├── .context_map/           # HCM Protocol v7.1 Documentation
-│   ├── context/            # Shadow Files (Logical Blueprints)
-│   ├── decision_logs.md    # Distilled Architecture Decisions
-│   ├── realisations.md     # Distilled Multi-Session Wisdom
-│   └── global_context.md   # Project Master Index (Digital DNA)
-├── public/                 # Static Assets
-│   ├── main.css            # Global Design System
-│   └── chat.css            # Chat-Specific Styling
-├── scripts/                # Optimization & Conversion Scripts
-│   ├── convert.py
-│   ├── convert_inspyrenet_onnx.py
-│   ├── optimize_birefnet_webgpu.py
-│   ├── patch_inspyrenet_webgpu.py
-│   ├── quantize_inspyrenet.py
-│   └── validate_model.py
-├── src/
-│   ├── main.js             # Global App Orchestrator
-│   ├── config.js           # Services & Model Registry
-│   ├── core/               # Shared Utilities
-│   │   ├── canvas-utils.js # Image Manipulation
-│   │   └── ui-utils.js     # DOM & Feedback Helpers
-│   └── services/           # Feature-Specific Processors
-│       ├── background-removal/ (processor.js, worker.js)
-│       ├── blur/               (processor.js, worker.js)
-│       ├── captioning/         (processor.js, worker.js)
-│       ├── chat/               (processor.js, worker.js)
-│       ├── compression/        (processor.js)
-│       ├── file-conversion/    (processor.js)
-│       ├── line-art/           (processor.js)
-│       ├── object-segmentation/(processor.js, worker.js)
-│       ├── style-transfer/     (processor.js - Stub)
-│       └── upscaling/          (processor.js, worker.js)
-├── index.html              # UI Skeleton & Entry Point
-├── package.json            # Node Dependencies & Metadata
-└── .gitignore              # Dependency & Build Exclusions
+│
+├── .context_map/              # HCM Protocol Documentation (7-header standard)
+│   ├── context/               # Shadow Files (Digital Twins)
+│   ├── decision_logs.md       # Distilled Architecture Decisions
+│   ├── realisations.md        # Distilled Multi-Session Wisdom
+│   └── global_context.md      # Project Master Index (Digital DNA)
+│
+├── public/                    # Static Assets (Models, Weights, Icons)
+│
+├── src/                       # Primary logic directory
+│   ├── App.jsx                # Main Entry Point & Layout Orchestrator
+│   ├── main.jsx               # React Bootstrap & Context Provider wrapping
+│   ├── config.js              # Services & Model Registry (Application Manifest)
+│   │
+│   ├── components/            # Presentation Layer
+│   │   ├── Sidebar.jsx        # Navigation & Service Selection
+│   │   ├── ControlPanel.jsx   # Dynamic service parameter controls
+│   │   ├── Workspace.jsx      # Visual stage, zoom, & feature overlays
+│   │   └── features/          # Specialized interactive UI (SAM, MaskEditor, Comparison)
+│   │
+│   ├── context/               # Global State Synchronization
+│   │   └── AppContext.jsx     # Central State Hub (Redux-lite pattern)
+│   │
+│   ├── core/                  # Shared Utilities (Vanilla JS)
+│   │   ├── canvas-utils.js    # High-performance pixel manipulation
+│   │   └── ui-utils.js        # DOM assistance & Toast Notification helpers
+│   │
+│   ├── hooks/                 # Business Logic & Connector Hooks
+│   │   ├── useProcessor.js    # AI execution lifecycle & worker management
+│   │   ├── useSAM.js          # Segment Anything interaction logic
+│   │   ├── useMaskEditor.js   # Manual refining & brush logic
+│   │   └── useFileIngestion.js # File processing intake & validation
+│   │
+│   └── services/              # Feature-Specific AI Implementation Tier
+│       ├── background-removal/ # MODNet & BiRefNet extractions
+│       └── (others...)        # Tiling upscalers, YOLO blur, Chat, etc.
+│
+├── index.html                 # HTML5 Skeleton
+└── package.json               # Node Manifest
 ```
 
-## How each file connects with each other
-The application follows a **Hub-and-Spoke** architecture centered on `main.js`.
-1. **Coordination**: `main.js` imports `config.js` to build the UI and route user actions.
-2. **Utility Access**: Both `main.js` and all service processors depend on `core/canvas-utils.js` for image manipulation and `core/ui-utils.js` for feedback.
-3. **Task Delegation**: When a service is activated, `main.js` calls the corresponding `processor.js`, which manages a dedicated `Web Worker` for non-blocking AI inference. For Blur/Pose services, the worker utilizes raw ONNX sessions to bypass high-level pipeline registries.
-4. **Data Loop**: Raw data (1-channel masks or ImageBitmaps) is transferred to workers via IPC. Processes utilize **GPU-Accelerated Scaling** (scaling low-res model outputs via `ctx.drawImage`), **Hot-Refinement** (caching AI results in workers), and **Lazy Candidate Rendering** (deferring full-res rendering until selection) to maintain 60fps UI performance even with multi-million pixel images.
 
-## Each folder and file 2-3 line purpose description
+## 4. Project User Flow
 
-### Core Root
-- **[index.html](file:///c:/projects/bg/my-ai-app/index.html)**: The semantic skeleton of the app, defining the side-by-side workspace and navigation containers. [Context Map](file:///c:/projects/bg/my-ai-app/.context_map/context/index.md)
-- **[src/main.js](file:///c:/projects/bg/my-ai-app/src/main.js)**: The central orchestrator handling DOM events, service switching, and the global processing lifecycle.
-- **[src/config.js](file:///c:/projects/bg/my-ai-app/src/config.js)**: The manifest file defining AI model paths, hardware requirements, and UI configuration constants. [Context Map](file:///c:/projects/bg/my-ai-app/.context_map/context/src/config.md)
-- **public/**: Host for shared static assets, including global CSS stylesheets ([main.css](file:///c:/projects/bg/my-ai-app/.context_map/context/public/main.md), [chat.css](file:///c:/projects/bg/my-ai-app/.context_map/context/public/chat.md)) and branding assets.
-- **scripts/**: A collection of Python-based automation tools for ONNX model conversion ([convert.py](file:///c:/projects/bg/my-ai-app/.context_map/context/scripts/convert.md)), weight optimization ([optimize_birefnet_webgpu.py](file:///c:/projects/bg/my-ai-app/.context_map/context/scripts/optimize_birefnet_webgpu.md)), and validation ([validate_model.py](file:///c:/projects/bg/my-ai-app/.context_map/context/scripts/validate_model.md)).
+### 1. Intake
 
-### Core Utilities (`src/core/`)
-- **[canvas-utils.js](file:///c:/projects/bg/my-ai-app/src/core/canvas-utils.js)**: A low-level toolkit for pixel manipulation, filters (Sobel/Blur), and canvas export logic.
-- **[ui-utils.js](file:///c:/projects/bg/my-ai-app/src/core/ui-utils.js)**: Reusable helpers for toast notifications, progress bars, and declarative DOM element creation.
+- **Flow**: User drops an image into the `Workspace`. The file is captured by `useFileIngestion`, validated for dimensions, converted to an internal `HTMLCanvasElement` using `canvas-utils.js`, and committed to the global state.
 
-### Service Modules (`src/services/`)
-- **[background-removal/](file:///c:/projects/bg/my-ai-app/src/services/background-removal/)**: Implements BiRefNet and MODNet. Uses **Raw 1-Channel Masking** and GPU-backed composition to enable near-instant threshold and feathering updates.
-- **[upscaling/](file:///c:/projects/bg/my-ai-app/src/services/upscaling/)**: A tile-based implementation of Real-ESRGAN for 4x resolution enhancement. Employs a **Hot-Refinement** cache to allow real-time adjustment of brightness, saturation, and detail intensity (<100ms) without re-running the heavy AI tiling loop.
-- **[blur/](file:///c:/projects/bg/my-ai-app/src/services/blur/)**: Uses YOLO-Pose (via raw ORT for tensor-level control) to detect faces and apply localized, feathered Gaussian blurs.
-- **[object-segmentation/](file:///c:/projects/bg/my-ai-app/src/services/object-segmentation/)**: Interactive SlimSAM and SAM-2 processors. Pioneer of the **Hot-Refinement** and **Low-Res Masking + GPU Scaling** patterns used throughout the app.
-- **[chat/](file:///c:/projects/bg/my-ai-app/src/services/chat/)**: Integrates local LLMs (LFM 1.2B) for conversational AI within the workspace.
+- **Files Involved**:
+  - `useFileIngestion.js`: Observes drag-and-drop events and manages the `FileReader` lifecycle.
+  - `canvas-utils.js`: Provides `loadImage` and `imageToCanvas` to generate the initial pixel buffer.
 
-## State Management
-The project uses a **Reactive DOM-centric State** approach rather than a central store like Redux:
-- **UI State**: Managed via CSS classes (`.active`, `.hidden`) and `HTMLElement.dataset` attributes on canvases for metadata.
-- **Worker Registry**: Each `processor.js` maintains a singleton reference to its worker to prevent redundant spawns.
-- **Callback Registry**: Async IPC responses are handled via a static callback map in `main.js` or specialized registries in files like `chat/processor.js`.
+### 2. Configuration & Strategy
 
-## Project User Flow
-1. **Intake**: User drops an image into the `#drop-zone` (`main.js` + `canvas-utils.js`).
-2. **Setup**: The original image is rendered to the source canvas and the service toolbar is populated from `config.js`.
-3. **Inference**: User triggers a tool; `main.js` invokes a `processor.js` which signals its `worker.js`.
-4. **Feedback**: Granular progress percentages from the worker are channeled back through `ui-utils.js` to the status bar.
-5. **Realisation**: The worker returns result buffers; the processor reconstructs the final result canvas for the UI.
+- **Flow**: User navigates the `Sidebar` to select a tool. The `AppContext` updates `currentService`, which triggers `ControlPanel.jsx` to render the relevant sliders and toggles (e.g., "Blur Radius" or "Quantization").
 
-## Constraints and To Remember Points
-- **Memory Management**: Always use `Transferables` (ImageBitmaps/ArrayBuffers) during `postMessage` to avoid OOM crashes on large images.
-- **GPU Compatibility**: Check for `navigator.gpu` presence; models must have WASM fallbacks configured in `config.js`.
-- **Canvas Limitations**: Browsers have strict max dimensions (approx 16k px); service processors like background-removal auto-downscale to 2048px for stability. **Interactive tools** (e.g. Object Segmentation) MUST cap internal AI resolution at 768px to ensure real-time responsiveness and avoid WebGPU command-buffer flooding.
-- **Garbage Collection**: Explicitly call `URL.revokeObjectURL` and `bitmap.close()` immediately after use to prevent memory leaks during long sessions.
+- **Files Involved**:
+  - `Sidebar.jsx`: Emits `selectService` calls to the context.
+  - `ControlPanel.jsx`: Dynamically maps `currentService.options` to UI controllers.
+
+### 3. Inference Execution
+
+- **Flow**: User clicks "Process". The UI triggers the `process` function in `useProcessor.js`. This hook selects the correct AI processor (e.g., `background-removal/processor.js`), initializes a singleton Web Worker, and transfers the `ImageBitmap` for processing.
+
+- **Files Involved**:
+  - `useProcessor.js`: Manages the loading state and serves as the bridge between React and Worker.
+  - `service/processor.js`: Houses the business logic for preparing data for the model.
+
+### 4. Evaluation & Refinement
+
+- **Flow**: The Web Worker performs tiled inference or global extraction and sends the result buffer back. The processor performs final compositing (like white-filling for JPEGs) and updates `resCanvasState`.
+
+- **Files Involved**:
+  - `service/worker.js`: Executes high-CPU/GPU models (SAM, Real-ESRGAN) on a separate thread.
+  - `Workspace.jsx`: Automatically mirrors the new static result canvas to the DOM-visible ref.
+
+
+## 5. State Management
+
+The application utilizes the React Context API as its "Digital Nervous System":
+
+- **srcCanvasState / originalCanvas**
+  - Syntax: `const [originalCanvas, setOriginalCanvas] = useState(null);`
+  - Purpose: Stores the persistent master reference of the user's uploaded image.
+  - File Location: `AppContext.jsx`
+
+- **resCanvasState / resultCanvas**
+  - Syntax: `const [resultCanvas, setResultCanvas] = useState(null);`
+  - Purpose: Stores the result of the most recent AI processing pass.
+  - File Location: `AppContext.jsx`
+
+- **currentService**
+  - Syntax: `const [currentService, setCurrentService] = useState(SERVICES[...]);`
+  - Purpose: Tracks which AI tool is currently active in the UI.
+  - File Location: `AppContext.jsx`
+
+- **isProcessing**
+  - Syntax: `const [isProcessing, setIsProcessing] = useState(false);`
+  - Purpose: Toggles global UI blocking and loading spinners.
+  - File Location: `AppContext.jsx`
+
+- **serviceResults**
+  - Syntax: `const [serviceResults, setServiceResults] = useState({});`
+  - Purpose: A persistence map allowing users to toggle between "Upscale" and "Blur" without re-running long inferences.
+  - File Location: `AppContext.jsx`
+
+
+## 6. How each file connects with each other
+
+The application maintains a **Strict Hierarchical Registry** to ensure that logic never leaks into presentation:
+
+- **Context-as-Glue**: `AppContext.jsx` is the heart. It doesn't perform logic; it merely stores the results of logic performed by hooks. `App.jsx` wraps the entire tree to provide this shared memory.
+
+- **The Hook Bridge**: Components like `Workspace.jsx` and `ControlPanel.jsx` never talk to the AI Workers directly. They instead talk to `useProcessor.js` or `useSAM.js`. These hooks act as "Middle Managers" that handle the messy details of `postMessage`, `ImageBitmap` transfers, and algorithmic derivations (like converting a brush stroke to a SAM bounding box).
+
+- **Deterministic Services**: The files in `src/services/` are designed to be "Vanilla-Compatible." They do not import React; they instead accept canvases and numbers as arguments and return results. This allows the AI engine to be tested or even migrated to a different framework without touching the core ML logic.
+
+- **Shared Core**: All logic paths eventually converge at `src/core/canvas-utils.js`. Whether it's an AI worker preparing an input or the `useFileIngestion` hook reading a file, they all use the same centralized pixel-manipulation functions to ensure cross-service consistency.
+
+
+## 7. Points to Consider
+
+- **The "Digital DNA" Sync**: Documentation in `.context_map` must match the code 1:1. Bypassing shadow map updates leads to unrecoverable "Context Drift".
+
+- **Coordinate Normalization**: Always communicate UI coordinates as percentages (0..1) to the AI workers. This ensures that SAM points work correctly whether the source is 500px or 5000px.
+
+- **Transferable Performance**: Moving `ImageBitmap` via the transferables array is the only way to avoid "Main-Thread Jank" during 4K image operations.
+
+- **Model Quantization**: To run locally without crashes, use 4-bit (q4) or fp16 weights where possible. 32-bit (fp32) should be reserved for high-precision tasks like YOLO face-pose detection.
+
+- **Memory Sanitation**: Browser GC is too slow for AI. Explicitly call `bitmap.close()` and `URL.revokeObjectURL` immediately after use.

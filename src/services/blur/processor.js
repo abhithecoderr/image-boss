@@ -81,51 +81,51 @@ export async function init(variant = 'nano', onProgress) {
 
 /**
  * Detect faces in an image (returns bounding boxes only)
- * @param {HTMLCanvasElement|ImageBitmap} source - Source image
- * @param {Object} options - Detection options
- * @param {Function} onProgress - Progress callback
- * @returns {Promise<Array<{x, y, width, height, confidence}>>}
  */
 export async function detectFaces(source, options = {}, onProgress) {
   const { variant = currentVariant } = options;
 
-  // Ensure initialized
   if (!isReady || variant !== currentVariant) {
     await init(variant, onProgress);
   }
 
-  // Get image data from source
-  const { imageData, width, height } = await getImageData(source);
+  const bitmap = await createImageBitmap(source);
+  const { width, height } = bitmap;
 
   return new Promise((resolve, reject) => {
     const handleMessage = (event) => {
-      const { type, progress, message, detections, error } = event.data;
-
-      switch (type) {
-        case 'progress':
-          onProgress?.(progress, message);
-          break;
-        case 'detections':
-          worker.removeEventListener('message', handleMessage);
-          resolve(detections);
-          break;
-        case 'error':
-          worker.removeEventListener('message', handleMessage);
-          reject(new Error(error));
-          break;
+      const { type, detections, error } = event.data;
+      if (type === 'detections') {
+        worker.removeEventListener('message', handleMessage);
+        resolve(detections);
+      } else if (type === 'error') {
+        worker.removeEventListener('message', handleMessage);
+        reject(new Error(error));
       }
     };
 
     worker.addEventListener('message', handleMessage);
     worker.postMessage({
       type: 'detect',
-      payload: { imageData, width, height, variant },
-    });
+      payload: { bitmap, width, height, variant },
+    }, [bitmap]);
   });
 }
 
+/**
+ * Get results and cache source for fast tweaking
+ */
+async function prepareExecution(source) {
+    const bitmap = await createImageBitmap(source);
+    if (lastSourceBitmap) lastSourceBitmap.close();
+    lastSourceBitmap = await createImageBitmap(bitmap); // Cache a clone for reblur
+    lastWidth = bitmap.width;
+    lastHeight = bitmap.height;
+    return { bitmap, width: lastWidth, height: lastHeight };
+}
+
 let lastDetections = [];
-let lastImageData = null;
+let lastSourceBitmap = null;
 let lastWidth = 0;
 let lastHeight = 0;
 
@@ -144,15 +144,12 @@ export async function process(source, options = {}, onProgress) {
     await init(variant, onProgress);
   }
 
-  // Get image data from source
-  const { imageData, width, height } = await getImageData(source);
-  lastImageData = imageData;
-  lastWidth = width;
-  lastHeight = height;
+  // Get results and cache source for fast tweaking
+  const { bitmap, width, height } = await prepareExecution(source);
 
   return new Promise((resolve, reject) => {
     const handleMessage = (event) => {
-      const { type, progress, message, imageData: resultData, detections, count, error, width: rw, height: rh } = event.data;
+      const { type, progress, message, resultBitmap, detections, count, error } = event.data;
 
       switch (type) {
         case 'progress':
@@ -162,16 +159,10 @@ export async function process(source, options = {}, onProgress) {
           worker.removeEventListener('message', handleMessage);
           lastDetections = detections;
 
-          // Convert result to canvas
-          const resultCanvas = document.createElement('canvas');
-          resultCanvas.width = rw;
-          resultCanvas.height = rh;
-          const ctx = resultCanvas.getContext('2d');
-          const imgData = new ImageData(new Uint8ClampedArray(resultData), rw, rh);
-          ctx.putImageData(imgData, 0, 0);
-
+          // No manual canvas creation or putImageData needed
+          // The result is already a high-performance ImageBitmap
           resolve({
-            canvas: resultCanvas,
+            canvas: resultBitmap,
             detections,
             count,
           });
@@ -186,8 +177,8 @@ export async function process(source, options = {}, onProgress) {
     worker.addEventListener('message', handleMessage);
     worker.postMessage({
       type: 'blur',
-      payload: { imageData, width, height, blurAmount, radiusScale, feathering, shape, variant },
-    });
+      payload: { bitmap, width, height, blurAmount, radiusScale, feathering, shape, variant },
+    }, [bitmap]);
   });
 }
 
@@ -195,21 +186,17 @@ export async function process(source, options = {}, onProgress) {
  * Re-blur with existing detections for fast UI feedback
  */
 export async function updateBlurTransform(options = {}) {
-  if (!worker || !lastDetections.length || !lastImageData) return;
+  if (!worker || !lastDetections.length || !lastSourceBitmap) return;
   const { blurAmount = 20, radiusScale = 1.0, feathering = 0.75, shape = 1.0 } = options;
+
+  const bitmap = await createImageBitmap(lastSourceBitmap);
 
   return new Promise((resolve, reject) => {
     const handleMessage = (event) => {
-      const { type, imageData: resultData, detections, count, error, width: rw, height: rh } = event.data;
+      const { type, resultBitmap, detections, count, error } = event.data;
       if (type === 'complete') {
         worker.removeEventListener('message', handleMessage);
-        const resultCanvas = document.createElement('canvas');
-        resultCanvas.width = rw;
-        resultCanvas.height = rh;
-        const ctx = resultCanvas.getContext('2d');
-        const imgData = new ImageData(new Uint8ClampedArray(resultData), rw, rh);
-        ctx.putImageData(imgData, 0, 0);
-        resolve({ canvas: resultCanvas, detections, count });
+        resolve({ canvas: resultBitmap, detections, count });
       } else if (type === 'error') {
         worker.removeEventListener('message', handleMessage);
         reject(new Error(error));
@@ -220,7 +207,7 @@ export async function updateBlurTransform(options = {}) {
     worker.postMessage({
       type: 'reblur',
       payload: {
-        imageData: lastImageData,
+        bitmap,
         width: lastWidth,
         height: lastHeight,
         detections: lastDetections,
@@ -229,7 +216,7 @@ export async function updateBlurTransform(options = {}) {
         feathering,
         shape
       },
-    });
+    }, [bitmap]);
   });
 }
 
@@ -282,10 +269,9 @@ export async function dispose() {
     const handleMessage = (event) => {
       if (event.data.type === 'disposed') {
         worker.removeEventListener('message', handleMessage);
+        if (lastSourceBitmap) lastSourceBitmap.close();
+        lastSourceBitmap = null;
         worker.terminate();
-        worker = null;
-        isReady = false;
-        pendingInit = null;
         resolve();
       }
     };

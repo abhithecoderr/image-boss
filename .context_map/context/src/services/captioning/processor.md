@@ -1,54 +1,82 @@
 # Context Map: captioning/processor.js
 
+
 ## 1. Purpose
-Management layer for image description services. Orchestrates the Florence-2 worker lifecycle and implements a specialized canvas generator for rendering descriptive overlays at high resolutions.
+
+The main-thread interface for the Florence-2 vision service. It handles the communication with the captioning worker and implements the "Bottom-Bar" rendering logic that overlays AI-generated text descriptions onto the bottom of the source image for unified result containers.
+
 
 ## 2. Imports
-- **worker.js?worker**: The background thread implementation.
+
+- **Worker**:
+  - Syntax: `import Worker from './worker.js?worker';`
+  - Purpose: Initializes the Florence-2 inference thread.
+
 
 ## 3. Dependencies
-- **Uses**:
-  - [worker.js](file:///c:/projects/bg/my-ai-app/src/services/captioning/worker.js): Background AI implementation.
+
 - **Used by**:
-  - `main.js`: Primary UI orchestrator.
+  - `useProcessor.js` (Invoked when the 'captioning' service is selected).
+
+- **External APIs**:
+  - **Canvas API (Text Measurement)**: Uses `ctx.measureText` for dynamic word-wrapping of long AI descriptions.
+  - **createImageBitmap**: Zero-copy transfer of the subject image to the worker.
+
 
 ## 4. State Management
 
-- **worker (Variable/Worker)**
-  - **Syntax**: `let worker = null`
-  - **Purpose**: Lazy-loaded singleton for the captioning thread.
+- **worker (Variable)**:
+  - Syntax: `let worker = null;`
+  - Purpose: Singleton worker reference.
+
 
 ## 5. Project Flow
-1. **Intake Stage**: Receives a `sourceCanvas` and task parameters from the main UI.
-2. **Transfer Stage**: Converts the canvas into an `ImageBitmap` for zero-copy worker ingestion.
-3. **Execution Stage**: The worker performs the Florence-2 generative pass.
-4. **Synthesis (Rendering Loop)**:
-   - Receives the final caption string.
-   - Invokes `createCaptionOverlay`.
-   - This function performs a manual **Word-Wrap Pass** using canvas `measureText` (L89) to calculate the required vertical space.
-   - It appends a dark "Letterbox" to the bottom of the image and renders the description text.
-5. **Return Stage**: Returns both the raw caption string (for the UI) and the result canvas (for downloads).
+
+### 1. Ingestation
+- **Flow**: Captures the source canvas and transfers it to the Florence-2 worker.
+
+### 2. Inference
+- **Flow**: Awaits the structured JSON result from the AI (containing `raw` results and the cleaned `caption`).
+- **Files Involved**:
+  - `worker.js`: Executes the vision-language model inference.
+
+### 3. Layout Calculation
+- **Flow**: `createCaptionOverlay` calculates the required height for the result container by wrapping the text based on the image width.
+
+### 4. Synthesis
+- **Flow**: Creates a new, taller canvas. Renders a black background, the original image at the top, and the word-wrapped text at the bottom.
+
+### 5. Realization
+- **Flow**: Resolves the promise with both the final `canvas` and the raw `caption` string.
+
 
 ## 6. Code Structure
 
-- **`getWorker` (Function)**
-  - **Name (Type)**: getWorker (Singleton Helper)
-  - **Syntax**: `function getWorker()`
+- **process (Function)**:
+  - Syntax: `export async function process(sourceCanvas, options = {}, onProgress) { ... }`
+  - Purpose: The primary async orchestrator.
 
-- **`process` (Function)**
-  - **Name (Type)**: process (Primary Entry Point)
-  - **Syntax**: `export async function process(sourceCanvas, options = {}, onProgress)`
-  - **Working**: Orchestrates the IPC loop. Returns a combined object containing the `canvas` and the descriptive `caption` text.
+- **createCaptionOverlay (Function)**:
+  - Syntax: `function createCaptionOverlay(sourceCanvas, caption) { ... }`
+  - Purpose: Generates the "Result Card" visual for captioning.
+  - Working: Implements a manual word-wrap algorithm using `split(' ')` and `measureText`. It expands the canvas height dynamically (`sourceCanvas.height + bottomBarHeight`) to ensure the text never overlaps the image pixels.
 
-- **`createCaptionOverlay` (Function)**
-  - **Name (Type)**: createCaptionOverlay (Visual Synth)
-  - **Syntax**: `function createCaptionOverlay(sourceCanvas, caption)`
-  - **Purpose**: Generates a high-quality "Captioned" version of the original image.
-  - **Working**:
-    - **Dynamic Letterboxing**: Calculates the height of a black bar based on the length of the caption and the font size (L105).
-    - **Centered Typography**: Renders the multi-line caption centered within the new letterbox area using the "Inter" system font.
+- **createSegmentationOverlay (Function)**:
+  - Syntax: `function createSegmentationOverlay(sourceCanvas, polygons) { ... }`
+  - Purpose: Generates the "Result Card" visual for segmentation.
+  - Working: Stacks two renderings: a B&W binary mask (Top) and a clean subject cutout on a black background (Bottom). It uses `ctx.filter = 'blur(1.5px)'` on the mask to anti-alias edges and `globalCompositeOperation = 'destination-in'` to clip the original pixels into the subject shape.
+
+- **Manual Polygon Parser (Logic)**:
+  - Purpose: Safety net for Transformers.js post-processing failures.
+  - Working: A regex-based fallback that extracts `[x, y]` coordinate pairs from raw location token strings (`<loc123><loc456>...`), ensures proper scaling, and reconstructs the JSON result expected by the renderer.
+
 
 ## 7. Points To Consider
-- **Context Preservation**: Consider re-applying `ctx.font` after any canvas resize (L52) to prevent the context from reverting to browser defaults and breaking the layout.
-- **IPC Efficiency**: Note that `createImageBitmap` (L53) is used to ensure the large model can process frames without blocking the main event loop.
-- **Extended Metadata**: Consider that `result.raw` contains detection coordinates (L54) which could be used for future bounding-box visualization features.
+
+- **Font Styling Invariant**: The overlay hardcodes `font: 600 24px Inter`. If the "Inter" font is not loaded in the parent CSS, it will fall back to `-apple-system`, which may alter the text measurement and cause clipping.
+
+- **The "Dataset" Metadata**: The final result canvas has `resultCanvas.dataset.caption = caption` attached. This is used by the `App.jsx` layer for "Copy to Clipboard" functionality without re-parsing the image.
+
+- **Zero-Copy Performance**: Using `createImageBitmap` ensures that large high-res photos don't freeze the main thread's UI event loop during the transfer to the worker.
+
+- **Dynamic Tasking**: The processor passes a `task` parameter (e.g., `<MORE_DETAILED_CAPTION>`) to the worker, allowing the UI to toggle between short and long AI descriptions.

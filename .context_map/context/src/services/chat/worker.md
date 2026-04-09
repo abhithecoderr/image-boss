@@ -1,65 +1,78 @@
 # Context Map: chat/worker.js
 
+
 ## 1. Purpose
-Local Large Language Model (LLM) engine utilizing the Liquid LFM 1.2B model. Provides a private, browser-native chat interface. Orchestrates the auto-regressive generation loop with real-time token streaming and instruction-following templates.
+
+The persistent background thread for the LiquidAI LFM-2.5B model. It manages massive token generation tasks using Transformers.js, implements real-time text streaming via the `TextStreamer` API, and handles the conditional formatting of user/assistant messages using model-specific chat templates.
+
 
 ## 2. Imports
-- **@huggingface/transformers**:
-  - `AutoModelForCausalLM`: The core transformer model for text generation.
-  - `AutoTokenizer`: Handles text-to-token encoding and Template application.
-  - `TextStreamer`: Facilitates real-time token-by-token UI updates.
+
+- **Transformers.js**:
+  - Syntax: `import { AutoModelForCausalLM, AutoTokenizer, TextStreamer, env } from "@huggingface/transformers";`
+  - Purpose: Core LLM framework for local 4-bit quantized inference.
+
 
 ## 3. Dependencies
-- **Uses**:
-  - Hugging Face Hub (`LiquidAI/LFM2.5-1.2B-Instruct-ONNX`).
-  - WebGPU (Primary) + WASM runtime.
+
 - **Used by**:
-  - [processor.js](file:///c:/projects/bg/my-ai-app/src/services/chat/processor.js) (IPC) - Routes prompts and accumulates streamed fragments.
+  - `processor.js` (The main-thread communicator).
+
+- **External APIs**:
+  - **WebGPU / WASM**: Hardware targets.
+  - **navigator.storage**: (Implicitly via `useBrowserCache`) for multi-hundred megabyte model persistence.
+
 
 ## 4. State Management
 
-- **model/tokenizer (Variables/Objects)**
-  - **Syntax**: `let model = null; let tokenizer = null;`
-  - **Purpose**: Global singletons for the LLM session. Pre-loaded to avoid the ~30 second Cold Start lag for 1.2B parameter models.
+- **model / tokenizer (Variables)**:
+  - Syntax: `let model = null; let tokenizer = null;`
+  - Purpose: Persistent AI engine references. These are multi-hundred megabyte assets that must stay in memory throughout the session.
 
-- **currentModelId (Variable/String)**
-  - **Syntax**: `let currentModelId = null`
-  - **Purpose**: Verification flag to prevent redundant model weights re-downloads.
 
-## 5. Project Flow
-1. **Bootstrap (Load)**: Downloads the `q4` (4-bit quantized) ONNX model.
-2. **Contextualization (Template)**:
-   - User input is wrapped in a **Chat Template** (L81).
-   - Injects `<|user|>` and `<|assistant|>` markers required by the Liquid baseline to maintain role-play stability.
-3. **Generation Pass (Auto-Regressive)**:
-   - The model predicts the next token based on the prompt features.
-   - The `TextStreamer` intercepts each token as it's predicted and forwards it back to the UI via IPC.
-4. **Decoding (Synthesis)**:
-   - Converts token IDs back into human-readable characters.
-   - Implements **Prompt Leakage Prevention** (L113) by stripping the echoed prompt from the final result.
-5. **Teardown**: Explicitly releases model resources on `dispose` command.
+### 1. Load Phase
+- **Flow**: Downloads and initializes the tokenizer and quantized (`q4`) model weights.
+- **Files Involved**:
+  - `@huggingface/transformers`: Orchestrates the download of multi-gigabyte LFM model shards.
+
+### 2. Template Application
+- **Flow**: Converts user prompts into the exact string format expected by the model.
+- **Files Involved**:
+  - `@huggingface/transformers`: Uses the specialized tokenizer to apply chat templates (e.g. `<|user|>`).
+
+### 3. Inference Loop
+- **Flow**: Starts the `model.generate` loop.
+- **Files Involved**:
+  - `@huggingface/transformers`: Executes the Causal LM auto-regressive decoding.
+
+### 4. Streaming
+- **Flow**: Hooks into the `TextStreamer` callback to send generated tokens back to the main thread *as they are predicted*.
+- **Files Involved**:
+  - `processor.js`: Receives real-time token events for incremental UI updates.
+
+### 5. Post-processing
+- **Flow**: Decodes the final token array and performs "Prompt Leak" sanitization.
+
 
 ## 6. Code Structure
 
-- **`loadModel` (Function)**
-  - **Name (Type)**: loadModel (Lifecycle)
-  - **Syntax**: `async function loadModel({ modelId, dtype, device })`
-  - **Working**: Orchestrates the Int4 session creation. Uses **q4 Quantization** (L32) which is the critical theory allowing a 1.2B model to run in a browser's ~1GB memory limit.
+- **loadModel (Function)**:
+  - Syntax: `async function loadModel({ modelId, dtype, device }) { ... }`
+  - Purpose: Hardware-accelerated weight loading.
+  - Working: Performs a singleton check on `currentModelId`. It uses the `progress_callback` to broadcast download progress from 20% to 100% of the UI status bar.
 
-- **`generate` (Function)**
-  - **Name (Type)**: generate (Inference Core)
-  - **Syntax**: `async function generate({ prompt, max_new_tokens, temperature })`
-  - **Working**:
-    - **System Alignment**: Injects a static "helpful assistant" system prompt (L75) to steer model behavior.
-    - **Streaming Hook**: Instantiates the `TextStreamer` with `skip_prompt: true`. This ensures the UI only receives new tokens, not the internal markers.
+- **generate (Function)**:
+  - Syntax: `async function generate({ prompt, max_new_tokens, temperature }) { ... }`
+  - Purpose: The text generation engine.
+  - Working: Defines a `system` prompt ("You are a helpful assistant"), applies the chat template, initializes the `TextStreamer`, and invokes the auto-regressive decoder. It includes a specific `skip_prompt: true` flag in the streamer to prevent echoed tokens.
 
-- **Generation Loop (Block)**
-  - **Name (Type)**: model.generate (Inference)
-  - **Syntax**: `const output = await model.generate({ ...inputs, max_new_tokens, streamer });`
-  - **Working**: The heavy lifting of the model. Iteratively consumes and produces tokens using the GPU's KV-cache.
 
 ## 7. Points To Consider
-- **Quantization Requirements**: Note that `dtype` must be `"q4"` (L62) for the 1.2B model to fit within browser memory limits; higher-precision versions will likely trigger OOM.
-- **UI Update Frequency**: Consider that the streamer callback can fire rapidly (L63); ensure the main-thread logic is optimized for high-frequency text updates.
-- **Prompt Templates**: Note that `apply_chat_template` is vital (L64) for maintaining coherent role-play and preventing model hallucinations.
-- **KV-Cache Management**: Consider that longer conversations consume more GPU memory; note that a worker reset may be needed (L65) if the system hangs after many rounds.
+
+- **Template Invariant**: Instruct models like LFM require strict chat templates. The use of `tokenizer.apply_chat_template` is mandatory for preventing the AI from generating gibberish or losing its instruction-following capability.
+
+- **Streaming UX Power**: The `TextStreamer` callback is the primary driver of the "Lush AI" feel of the chat interface. It ensures the user sees activity within milliseconds of pressing Enter.
+
+- **Memory Sanitization**: The hook includes a `.startsWith(decodedInput)` check during post-processing. This is a crucial safety guard against certain ONNX backends that include the input prompt in the returned output buffer.
+
+- **Quantization strategy**: The worker defaults to `dtype: "q4"`. This reduces the RAM footprint of the 1.2B parameter model to ~1.2GB, making it viable for 16GB consumer machines.

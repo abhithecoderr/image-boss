@@ -1,68 +1,80 @@
 # Context Map: captioning/worker.js
 
+
 ## 1. Purpose
-Multimodal image description engine utilizing the Florence-2 vision model. Orchestrates the full generative lifecycle: from raw pixel feature extraction to tokenized auto-regressive text generation. Supports multiple vision tasks via a unified prompt-based interface.
+
+The deep-learning inference thread for image captioning. It runs the Microsoft Florence-2 model via Transformers.js, managing multi-gigabyte weight loading, auto-processor tokenization, and structured vision-task execution.
+
 
 ## 2. Imports
-- **@huggingface/transformers**:
-  - `Florence2ForConditionalGeneration`: The core generative vision-language model.
-  - `AutoProcessor`: Manages the complex intersection of pixel encoding and text tokenization.
-  - `RawImage`/`env`: Data structures and hardware acceleration controls.
+
+- **Transformers.js**:
+  - Syntax: `import { Florence2ForConditionalGeneration, AutoProcessor, RawImage, env } from '@huggingface/transformers';`
+  - Purpose: Core AI framework for local Florence-2 execution.
+
 
 ## 3. Dependencies
-- **Uses**:
-  - Hugging Face Hub (`onnx-community/Florence-2-base-ft`).
-  - WebGPU (Primary Hardware Target) + WASM runtime.
+
 - **Used by**:
-  - [processor.js](file:///c:/projects/bg/my-ai-app/src/services/captioning/processor.js) (IPC) - Routes user-selected tasks and handles result synthesis.
+  - `processor.js` (Main thread communicator).
+
+- **External APIs**:
+  - **WebGPU**: Primary hardware target.
+  - **OffscreenCanvas**: Bridge between `ImageBitmap` and the Transformers.js `RawImage` format.
+
 
 ## 4. State Management
 
-- **model/processor (Variables/Objects)**
-  - **Syntax**: `let model = null; let processor = null;`
-  - **Purpose**: Global singletons for the Florence-2 session. These are kept in memory due to their significant size (~250MB+), ensuring subsequent generation calls avoid initialization lag.
+- **model / processor (Variables)**:
+  - Syntax: `let model = null; let processor = null;`
+  - Purpose: Cached AI instances to prevent subsequent prompt latency.
 
-## 5. Project Flow
-1. **Intake**: Receives an `ImageBitmap` and a task identifier (e.g., `<MORE_DETAILED_CAPTION>`).
-2. **Alignment (Input Prep)**:
-   - The `processor` converts raw pixels into visual tokens.
-   - It constructs the textual prompt based on the selected vision task (L73).
-3. **Inference (The Generation Pass)**:
-   - The model executes an auto-regressive generation loop.
-   - It predicts tokens one-by-one (up to 100 tokens) using the combined vision-text features.
-4. **Structural Synthesis**:
-   - The generated token IDs are decoded into raw text via `batch_decode`.
-   - `post_process_generation` (L86) parses the raw text into structured JSON metadata (splitting coordinates, labels, and text).
-5. **Export**: The final refined string and structured raw results are transferred back to the main thread.
+- **cachedCanvas (Variable)**:
+  - Syntax: `let cachedCanvas = null;`
+  - Purpose: Reusable buffer for bitmap-to-tensor conversion.
+
+
+### 1. Initialization
+- **Flow**: Loads the Florence-2 `AutoProcessor` and `Florence2ForConditionalGeneration` weights.
+- **Files Involved**:
+  - `@huggingface/transformers`: Downloads and initializes the large-scale vision-language model weights and processor.
+
+### 2. HW-Specific Loading
+- **Flow**: Loads the model with `dtype: 'fp32'` directly for WebGPU to ensure maximum precision and avoid first-run fallback lag.
+
+### 3. Input Preparation
+- **Flow**: Converts the incoming bitmap to a `RawImage` and constructs the Florence-2 specific task prompts (e.g., `<CAPTION>` or `<REFERRING_EXPRESSION_SEGMENTATION>{prompt}`).
+
+### 4. Generation
+- **Flow**: Runs the auto-regressive model to generate text tokens.
+- **Files Involved**:
+  - `@huggingface/transformers`: Executes the Beam Search or Greed Search token generation loop.
+
+### 5. Decoding
+- **Flow**: Converts tokens back into human-readable strings and removes special punctuation tags.
+- **Files Involved**:
+  - `@huggingface/transformers`: Utilizes the model tokenizer to convert high-dimensional vectors back to text.
+
 
 ## 6. Code Structure
 
-- **Hardware Config (Block)**
-  - **Name (Type)**: env (Configuration)
-  - **Syntax**: `env.backends.onnx.wasm.proxy = false;`
-  - **Purpose**: Disables WASM proxying to prevent IPC synchronization deadlocks within the worker environment.
+- **bitmapToCanvas (Function)**:
+  - Syntax: `function bitmapToCanvas(bitmap) { ... }`
+  - Purpose: Format bridge.
+  - Working: Ensures incoming `ImageBitmap` (Transferable) is converted to an `OffscreenCanvas` so it can be ingested by the `RawImage.fromCanvas` utility.
 
-- **Initialization Logic (Block)**
-  - **Name (Type)**: Model Loader (Lifecycle)
-  - **Syntax**: `model = await Florence2ForConditionalGeneration.from_pretrained(...)`
-  - **Working**: Implements **Surgical Precision Fallback**. It attempts to load the `fp16` model via WebGPU first for maximum speed. If the hardware lacks `shader-f16` capabilities, it automatically re-attempts with `fp32` (L54).
+- **onmessage (Handler)**:
+  - Syntax: `self.onmessage = async ({ data }) => { ... };`
+  - Purpose: Global message router.
+  - Working: Governs the Florence-2 lifecycle. It includes a robust error mapper that detects numeric hardware codes and translates them into user-friendly "OOM or WebGPU incompatibility" messages.
 
-- **Prompt Construction (Block)**
-  - **Name (Type)**: construct_prompts (Processor)
-  - **Syntax**: `const prompts = processor.construct_prompts(task);`
-  - **Purpose**: Maps high-level UI requests to the specific internal "Vision Task Tokens" used by Florence-2.
-
-- **Generation Lifecycle (Block)**
-  - **Name (Type)**: model.generate (Inference)
-  - **Syntax**: `const generated_ids = await model.generate({ ...inputs, max_new_tokens: 100 });`
-  - **Working**: Triggers the transformer's decoder. It uses the visual features as "context" to predict the most likely descriptive text sequence.
-
-- **Hardware Recovery (Block)**
-  - **Name (Type)**: Error Handler (Cleanup)
-  - **Working**: Specifically intercepts numeric WebGPU errors (OOM) and converts them into human-readable hardware alerts (L104).
 
 ## 7. Points To Consider
-- **Thread Proxying Configuration**: Note that `wasm.proxy` should remain `false` (L65) to ensure the ONNX runtime can communicate directly with worker-shared buffers without deadlocks.
-- **Task Token Accuracy**: Consider that the `task` string (e.g., `<DETAILED_CAPTION>`) must match the Florence-2 registry exactly (L66) for the model to behave correctly.
-- **Memory Pressure**: Note that Florence-2 is memory-intensive; consider checking for WebGPU OOM errors if processing images exceeding 1024px (L67).
-- **Post-Processing**: Consider that `post_process_generation` is necessary (L68) to clean tasks tags and coordinate markers from the raw output string.
+
+- **The Florence Task Registry**: Tasks like `<REFERRING_EXPRESSION_SEGMENTATION>` return location tokens. The worker sanitizes these by removing underscores (`<loc_123>` -> `<loc123>`) to ensure compatibility with the processor's parser.
+
+- **V3 Prompt Invariant**: Transformers.js v3 requires a space between the task tag and the prompt text (e.g., `<TASK> prompt`). The worker enforces this formatting to prevent empty model outputs.
+
+- **Token Limit Invariant**: `max_new_tokens: 100` is default for captions. For `<REFERRING_EXPRESSION_SEGMENTATION>`, this is increased to `1024` to prevent coordinate truncation in complex polygons. This keeps response time under 2-5 seconds depending on polygon complexity.
+
+- **Strict Proxy-Disable**: `env.backends.onnx.wasm.proxy = false` is set to ensure the worker communicates directly with the WASM binary, avoiding double-proxy overhead in modern browsers.

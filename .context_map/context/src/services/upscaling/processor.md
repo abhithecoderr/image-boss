@@ -1,50 +1,80 @@
 # Context Map: upscaling/processor.js
 
+
 ## 1. Purpose
-Management layer for the upscaling service. Provides the API for triggering heavy AI upscales and lightweight post-processing refinements. Manages the worker lifecycle and handles the conversion between ImageBitmaps and visible Canvas elements.
+
+The main-thread interface for the AI Super-Resolution service. It manages a dedicated tiling worker for high-performance upscaling (Real-ESRGAN), handles the conversion between `HTMLCanvasElement` and `ImageBitmap`, and provides a `refine` method for instant UI feedback on post-processing filters.
+
 
 ## 2. Imports
-- **worker.js?worker**: The background thread implementation.
+
+- **Worker**:
+  - Syntax: `import Worker from './worker.js?worker';`
+  - Purpose: Initializes the tile-based upscaling thread.
+
 
 ## 3. Dependencies
-- **Uses**:
-  - [worker.js](file:///c:/projects/bg/my-ai-app/src/services/upscaling/worker.js): Background AI implementation.
+
 - **Used by**:
-  - `main.js`: Primary UI orchestrator.
+  - `useProcessor.js` (Invoked when the 'upscaling' service is selected).
+
+- **External APIs**:
+  - **createImageBitmap**: Zero-copy transfer of high-res source images.
+
 
 ## 4. State Management
 
-- **worker (Variable/Worker)**
-  - **Syntax**: `let worker = null`
-  - **Purpose**: Lazy-loaded singleton for the upscaling thread.
+- **worker (Variable)**:
+  - Syntax: `let worker = null;`
+  - Purpose: Singleton worker reference.
 
-## 5. Project Flow
-1. **Intake Stage**: `main.js` calls `process()` with a source canvas and desired upscale parameters.
-2. **Transfer Stage**: The processor converts the canvas into an `ImageBitmap` to utilize zero-copy memory transfers to the worker.
-3. **Execution Stage**: The worker performs the tiling and frequency separation. The processor channels progress messages back to the status bar.
-4. **Synthesis Stage**:
-   - The processor receives a result `ImageBitmap`.
-   - It creates a new canvas at the destination resolution.
-   - It draws the bitmap and immediately Closes the bitmap to free graphics memory.
-5. **Return Stage**: The high-res canvas is returned for display in the workspace.
+
+### 1. Ingestation
+- **Flow**: Captures the source canvas and generates an `ImageBitmap`.
+- **Files Involved**:
+  - `canvas-utils.js`: Converts the HTML5 Canvas state into a transferable bitmap buffer.
+
+### 2. Inference Handshake
+- **Flow**: Posts the bitmap and scale options to the Upscaling Worker.
+- **Files Involved**:
+  - `worker.js`: Receives the source pixels to initiate the tiling loop.
+
+### 3. Tile Execution
+- **Flow**: The worker processes the image in 128px tiles (managed by the worker).
+- **Files Involved**:
+  - `worker.js`: Orchestrates the spatial division and sequential AI upscaling.
+
+### 4. Resolution
+- **Flow**: Receives a single large `ImageBitmap` (4x the original) from the worker.
+
+### 5. Reification
+- **Flow**: Creates a result canvas of the new dimensions and renders the bitmap into it.
+
+### 6. Refinement
+- **Flow**: When the user adjusts "Details" or "Brightness", the `refine` function signals the worker to apply GPU filters to its cached result.
+- **Files Involved**:
+  - `worker.js`: Applies fast OffscreenCanvas frequency-separation filters.
+
 
 ## 6. Code Structure
 
-- **`getWorker` (Function)**
-  - **Name (Type)**: getWorker (Singleton Helper)
-  - **Syntax**: `function getWorker()`
+- **process (Function)**:
+  - Syntax: `export async function process(sourceCanvas, options = {}, onProgress) { ... }`
+  - Purpose: The primary async orchestrator.
+  - Working: Manages the `messageHandler` lifecycle. It performs the Canvas-to-Bitmap conversion, transmits the data, and then performs the reverse Bitmap-to-Canvas conversion once the 400% upscaled result arrives.
 
-- **`process` (Function)**
-  - **Name (Type)**: process (Primary Entry Point)
-  - **Syntax**: `export async function process(sourceCanvas, options = {}, onProgress)`
-  - **Working**: Orchestrates the full upscaling lifecycle. This is the "Heavy" call used for the first pass or when the upscale factor changes.
+- **refine (Function)**:
+  - Syntax: `export async function refine(options = {}) { ... }`
+  - Purpose: The "Instant Tweaking" bridge.
+  - Working: Sends parameter updates to the worker without re-running the AI model. This allows for near-instant updates of high-pass detail enhancement and color grading.
 
-- **`refine` (Function)**
-  - **Name (Type)**: refine (Lightweight Pass)
-  - **Syntax**: `export async function refine(options = {})`
-  - **Working**: Used for real-time slider adjustments (details, brightness, sat). Sends a command to the worker to re-run the filter pass on cached data.
 
 ## 7. Points To Consider
-- **Transferable Performance**: Consider including the `bitmap` in the `postMessage` transfer list (L48) to ensure zero-copy memory movement and prevent main-thread stutter.
-- **Bitmap Hygiene**: Note that results can be 8MB-32MB; consider calling `result.close()` (L49) immediately after drawing to a canvas to manage graphics memory efficiently.
-- **Progress Debouncing**: Consider debouncing `refine` calls from the UI (L50) to prevent saturating the IPC channel during rapid slider interactions.
+
+- **The "Scale Factor" Invariant**: The worker always upscales by 4x. If the user requests 2x, the processor receives the 4x result and performs a final high-quality downscale to the target dimensions on the main thread.
+
+- **Transferable Hygiene**: Bitmaps are transferred both *to* and *from* the worker. `result.close()` is called immediately after drawing to the main canvas to release GPU memory.
+
+- **Manual Listener Management**: The `messageHandler` is added and removed for every `process` call to prevent listener leaks in long-running sessions.
+
+- **Feedback Strategy**: The `onProgress` callback receives granular tile-based progress (e.g., "Processed 45/96 tiles") to keep the user engaged during the long inference pass.
