@@ -4,14 +4,12 @@
  */
 
 import Worker from './worker.js?worker';
+import { workerRegistry } from '../../core/worker-registry.js';
 
-let worker = null;
+const SERVICE_ID = 'captioning';
 
 function getWorker() {
-  if (!worker) {
-    worker = new Worker();
-  }
-  return worker;
+  return workerRegistry.getWorker(SERVICE_ID, Worker);
 }
 
 /**
@@ -22,10 +20,7 @@ function getWorker() {
  * @returns {Promise<Object>} Result object with canvas and data
  */
 export async function process(sourceCanvas, options = {}, onProgress) {
-  const isLFM = options.modelId?.includes('LFM');
-  const isSegmentation = !isLFM && options.task === '<REFERRING_EXPRESSION_SEGMENTATION>';
-  const modelLabel = isLFM ? 'LFM 2.5 VL' : 'Florence-2';
-  console.log(`[Processor] Starting ${modelLabel} ${isSegmentation ? 'segmentation' : 'captioning'}...`);
+  console.log(`[Processor] Starting LFM 2.5 VL image captioning...`);
 
   return new Promise(async (resolve, reject) => {
     const w = getWorker();
@@ -33,50 +28,46 @@ export async function process(sourceCanvas, options = {}, onProgress) {
     // Use zero-copy ImageBitmap transfer
     const bitmap = await createImageBitmap(sourceCanvas);
 
-    w.onmessage = ({ data }) => {
+    const messageHandler = ({ data }) => {
       const { type, progress, message, result, error } = data;
 
       if (type === 'progress') {
         onProgress?.(progress, message);
       } else if (type === 'complete') {
+        w.removeEventListener('message', messageHandler);
         onProgress?.(0.95, 'Rendering result...');
 
-        let resultCanvas;
-        let finalValue;
-
-        if (isSegmentation) {
-          // Pass result.value directly — it could be a parsed object OR a raw string.
-          // createSegmentationOverlay handles both cases.
-          resultCanvas = createSegmentationOverlay(sourceCanvas, result.value);
-          finalValue = result.value;
-        } else {
-          // result.value is the caption string
-          resultCanvas = createCaptionOverlay(sourceCanvas, result.value);
-          finalValue = result.value;
-        }
+        const resultCanvas = createCaptionOverlay(sourceCanvas, result.value);
+        const finalValue = result.value;
 
         // Detailed log of structured vision result
-        console.log(`[Processor] ${modelLabel} Result:`, result.raw);
+        console.log(`[Processor] Result:`, result.raw);
 
         onProgress?.(1, 'Complete!');
-        resolve({ canvas: resultCanvas, [isSegmentation ? 'segmentation' : 'captioning']: finalValue });
+        resolve({ canvas: resultCanvas, captioning: finalValue });
       } else if (type === 'error') {
+        w.removeEventListener('message', messageHandler);
         console.error('[Processor] Worker Error:', error);
         reject(new Error(error));
       }
     };
 
-    w.onerror = (err) => reject(new Error(err.message));
+    const errorHandler = (err) => {
+      w.removeEventListener('message', messageHandler);
+      w.removeEventListener('error', errorHandler);
+      reject(new Error(err.message));
+    };
+
+    w.addEventListener('message', messageHandler);
+    w.addEventListener('error', errorHandler, { once: true });
 
     // Send to worker
     w.postMessage({
       type: 'process',
       payload: {
         bitmap,
-        modelId: options.modelId || 'onnx-community/Florence-2-base-ft',
-        task: options.task || '<MORE_DETAILED_CAPTION>',
-        segPrompt: options.segPrompt || '',
-        lfmPrompt: options.lfmPrompt || ''
+        modelId: options.modelId || 'LiquidAI/LFM2.5-VL-450M-ONNX',
+        lfmPrompt: options.lfmPrompt || 'Describe this image in detail.'
       }
     }, [bitmap]);
   });
@@ -147,103 +138,11 @@ function createCaptionOverlay(sourceCanvas, caption) {
 }
 
 /**
- * Create canvas with segmentation masks (B&W Mask + Color Cutout)
+ * Dispose worker and free resources
  */
-function createSegmentationOverlay(sourceCanvas, segmentationData) {
-  const width = sourceCanvas.width;
-  const height = sourceCanvas.height;
-  const gap = 20;
-
-  // 1. Resolve Polygons (Handling raw string fallback)
-  let polygons = [];
-  if (segmentationData && typeof segmentationData === 'object' && segmentationData.polygons) {
-    polygons = segmentationData.polygons;
-  } else if (typeof segmentationData === 'string') {
-    console.warn('[Processor] Post-processor returned raw string. Running manual <loc> parser...', segmentationData);
-    const matches = Array.from(segmentationData.matchAll(/<loc_?(\d+)>/g)).map(m => parseInt(m[1]));
-
-    if (matches.length >= 4 && matches.length % 2 === 0) {
-      const coords = [];
-      for (let i = 0; i < matches.length; i += 2) {
-        const x = (matches[i] / 1000) * width;
-        const y = (matches[i + 1] / 1000) * height;
-        coords.push([x, y]);
-      }
-      polygons = [coords];
-    }
-  }
-
-  // Helper to trace a polygon path
-  const tracePoly = (ctx, outline, yOffset = 0) => {
-    if (!outline || outline.length < 2) return;
-    ctx.beginPath();
-    if (Array.isArray(outline[0])) {
-      ctx.moveTo(outline[0][0], outline[0][1] + yOffset);
-      for (let i = 1; i < outline.length; i++) {
-        ctx.lineTo(outline[i][0], outline[i][1] + yOffset);
-      }
-    } else {
-      ctx.moveTo(outline[0], outline[1] + yOffset);
-      for (let i = 2; i < outline.length; i += 2) {
-        ctx.lineTo(outline[i], outline[i + 1] + yOffset);
-      }
-    }
-    ctx.closePath();
-  };
-
-  // 2. Create a smooth mask on a temporary canvas (with edge blur for anti-aliasing)
-  const maskCanvas = document.createElement('canvas');
-  maskCanvas.width = width;
-  maskCanvas.height = height;
-  const maskCtx = maskCanvas.getContext('2d');
-
-  // Draw polygon mask with blur for smooth edges
-  maskCtx.filter = 'blur(1.5px)';
-  maskCtx.fillStyle = '#ffffff';
-  polygons.forEach(poly => {
-    tracePoly(maskCtx, poly, 0);
-    maskCtx.fill();
-  });
-  maskCtx.filter = 'none';
-
-  // 3. Setup final result canvas (B&W Mask + Color Cutout)
-  const resultCanvas = document.createElement('canvas');
-  const ctx = resultCanvas.getContext('2d');
-  resultCanvas.width = width;
-  resultCanvas.height = (height * 2) + gap;
-
-  // Fill background
-  ctx.fillStyle = '#0a0a0a';
-  ctx.fillRect(0, 0, resultCanvas.width, resultCanvas.height);
-
-  // 4. Draw B&W Mask (Top) — use the smoothed mask
-  ctx.fillStyle = '#000000';
-  ctx.fillRect(0, 0, width, height);
-  ctx.drawImage(maskCanvas, 0, 0);
-
-  // 5. Draw Color Cutout (Bottom) — original image clipped by mask
-  const offsetY = height + gap;
-
-  // Create a temp canvas for the cutout compositing
-  const cutoutCanvas = document.createElement('canvas');
-  cutoutCanvas.width = width;
-  cutoutCanvas.height = height;
-  const cutoutCtx = cutoutCanvas.getContext('2d');
-
-  // Draw the original image first
-  cutoutCtx.drawImage(sourceCanvas, 0, 0);
-  // Use 'destination-in' to keep only pixels where the mask is white
-  cutoutCtx.globalCompositeOperation = 'destination-in';
-  cutoutCtx.drawImage(maskCanvas, 0, 0);
-  cutoutCtx.globalCompositeOperation = 'source-over';
-
-  // Stamp the cutout onto the result canvas
-  ctx.fillStyle = '#000000';
-  ctx.fillRect(0, offsetY, width, height);
-  ctx.drawImage(cutoutCanvas, 0, offsetY);
-
-  return resultCanvas;
+export async function dispose() {
+  const w = getWorker();
+  w.postMessage({ type: 'dispose' });
 }
 
-
-export default { process };
+export default { process, dispose };

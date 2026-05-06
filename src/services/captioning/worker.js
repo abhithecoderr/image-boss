@@ -4,12 +4,13 @@
  */
 
 import {
-  Florence2ForConditionalGeneration,
   AutoModelForImageTextToText,
   AutoProcessor,
   RawImage,
   env
 } from '@huggingface/transformers';
+import { getGPUConfig, createProgressReporter } from '../../core/worker-utils.js';
+
 
 // v4: no wasm.proxy workaround needed — build system no longer double-proxies
 env.allowLocalModels = false;
@@ -18,20 +19,7 @@ let model = null;
 let processor = null;
 let currentModelId = null;  // Track loaded model to detect switches
 
-/**
- * Detect WebGPU and fp16 support
- */
-async function getGPUConfig() {
-  if (!navigator.gpu) return { supported: false, fp16: false };
-  try {
-    const adapter = await navigator.gpu.requestAdapter();
-    if (!adapter) return { supported: false, fp16: false };
-    const hasFP16 = adapter.features.has('shader-f16');
-    return { supported: true, fp16: hasFP16 };
-  } catch (_) {
-    return { supported: false, fp16: false };
-  }
-}
+
 
 /**
  * Convert ImageBitmap to OffscreenCanvas for RawImage compatibility.
@@ -49,12 +37,12 @@ function bitmapToCanvas(bitmap) {
   return cachedCanvas;
 }
 
+
 /**
- * Determine model architecture from its ID
+ * Determine model architecture from its ID (Hardcoded to LFM after Florence-2 removal)
  */
 function getModelArch(modelId) {
-  if (modelId.includes('LFM')) return 'lfm';
-  return 'florence2';
+  return 'lfm';
 }
 
 /**
@@ -69,92 +57,17 @@ async function teardown() {
   currentModelId = null;
 }
 
-/**
- * Standard progress callback factory for model downloads
- */
-function makeProgressCallback(baseProgress, range) {
-  return (p) => {
-    if (p.status === 'progress') {
-      const pct = p.total
-        ? ((p.loaded ?? 0) / p.total) * 100
-        : (p.progress ?? 0);
-      if (pct > 0) {
-        self.postMessage({
-          type: 'progress',
-          progress: baseProgress + (pct / 100) * range,
-          message: `Downloading model... ${Math.round(pct)}%`
-        });
-      }
-    }
-  };
-}
 
-// ─── Florence-2 Pipeline ────────────────────────────────────────────────────
 
-async function loadFlorence2(modelId, hw) {
-  self.postMessage({ type: 'progress', progress: 0.1, message: 'Initializing Florence-2 Processor...' });
-  processor = await AutoProcessor.from_pretrained(modelId);
 
-  // v4: promote to fp16 where hardware supports it — ~2× faster generation
-  // with the new C++ WebGPU runtime. Fall back to fp32 if fp16 unavailable.
-  const device = hw.supported ? 'webgpu' : 'wasm';
-  const dtype = (hw.supported && hw.fp16) ? 'fp16' : 'fp32';
-
-  self.postMessage({ type: 'progress', progress: 0.2, message: `Loading Florence-2 Model (${dtype})...` });
-
-  model = await Florence2ForConditionalGeneration.from_pretrained(modelId, {
-    dtype,
-    device,
-    progress_callback: makeProgressCallback(0.2, 0.3),
-  });
-
-  currentModelId = modelId;
-  self.postMessage({ type: 'progress', progress: 0.5, message: `Model loaded (${dtype}, ${device})` });
-}
-
-async function runFlorence2(image, task, segPrompt) {
-  // Handle full prompt for segmentation.
-  // Ensure exactly one space between task and prompt — standard Florence-2 requirement.
-  // NOTE: This is a model behavioural invariant, not a library version issue. Keep in v4.
-  const cleanedSegPrompt = segPrompt.trim();
-  const fullPrompt = task === '<REFERRING_EXPRESSION_SEGMENTATION>'
-    ? `${task} ${cleanedSegPrompt}`
-    : task;
-
-  const prompts = processor.construct_prompts(fullPrompt);
-  const inputs = await processor(image, prompts);
-
-  self.postMessage({ type: 'progress', progress: 0.8, message: 'Generating description...' });
-
-  const generated_ids = await model.generate({
-    ...inputs,
-    max_new_tokens: task === '<REFERRING_EXPRESSION_SEGMENTATION>' ? 1024 : 100,
-  });
-
-  // 4. Decode & Post-process
-  const generated_text = processor.batch_decode(generated_ids, { skip_special_tokens: false })[0];
-
-  // SANITIZATION: Some Florence-2 versions output <loc_XXX> but Transformers.js expects <locXXX>
-  // This is a model-level artefact — kept in v4.
-  const sanitizedGeneratedText = generated_text.replace(/<loc_/g, '<loc');
-
-  const result = processor.post_process_generation(sanitizedGeneratedText, fullPrompt, image.size);
-
-  // Extract the result (caption or polygons)
-  let value = result[fullPrompt] || result[task] || generated_text;
-
-  // Ensure we pass the object if polygons are present, even if found under task key
-  if (typeof value === 'string' && result[task]?.polygons) {
-    value = result[task];
-  }
-
-  return { value, raw: result };
-}
 
 // ─── LFM 2.5 VL Pipeline ───────────────────────────────────────────────────
 
 async function loadLFM(modelId, hw) {
-  self.postMessage({ type: 'progress', progress: 0.1, message: 'Initializing LFM 2.5 VL Processor...' });
+  const onProgress = (prog, msg) => self.postMessage({ type: 'progress', progress: prog, message: msg });
+  const report = createProgressReporter(onProgress);
+
+  report(0.1, 0.1, 'Initializing LFM 2.5 VL Processor...')(0);
   processor = await AutoProcessor.from_pretrained(modelId);
 
   const device = hw.supported ? 'webgpu' : 'wasm';
@@ -167,17 +80,17 @@ async function loadLFM(modelId, hw) {
   } : 'fp32';
 
   const dtypeLabel = hw.supported ? 'fp16+q4' : 'fp32';
-  self.postMessage({ type: 'progress', progress: 0.2, message: `Loading LFM 2.5 VL Model (${dtypeLabel})...` });
 
   model = await AutoModelForImageTextToText.from_pretrained(modelId, {
     device,
     dtype,
-    progress_callback: makeProgressCallback(0.2, 0.3),
+    progress_callback: report(0.2, 0.5, "Downloading LFM 2.5 VL model..."),
   });
 
   currentModelId = modelId;
-  self.postMessage({ type: 'progress', progress: 0.5, message: `Model loaded (${dtypeLabel}, ${device})` });
+  report(0.5, 0.5, `Model loaded (${dtypeLabel}, ${device})`)(0);
 }
+
 
 async function runLFM(image, userPrompt) {
   const prompt = userPrompt?.trim() || 'Describe this image in detail.';
@@ -209,17 +122,19 @@ async function runLFM(image, userPrompt) {
 self.onmessage = async ({ data }) => {
   const { type, payload } = data;
 
+  if (type === 'dispose') {
+    await teardown();
+    console.info('[Captioning Worker] Model disposed.');
+    return;
+  }
+
   if (type === 'process') {
     try {
       const {
         bitmap,
-        task = '<MORE_DETAILED_CAPTION>',
-        segPrompt = '',
         modelId,
         lfmPrompt = ''
       } = payload;
-
-      const arch = getModelArch(modelId);
 
       // 1. (Re)initialize model if needed
       if (!model || modelId !== currentModelId) {
@@ -230,12 +145,7 @@ self.onmessage = async ({ data }) => {
         }
 
         const hw = await getGPUConfig();
-
-        if (arch === 'lfm') {
-          await loadLFM(modelId, hw);
-        } else {
-          await loadFlorence2(modelId, hw);
-        }
+        await loadLFM(modelId, hw);
       }
 
       self.postMessage({ type: 'progress', progress: 0.6, message: 'Processing vision inputs...' });
@@ -250,12 +160,7 @@ self.onmessage = async ({ data }) => {
       }
 
       // 3. Run inference
-      let result;
-      if (arch === 'lfm') {
-        result = await runLFM(image, lfmPrompt);
-      } else {
-        result = await runFlorence2(image, task, segPrompt);
-      }
+      const result = await runLFM(image, lfmPrompt);
 
       self.postMessage({ type: 'complete', result });
 

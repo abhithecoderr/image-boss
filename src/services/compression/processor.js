@@ -5,6 +5,7 @@
 
 import imageCompression from 'browser-image-compression';
 import { loadImage, imageToCanvas, canvasToBlob } from '../../core/canvas-utils.js';
+import { createProgressReporter } from '../../core/worker-utils.js';
 
 /**
  * Compress image
@@ -14,52 +15,61 @@ import { loadImage, imageToCanvas, canvasToBlob } from '../../core/canvas-utils.
  * @returns {HTMLCanvasElement} Result canvas
  */
 export async function process(sourceCanvas, options = {}, onProgress) {
-  let { maxSizeMB = 1, quality = 0.8, preset } = options;
-
-  // Map presets to values
-  if (preset === 'light') {
-    maxSizeMB = 2;
-    quality = 0.9;
-  } else if (preset === 'medium') {
-    maxSizeMB = 1;
-    quality = 0.8;
-  } else if (preset === 'heavy') {
-    maxSizeMB = 0.5;
-    quality = 0.6;
-  }
+  let { quality = 80 } = options;
+  const compressionQuality = quality / 100;
+  const maxSizeMB = options.maxSizeMB || (quality > 90 ? 2 : quality > 50 ? 1 : 0.5);
 
   onProgress?.(0.1, 'Preparing image...');
 
+  // Detect transparency: if the image has an alpha channel, use lossless-friendly
+  // WebP instead of JPEG to avoid destroying the transparent background.
+  let mimeType = 'image/jpeg';
+  try {
+    const sampleCtx = sourceCanvas.getContext('2d');
+    if (sampleCtx) {
+      // Sample a corner pixel — if alpha < 255 the image has transparency
+      const pixel = sampleCtx.getImageData(0, 0, 1, 1).data;
+      if (pixel[3] < 255) {
+        mimeType = 'image/webp';
+        console.info('[Compression] Alpha channel detected — using WebP to preserve transparency.');
+      }
+    }
+  } catch (_) { /* ignore — if sampling fails, default to jpeg */ }
+
   // Convert canvas to blob/file for the compression library
-  const blob = await canvasToBlob(sourceCanvas, 'image/jpeg', 1);
-  const file = new File([blob], 'image.jpg', { type: 'image/jpeg' });
+  const blob = await canvasToBlob(sourceCanvas, mimeType, 1);
+  const fileName = mimeType === 'image/webp' ? 'image.webp' : 'image.jpg';
+  const file = new File([blob], fileName, { type: mimeType });
 
   const originalSize = file.size;
+  const report = createProgressReporter(onProgress);
 
-  onProgress?.(0.2, 'Compressing...');
+  report(0.2, 0.2, 'Compressing...')();
 
   const compressionOptions = {
     maxSizeMB,
     maxWidthOrHeight: Math.max(sourceCanvas.width, sourceCanvas.height),
     useWebWorker: true,
-    initialQuality: quality,
-    onProgress: (percent) => {
-      onProgress?.(0.2 + percent * 0.006, `Compressing... ${percent}%`);
-    },
+    initialQuality: compressionQuality,
+    onProgress: report(0.2, 0.8, 'Compressing...'),
   };
 
   const compressedFile = await imageCompression(file, compressionOptions);
   const compressedSize = compressedFile.size;
 
-  onProgress?.(0.9, 'Rendering result...');
+  report(0.9, 0.9, 'Rendering result...')();
 
-  // Convert back to canvas
+  // Convert back to canvas for PREVIEW only
   const img = await loadImage(compressedFile);
   const { canvas: resultCanvas } = imageToCanvas(img);
 
   const reduction = ((1 - compressedSize / originalSize) * 100).toFixed(1);
+  report(1, 1, `Reduced by ${reduction}% (${(compressedSize / 1024).toFixed(1)} KB)`)();
 
-  onProgress?.(1, `Reduced by ${reduction}% (${(compressedSize / 1024).toFixed(1)} KB)`);
+  // Return both the canvas (for preview) AND the raw compressed blob (for download)
+  // This is critical: re-encoding the canvas would undo all compression work
+  resultCanvas._compressedBlob = compressedFile;
+  resultCanvas._compressedMimeType = mimeType;
 
   return resultCanvas;
 }

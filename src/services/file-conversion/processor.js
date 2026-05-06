@@ -4,6 +4,7 @@
  */
 
 import { canvasToBlob } from '../../core/canvas-utils.js';
+import { createProgressReporter } from '../../core/worker-utils.js';
 
 /**
  * Convert image to different format
@@ -14,8 +15,9 @@ import { canvasToBlob } from '../../core/canvas-utils.js';
  */
 export async function process(sourceCanvas, options = {}, onProgress) {
   const { format = 'image/webp', quality = 0.92 } = options;
+  const report = createProgressReporter(onProgress);
 
-  onProgress?.(0.3, `Converting to ${format.split('/')[1].toUpperCase()}...`);
+  report(0.3, 0.3, `Converting to ${format.split('/')[1].toUpperCase()}...`)();
 
   // Create result canvas
   const resultCanvas = document.createElement('canvas');
@@ -23,24 +25,29 @@ export async function process(sourceCanvas, options = {}, onProgress) {
   resultCanvas.height = sourceCanvas.height;
   const ctx = resultCanvas.getContext('2d');
 
-  // For JPEG, fill white background (no transparency)
-  if (format === 'image/jpeg') {
+  // For formats that don't support transparency (or have poor browser support for it), fill white background
+  const noAlphaFormats = ['image/jpeg', 'image/bmp'];
+  if (noAlphaFormats.includes(format)) {
     ctx.fillStyle = '#ffffff';
     ctx.fillRect(0, 0, resultCanvas.width, resultCanvas.height);
   }
 
   ctx.drawImage(sourceCanvas, 0, 0);
 
-  onProgress?.(0.8, 'Encoding...');
+  report(0.8, 0.8, 'Encoding...')();
 
   // Convert to blob to verify encoding works
   const blob = await canvasToBlob(resultCanvas, format, quality);
 
-  // Store format info on canvas for download
+  // Attach result for direct download without re-encoding
+  resultCanvas._resultBlob = blob;
+  resultCanvas._resultMimeType = format;
+
+  // Store format info on canvas for metadata
   resultCanvas.dataset.format = format;
   resultCanvas.dataset.quality = quality;
 
-  onProgress?.(1, `Converted (${(blob.size / 1024).toFixed(1)} KB)`);
+  report(1, 1, `Converted (${(blob.size / 1024).toFixed(1)} KB)`)();
 
   return resultCanvas;
 }

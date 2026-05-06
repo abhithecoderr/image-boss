@@ -4,14 +4,12 @@
  */
 
 import Worker from './worker.js?worker';
+import { workerRegistry } from '../../core/worker-registry.js';
 
-let worker = null;
+const SERVICE_ID = 'upscaling';
 
 function getWorker() {
-  if (!worker) {
-    worker = new Worker();
-  }
-  return worker;
+  return workerRegistry.getWorker(SERVICE_ID, Worker);
 }
 
 /**
@@ -22,12 +20,12 @@ function getWorker() {
  * @returns {Promise<HTMLCanvasElement>} Result canvas (2x resolution)
  */
 export async function process(sourceCanvas, options = {}, onProgress) {
-  return new Promise(async (resolve, reject) => {
-    const w = getWorker();
+  const w = getWorker();
 
-    // Zero-copy transfer
-    const bitmap = await createImageBitmap(sourceCanvas);
+  // Zero-copy transfer
+  const bitmap = await createImageBitmap(sourceCanvas);
 
+  return new Promise((resolve, reject) => {
     const messageHandler = ({ data }) => {
       const { type, progress, message, result, error } = data;
 
@@ -91,4 +89,12 @@ export async function refine(options = {}) {
     });
 }
 
-export default { process, refine };
+/**
+ * Dispose worker and free resources
+ */
+export async function dispose() {
+  const w = getWorker();
+  w.postMessage({ type: 'dispose' });
+}
+
+export default { process, refine, dispose };

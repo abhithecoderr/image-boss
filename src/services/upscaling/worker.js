@@ -6,6 +6,7 @@
  */
 
 import * as ort from 'onnxruntime-web/webgpu';
+import { createProgressReporter } from '../../core/worker-utils.js';
 
 // Configure ONNX Runtime for stability
 ort.env.wasm.numThreads = 1;
@@ -29,7 +30,7 @@ const DEFAULT_SATURATION = 0;            // -0.3 to +0.3
 let session = null;
 let currentDevice = null;
 
-async function fetchWithProgress(url, label, onProgress, startWeight, endWeight) {
+async function fetchWithProgress(url, label, report, startWeight, endWeight) {
   const response = await fetch(url);
   if (!response.ok) throw new Error(`Failed to fetch ${label}: ${response.statusText}`);
 
@@ -39,6 +40,7 @@ async function fetchWithProgress(url, label, onProgress, startWeight, endWeight)
 
   const reader = response.body.getReader();
   const chunks = [];
+  const reportProgress = report(startWeight, endWeight, `Downloading ${label}...`);
 
   while (true) {
     const { done, value } = await reader.read();
@@ -47,8 +49,7 @@ async function fetchWithProgress(url, label, onProgress, startWeight, endWeight)
     loaded += value.length;
 
     if (total) {
-      const progress = startWeight + (loaded / total) * (endWeight - startWeight);
-      onProgress?.(progress, `Downloading ${label}: ${Math.round((loaded / total) * 100)}%`);
+      reportProgress((loaded / total) * 100);
     }
   }
 
@@ -65,16 +66,18 @@ async function fetchWithProgress(url, label, onProgress, startWeight, endWeight)
 async function getSession(onProgress) {
   if (session) return session;
 
-  try {
-    if (!navigator.gpu) {
-      throw new Error('WebGPU is not supported by your browser or hardware.');
-    }
+  const report = createProgressReporter(onProgress);
 
-    const modelBuffer = await fetchWithProgress(MODEL_ONNX_URL, 'model structure', onProgress, 0.05, 0.1);
-    const dataBuffer = await fetchWithProgress(MODEL_DATA_URL, 'model weights', onProgress, 0.1, 0.3);
+  try {
+    const useWebGPU = !!navigator.gpu;
+    const executionProviders = useWebGPU ? ['webgpu'] : ['wasm'];
+    const deviceLabel = useWebGPU ? 'WEBGPU' : 'WASM';
+
+    const modelBuffer = await fetchWithProgress(MODEL_ONNX_URL, 'model structure', report, 0.05, 0.1);
+    const dataBuffer = await fetchWithProgress(MODEL_DATA_URL, 'model weights', report, 0.1, 0.3);
 
     const sessionOptions = {
-      executionProviders: ['webgpu'],
+      executionProviders,
       graphOptimizationLevel: 'all',
       externalData: [
         {
@@ -84,17 +87,17 @@ async function getSession(onProgress) {
       ]
     };
 
-    onProgress?.(0.3, 'Initializing Real-ESRGAN (WEBGPU)...');
+    report(0.3, 0.3, `Initializing Real-ESRGAN (${deviceLabel})...`)(0);
 
     session = await ort.InferenceSession.create(modelBuffer, sessionOptions);
-    currentDevice = 'webgpu';
-    console.info('✓ Real-ESRGAN loaded (WEBGPU)');
+    currentDevice = useWebGPU ? 'webgpu' : 'wasm';
+    console.info(`✓ Real-ESRGAN loaded (${deviceLabel})`);
 
-    onProgress?.(0.4, 'Model ready');
+    report(0.4, 0.4, 'Model ready')(0);
     return session;
 
   } catch (err) {
-    console.error('Failed to load WebGPU session:', err);
+    console.error('Failed to load session:', err);
     throw err;
   }
 }
@@ -183,9 +186,8 @@ self.onmessage = async ({ data }) => {
 
   if (type === 'upscale' || type === 'refine') {
     try {
-      const progressCallback = (progress, message) => {
-        self.postMessage({ type: 'progress', progress, message });
-      };
+      const onProgress = (prog, msg) => self.postMessage({ type: 'progress', progress: prog, message: msg });
+      const report = createProgressReporter(onProgress);
 
       const params = payload;
       const targetScale = parseFloat(params.scale || cachedScale || 4);
@@ -200,7 +202,7 @@ self.onmessage = async ({ data }) => {
 
       if (!isRefine && (isNewImage || isParamChange)) {
         // --- HEAVY AI PASS (Tiling) ---
-        const sess = await getSession(progressCallback);
+        const sess = await getSession(onProgress);
 
         // Clean up old cache
         if (isNewImage && cachedOriginalBitmap) {
@@ -224,7 +226,7 @@ self.onmessage = async ({ data }) => {
           processingBitmap = await createImageBitmap(turboCanvas);
           imgW = turboW;
           imgH = turboH;
-          progressCallback(0.4, `Turbo ${targetScale}x Mode...`);
+          report(0.4, 0.4, `Turbo ${targetScale}x Mode...`)(0);
         }
 
         const outW = imgW * SCALE_FACTOR;
@@ -303,7 +305,7 @@ self.onmessage = async ({ data }) => {
           );
 
           if (tilesDone % 5 === 0 || tilesDone === totalTiles) {
-            progressCallback(0.4 + (tilesDone / totalTiles) * 0.5, `Processed ${tilesDone}/${totalTiles} tiles...`);
+            report(0.4, 0.9, `Processed ${tilesDone}/${totalTiles} tiles...`)((tilesDone / totalTiles) * 100);
           }
         }
 
@@ -323,7 +325,7 @@ self.onmessage = async ({ data }) => {
       }
 
       // --- LIGHT FILTER PASS (Frequency Separation + Grading) ---
-      const resultBitmap = await applyFilters(aiOutput, originalBitmap, { ...params, targetScale }, progressCallback);
+      const resultBitmap = await applyFilters(aiOutput, originalBitmap, { ...params, targetScale }, onProgress);
 
       self.postMessage({
         type: 'complete',
@@ -339,5 +341,31 @@ self.onmessage = async ({ data }) => {
       console.error('Upscaling error:', err);
       self.postMessage({ type: 'error', error: err.message || 'Upscaling failed' });
     }
+  }
+
+  // Explicit cleanup — releases cached GPU memory (ImageBitmap) on demand
+  if (type === 'clear') {
+    if (cachedOriginalBitmap) {
+      cachedOriginalBitmap.close();
+      cachedOriginalBitmap = null;
+    }
+    cachedAIResult = null;
+    cachedScale = null;
+    self.postMessage({ type: 'cleared' });
+  }
+
+  // Model eviction — called by WorkerRegistry when switching to another service.
+  // The session is released so WebGPU/WASM memory is freed.
+  // Model weights stay in the browser HTTP cache for fast re-loading.
+  if (type === 'dispose') {
+    if (cachedOriginalBitmap) { cachedOriginalBitmap.close(); cachedOriginalBitmap = null; }
+    cachedAIResult = null;
+    cachedScale = null;
+    if (session) {
+      try { session.release?.(); } catch (_) {}
+      session = null;
+      currentDevice = null;
+    }
+    console.info('[Upscaling Worker] Model disposed.');
   }
 };

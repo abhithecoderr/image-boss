@@ -1,5 +1,6 @@
-import { useState, useCallback, useRef } from 'react';
+import { useCallback } from 'react';
 import { useApp } from '../context/AppContext';
+import { processorEngine } from '../core/processor-engine';
 
 export const useProcessor = () => {
   const {
@@ -12,43 +13,25 @@ export const useProcessor = () => {
     showToast
   } = useApp();
 
-  const processorRef = useRef(null);
-
-  const loadProcessor = useCallback(async (serviceId) => {
-    try {
-      // Framework-agnostic lazy load from the services folder
-      const module = await import(`../services/${serviceId}/processor.js`);
-      return module.default || module;
-    } catch (err) {
-      console.error(`Failed to load processor for ${serviceId}:`, err);
-      throw err;
-    }
-  }, []);
-
   const process = useCallback(async (options = {}) => {
     if (!originalCanvas || !currentService) return;
 
-    // Reset results before starting new process (e.g. on model switch)
-    setResultCanvas(null);
-    setSegmentationResult(null);
+    const isPostProcess = options._postProcess === true;
 
-    setIsProcessing(true);
-    updateProgress(0, 'Initializing...');
+    if (!isPostProcess) {
+      // Reset results before starting new process
+      setResultCanvas(null);
+      setSegmentationResult(null);
+      setIsProcessing(true);
+      updateProgress(0, 'Initializing...');
+    }
 
     try {
-      if (!processorRef.current || processorRef.current.id !== currentService.id) {
-        // Dispose old if needed
-        if (processorRef.current?.dispose) {
-          processorRef.current.dispose();
-        }
-        processorRef.current = await loadProcessor(currentService.id);
-        processorRef.current.id = currentService.id;
-      }
-
-      const result = await processorRef.current.process(
+      const result = await processorEngine.process(
+        currentService.id,
         originalCanvas,
         options,
-        (prog, msg) => updateProgress(prog, msg)
+        isPostProcess ? undefined : (prog, msg) => updateProgress(prog, msg)
       );
 
       // Handle different result formats (Canvas, Object with Canvas, etc.)
@@ -64,15 +47,22 @@ export const useProcessor = () => {
         setResultCanvas(finalCanvas);
       }
 
-      showToast('Processing complete!', 'success');
+      if (!isPostProcess) {
+        showToast('Processing complete!', 'success');
+      }
       return result;
     } catch (err) {
       console.error('Processing failed:', err);
-      showToast(`Error: ${err.message}`, 'error');
+      if (!isPostProcess) {
+        showToast(`Error: ${err.message}`, 'error');
+      }
     } finally {
-      setIsProcessing(false);
+      if (!isPostProcess) {
+        setIsProcessing(false);
+      }
     }
-  }, [originalCanvas, currentService, loadProcessor, setIsProcessing, updateProgress, setResultCanvas, showToast]);
+  }, [originalCanvas, currentService, setIsProcessing, updateProgress, setResultCanvas, setSegmentationResult, showToast]);
 
   return { process };
 };
+

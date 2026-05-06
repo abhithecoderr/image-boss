@@ -4,6 +4,7 @@
  */
 
 import { SamModel, Sam2Model, AutoProcessor, RawImage, env } from '@huggingface/transformers';
+import { getGPUConfig, createProgressReporter } from '../../core/worker-utils.js';
 
 env.allowLocalModels = false;
 
@@ -23,20 +24,7 @@ function clearCache() {
   lastImageInputs = null;
 }
 
-/**
- * Detect WebGPU and fp16 support — mirrors bg-removal pattern
- */
-async function getGPUConfig() {
-  if (!navigator.gpu) return { supported: false, fp16: false };
-  try {
-    const adapter = await navigator.gpu.requestAdapter();
-    if (!adapter) return { supported: false, fp16: false };
-    const hasFP16 = adapter.features.has('shader-f16');
-    return { supported: true, fp16: hasFP16 };
-  } catch (_) {
-    return { supported: false, fp16: false };
-  }
-}
+
 
 /**
  * Convert mask tensor to ImageBitmap
@@ -76,7 +64,10 @@ self.onmessage = async ({ data }) => {
       const modelId = payload.modelId || 'Xenova/slimsam-77-uniform';
 
       if (!model || !processor || modelId !== currentModelId) {
-        self.postMessage({ type: 'progress', progress: 0.1, message: `Loading ${modelId.includes('sam2') ? 'SAM-2' : 'SlimSAM'} model...` });
+        const onProgress = (prog, msg) => self.postMessage({ type: 'progress', progress: prog, message: msg });
+        const report = createProgressReporter(onProgress);
+
+        report(0.1, 0.1, `Loading ${modelId.includes('sam2') ? 'SAM-2' : 'SlimSAM'} model...`)(0);
 
         // Clear cache if switching models
         if (modelId !== currentModelId) {
@@ -86,7 +77,6 @@ self.onmessage = async ({ data }) => {
 
         const modelClass = modelId.includes('sam2') ? Sam2Model : SamModel;
 
-        // v4: dynamic device/dtype with fp16 guard (no longer hardcoded)
         const hw = await getGPUConfig();
         const device = hw.supported ? 'webgpu' : 'wasm';
         const dtype = (hw.supported && hw.fp16) ? 'fp16' : 'fp32';
@@ -96,25 +86,13 @@ self.onmessage = async ({ data }) => {
         model = await modelClass.from_pretrained(modelId, {
           device,
           dtype,
-          progress_callback: (p) => {
-            // v4: primary fields are loaded/total; legacy p.progress kept as fallback
-            if (p.status === 'progress') {
-              const pct = p.total
-                ? ((p.loaded ?? 0) / p.total) * 100
-                : (p.progress ?? 0);
-              self.postMessage({
-                type: 'progress',
-                progress: 0.1 + (pct / 100) * 0.3,
-                message: `Downloading model... ${Math.round(pct)}%`
-              });
-            }
-          },
+          progress_callback: report(0.1, 0.45, "Downloading model..."),
         });
 
-        self.postMessage({ type: 'progress', progress: 0.45, message: 'Loading processor...' });
+        report(0.45, 0.45, 'Loading processor...')(0);
         processor = await AutoProcessor.from_pretrained(modelId);
-
       }
+
 
       self.postMessage({ type: 'progress', progress: 0.5, message: 'Processing image...' });
 
@@ -138,7 +116,13 @@ self.onmessage = async ({ data }) => {
         cachedEmbeddings = await model.get_image_embeddings(lastImageInputs);
         console.log('[Worker] Image encoded and cached.');
 
+        // Dispose the preprocessed inputs — the embeddings are now cached separately.
+        // Keeping lastImageInputs alive would accumulate GPU tensors across multiple images.
+        if (lastImageInputs?.dispose) lastImageInputs.dispose();
+        lastImageInputs = null;
+
         payload.bitmap.close();
+        payload.bitmap = null; // Prevent the double-close guard below from firing erroneously
       }
 
       if (!cachedRawImage || !cachedEmbeddings) {
@@ -236,7 +220,7 @@ self.onmessage = async ({ data }) => {
 
       // Note: cachedEmbeddings is intentionally preserved for hot-refinement loop.
       // Aggressive disposal was causing "Device Lost" on fast refinement cycles.
-      payload.bitmap?.close();
+      // payload.bitmap is already closed above (or null if this was a same-image refinement).
     } catch (error) {
       console.error('[Worker] Error:', error);
 
@@ -252,5 +236,12 @@ self.onmessage = async ({ data }) => {
     }
   } else if (type === 'clear') {
     clearCache();
+  } else if (type === 'dispose') {
+    clearCache();
+    if (model?.dispose) { try { model.dispose(); } catch (_) {} }
+    model = null;
+    processor = null;
+    currentModelId = null;
+    console.info('[Object Segmentation Worker] Model disposed.');
   }
 };

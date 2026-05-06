@@ -144,10 +144,14 @@ export async function canvasToBlob(canvas, type = 'image/png', quality = 0.92) {
 }
 
 /**
- * Download a canvas as an image file
+ * Download a canvas as an image file.
+ * If the canvas has a pre-compressed blob attached (e.g. from the compression service),
+ * that blob is used directly to avoid re-encoding which would undo all compression work.
  */
 export async function downloadCanvas(canvas, filename = 'image.png', type = 'image/png') {
-  const blob = await canvasToBlob(canvas, type);
+  // Use the pre-encoded blob if available (avoids unnecessary re-encoding)
+  const blob = canvas._resultBlob || canvas._compressedBlob || await canvasToBlob(canvas, type);
+
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');
   a.href = url;

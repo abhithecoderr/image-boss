@@ -49,3 +49,28 @@ export async function bitmapToRawImage(bitmap) {
   canvas.getContext('2d').drawImage(bitmap, 0, 0);
   return await RawImage.fromCanvas(canvas);
 }
+
+/**
+ * Creates a standardized progress reporter for AI tasks.
+ * Maps a localized task (0-100%) to a global progress range (start-end).
+ * 
+ * @param {Function} onProgress The callback that sends the actual message (prog, msg)
+ * @returns {Function} A factory function (start, end, prefix) => callback
+ */
+export function createProgressReporter(onProgress) {
+  return (start, end, messagePrefix = "Downloading...") => {
+    return (p) => {
+      let pct = 0;
+      if (p && typeof p === 'object' && p.status === 'progress') {
+        pct = p.total ? ((p.loaded ?? 0) / p.total) * 100 : (p.progress ?? 0);
+      } else if (typeof p === 'number') {
+        pct = p;
+      }
+
+      const progress = start + (pct / 100) * (end - start);
+      const message = pct > 0 ? `${messagePrefix} ${Math.round(pct)}%` : messagePrefix;
+      onProgress?.(progress, message);
+    };
+  };
+}
+

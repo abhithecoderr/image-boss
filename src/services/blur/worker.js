@@ -6,10 +6,14 @@
  * Manual Tensor Parsing for surgical keypoint access.
  */
 
-import * as ort from 'onnxruntime-web/webgpu';
+import * as ort from "onnxruntime-web/webgpu";
+import {
+  getGPUConfig,
+  createProgressReporter,
+} from "../../core/worker-utils.js";
 
 // Configure ONNX Runtime
-const ORT_VERSION = '1.20.1';
+const ORT_VERSION = "1.20.1";
 ort.env.wasm.wasmPaths = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/`;
 
 // Optional: HuggingFace Token if repo is private (not needed for onnx-community)
@@ -17,34 +21,40 @@ ort.env.wasm.wasmPaths = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VER
 
 // 2026 Optimized Pose Model
 const MODEL_VARIANTS = {
-  nano: 'onnx-community/yolo26n-pose-ONNX',
-  small: 'onnx-community/yolo26s-pose-ONNX',
-  medium: 'onnx-community/yolo26m-pose-ONNX',
-  large: 'onnx-community/yolo26l-pose-ONNX',
-  xlarge: 'onnx-community/yolo26x-pose-ONNX',
+  nano: "onnx-community/yolo26n-pose-ONNX",
+  small: "onnx-community/yolo26s-pose-ONNX",
+  medium: "onnx-community/yolo26m-pose-ONNX",
+  large: "onnx-community/yolo26l-pose-ONNX",
+  xlarge: "onnx-community/yolo26x-pose-ONNX",
 };
 
 // Class labels we care about for blurring
 // YOLOv10 COCO classes include person, car, bus, truck, motorcycle
-const PERSON_LABELS = ['person', 'face', 'human', 'head'];
+const PERSON_LABELS = ["person", "face", "human", "head"];
 const TARGET_LABELS = [...PERSON_LABELS];
 const CONFIDENCE_THRESHOLD = 0.4;
 
 let session = null;
-let currentVariant = 'nano';
-let currentDevice = 'wasm';
+let currentVariant = "nano";
+let currentDevice = "wasm";
 let isInitializing = false;
 
-async function fetchWithProgress(url, label, onProgress, startWeight, endWeight) {
+async function fetchWithProgress(url, label, report, startWeight, endWeight) {
   const response = await fetch(url);
-  if (!response.ok) throw new Error(`Failed to fetch ${label}: ${response.statusText}`);
+  if (!response.ok)
+    throw new Error(`Failed to fetch ${label}: ${response.statusText}`);
 
-  const contentLength = response.headers.get('Content-Length');
+  const contentLength = response.headers.get("Content-Length");
   const total = contentLength ? parseInt(contentLength, 10) : 0;
   let loaded = 0;
 
   const reader = response.body.getReader();
   const chunks = [];
+  const reportProgress = report(
+    startWeight,
+    endWeight,
+    `Downloading ${label}...`,
+  );
 
   while (true) {
     const { done, value } = await reader.read();
@@ -53,8 +63,7 @@ async function fetchWithProgress(url, label, onProgress, startWeight, endWeight)
     loaded += value.length;
 
     if (total) {
-      const progress = startWeight + (loaded / total) * (endWeight - startWeight);
-      onProgress?.(progress, `Downloading ${label}: ${Math.round((loaded / total) * 100)}%`);
+      reportProgress((loaded / total) * 100);
     }
   }
 
@@ -71,11 +80,11 @@ async function fetchWithProgress(url, label, onProgress, startWeight, endWeight)
 /**
  * Initialize the YOLO26 Pose model via ORT
  */
-async function initDetector(variant = 'nano', onProgress) {
+async function initDetector(variant = "nano", onProgress) {
   if (session && currentVariant === variant) return session;
   if (isInitializing) {
     while (isInitializing) {
-      await new Promise(resolve => setTimeout(resolve, 100));
+      await new Promise((resolve) => setTimeout(resolve, 100));
     }
     return session;
   }
@@ -84,33 +93,40 @@ async function initDetector(variant = 'nano', onProgress) {
   currentVariant = variant;
   const modelId = MODEL_VARIANTS[variant] || MODEL_VARIANTS.nano;
 
+  const report = createProgressReporter(onProgress);
+
   // Construct direct download URL
   const modelUrl = `https://huggingface.co/${modelId}/resolve/main/onnx/model.onnx`;
 
   try {
-    const modelBuffer = await fetchWithProgress(modelUrl, `YOLO26 ${variant} model`, onProgress, 0.1, 0.6);
+    const modelBuffer = await fetchWithProgress(
+      modelUrl,
+      `YOLO26 ${variant} model`,
+      report,
+      0.1,
+      0.6,
+    );
+
+    const useWebGPU = !!navigator.gpu;
+    const executionProviders = useWebGPU ? ["webgpu", "wasm"] : ["wasm"];
+    const deviceLabel = useWebGPU ? "WEBGPU" : "WASM";
 
     const sessionOptions = {
-        executionProviders: ['webgpu'],
-        graphOptimizationLevel: 'all',
+      executionProviders,
+      graphOptimizationLevel: "all",
     };
 
-    onProgress?.(0.7, 'Initializing YOLO26 session (WEBGPU)...');
-
-    if (!navigator.gpu) {
-      throw new Error('WebGPU is not supported by your browser or hardware.');
-    }
+    report(0.7, 0.7, `Initializing YOLO26 session (${deviceLabel})...`)(0);
 
     session = await ort.InferenceSession.create(modelBuffer, sessionOptions);
-    currentDevice = 'webgpu';
-    console.info(`✓ YOLO26 ${variant} loaded (WEBGPU)`);
+    currentDevice = useWebGPU ? "webgpu" : "wasm";
+    console.info(`✓ YOLO26 ${variant} loaded (${deviceLabel})`);
 
-    onProgress?.(0.8, `Model ready (${currentDevice})`);
+    report(0.8, 0.8, `Model ready (${currentDevice})`)(0);
     return session;
-
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error('Failed to initialize detector:', error);
+    console.error("Failed to initialize detector:", error);
     throw new Error(`Initialization failed: ${errorMsg}`);
   } finally {
     isInitializing = false;
@@ -121,34 +137,38 @@ async function initDetector(variant = 'nano', onProgress) {
  * Detect persons/faces using bit-precise tensor parsing and NMS
  */
 async function detectFaces(bitmap, width, height) {
-  if (!session) throw new Error('Detector not initialized');
+  if (!session) throw new Error("Detector not initialized");
 
-  // 1. Preprocessing: Stretching to 640x640
+  // 1. Preprocessing: Stretching to 640x640 (Custom ORT manual resize)
   const inputSize = 640;
   const canvas = new OffscreenCanvas(inputSize, inputSize);
-  const ctx = canvas.getContext('2d');
-
-  // Use stretched resize (no aspect ratio preservation as per YOLO spec)
+  const ctx = canvas.getContext("2d");
   ctx.drawImage(bitmap, 0, 0, width, height, 0, 0, inputSize, inputSize);
   const resizedData = ctx.getImageData(0, 0, inputSize, inputSize).data;
 
-  // 2. Image to Tensor (RGB normalized [0,1])
+  // 2. Image to Tensor
   const inputTensorData = new Float32Array(3 * inputSize * inputSize);
   for (let i = 0; i < inputSize * inputSize; i++) {
     inputTensorData[i] = resizedData[i * 4] / 255.0;
     inputTensorData[inputSize * inputSize + i] = resizedData[i * 4 + 1] / 255.0;
-    inputTensorData[2 * inputSize * inputSize + i] = resizedData[i * 4 + 2] / 255.0;
+    inputTensorData[2 * inputSize * inputSize + i] =
+      resizedData[i * 4 + 2] / 255.0;
   }
 
-  const tensor = new ort.Tensor('float32', inputTensorData, [1, 3, inputSize, inputSize]);
+  const tensor = new ort.Tensor("float32", inputTensorData, [
+    1,
+    3,
+    inputSize,
+    inputSize,
+  ]);
 
-  // 3. Run Inference
+  // 3. Inference via ORT
   const inputs = {};
   inputs[session.inputNames[0]] = tensor;
   const outputs = await session.run(inputs);
   const output0 = outputs[session.outputNames[0]];
 
-  // 4. Robust Tensor Parser (Auto-Shape & Auto-Format Detection)
+  // 4. Robust Tensor Parser (SHARED for both ORT and Transformers modes)
   const data = output0.data;
   const dims = output0.dims;
   const d1 = dims[1];
@@ -161,21 +181,32 @@ async function detectFaces(bitmap, width, height) {
   // Auto-detect coordinate domain with exhaustive check
   let isPixelSpace = false;
   for (let j = 0; j < numPredictions; j++) {
-      const getVal = (row) => isTransposed ? data[row * numPredictions + j] : data[j * numChannels + row];
-      // Only check if there's SOME signal (score > 0.05)
-      if (getVal(4) > 0.05) {
-          if (getVal(0) > 1.1 || getVal(1) > 1.1 || getVal(2) > 1.1 || getVal(3) > 1.1) {
-              isPixelSpace = true;
-              break;
-          }
+    const getVal = (row) =>
+      isTransposed
+        ? data[row * numPredictions + j]
+        : data[j * numChannels + row];
+    // Only check if there's SOME signal (score > 0.05)
+    if (getVal(4) > 0.05) {
+      if (
+        getVal(0) > 1.1 ||
+        getVal(1) > 1.1 ||
+        getVal(2) > 1.1 ||
+        getVal(3) > 1.1
+      ) {
+        isPixelSpace = true;
+        break;
       }
+    }
   }
 
   const rawDetections = [];
   const LOCAL_CONF_THRESHOLD = 0.2;
 
   for (let j = 0; j < numPredictions; ++j) {
-    const getVal = (row) => isTransposed ? data[row * numPredictions + j] : data[j * numChannels + row];
+    const getVal = (row) =>
+      isTransposed
+        ? data[row * numPredictions + j]
+        : data[j * numChannels + row];
 
     const score = getVal(4);
     if (score < LOCAL_CONF_THRESHOLD) continue;
@@ -186,25 +217,30 @@ async function detectFaces(bitmap, width, height) {
     let v3 = getVal(3);
 
     // Normalize immediately if in pixel space
-    if (isPixelSpace) { v0 /= 640; v1 /= 640; v2 /= 640; v3 /= 640; }
+    if (isPixelSpace) {
+      v0 /= 640;
+      v1 /= 640;
+      v2 /= 640;
+      v3 /= 640;
+    }
 
     // SCIENTIFIC BOX FORMAT INFERENCE
     // In [x1, y1, x2, y2], v2 > v0 and v3 > v1 always.
     // In [cx, cy, w, h], v2 and v3 are sizes.
     // If v2 < v0 or v3 < v1, it's very likely [cx, cy, w, h] or some other format.
-    const isCenterFormat = (v2 < v0 * 0.8) || (v3 < v1 * 0.8); // Heuristic for center-based
+    const isCenterFormat = v2 < v0 * 0.8 || v3 < v1 * 0.8; // Heuristic for center-based
 
     let xmin, ymin, xmax, ymax;
     if (isCenterFormat) {
-        xmin = v0 - v2 / 2;
-        ymin = v1 - v3 / 2;
-        xmax = v0 + v2 / 2;
-        ymax = v1 + v3 / 2;
+      xmin = v0 - v2 / 2;
+      ymin = v1 - v3 / 2;
+      xmax = v0 + v2 / 2;
+      ymax = v1 + v3 / 2;
     } else {
-        xmin = v0;
-        ymin = v1;
-        xmax = v2;
-        ymax = v3;
+      xmin = v0;
+      ymin = v1;
+      xmax = v2;
+      ymax = v3;
     }
 
     const kptStart = numChannels === 57 ? 6 : 5;
@@ -214,19 +250,24 @@ async function detectFaces(bitmap, width, height) {
       let kY = getVal(kptStart + k * 3 + 1);
       const kConf = getVal(kptStart + k * 3 + 2);
 
-      if (isPixelSpace) { kX /= 640; kY /= 640; }
+      if (isPixelSpace) {
+        kX /= 640;
+        kY /= 640;
+      }
       keypoints.push([kX, kY, kConf]);
     }
 
     rawDetections.push({
       score,
       keypoints,
-      box: { xmin, ymin, xmax, ymax }
+      box: { xmin, ymin, xmax, ymax },
     });
   }
 
   const finalDetections = nms(rawDetections, 0.75);
-  console.log(`[Domain: ${isPixelSpace ? 'Pixel' : 'Norm'}] Parsed ${rawDetections.length} raw -> ${finalDetections.length} after NMS. Shape: [${dims.join(', ')}]`);
+  console.log(
+    `[Domain: ${isPixelSpace ? "Pixel" : "Norm"}] Parsed ${rawDetections.length} raw -> ${finalDetections.length} after NMS. Shape: [${dims.join(", ")}]`,
+  );
 
   return finalDetections;
 }
@@ -268,7 +309,6 @@ function calculateIOU(box1, box2) {
   return intersection / (area1 + area2 - intersection);
 }
 
-
 let workerBlurCanvas = null;
 let workerBlurCtx = null;
 let workerPatchCanvas = null;
@@ -279,12 +319,16 @@ async function applyBlur(bitmap, width, height, detections, options = {}) {
     blurAmount = 20,
     radiusScale = 1.0,
     feathering = 0.75,
-    shape = 1.0
+    shape = 1.0,
   } = options;
 
-  if (!workerBlurCanvas || workerBlurCanvas.width !== width || workerBlurCanvas.height !== height) {
+  if (
+    !workerBlurCanvas ||
+    workerBlurCanvas.width !== width ||
+    workerBlurCanvas.height !== height
+  ) {
     workerBlurCanvas = new OffscreenCanvas(width, height);
-    workerBlurCtx = workerBlurCanvas.getContext('2d');
+    workerBlurCtx = workerBlurCanvas.getContext("2d");
   }
 
   workerBlurCtx.clearRect(0, 0, width, height);
@@ -310,9 +354,13 @@ async function applyBlur(bitmap, width, height, detections, options = {}) {
     const rEye = { x: rEye_kp[0], y: rEye_kp[1], score: rEye_kp[2] };
 
     let radius;
-    if (lEye.score > 0.2 && rEye.score > 0.2 && (lEye.x !== 0 || rEye.x !== 0)) {
-      const dx_eyes = (lEye.x * width) - (rEye.x * width);
-      const dy_eyes = (lEye.y * height) - (rEye.y * height);
+    if (
+      lEye.score > 0.2 &&
+      rEye.score > 0.2 &&
+      (lEye.x !== 0 || rEye.x !== 0)
+    ) {
+      const dx_eyes = lEye.x * width - rEye.x * width;
+      const dy_eyes = lEye.y * height - rEye.y * height;
       const dist = Math.sqrt(dx_eyes * dx_eyes + dy_eyes * dy_eyes);
       radius = dist * 2.2 * radiusScale;
     } else {
@@ -335,18 +383,16 @@ async function applyBlur(bitmap, width, height, detections, options = {}) {
 
     workerBlurCtx.save();
 
+    // Apply blur filter first, then clip to ensure blur stays within bounds
+    workerBlurCtx.filter = `blur(${blurAmount}px)`;
+
     // Create elliptical clip path
     workerBlurCtx.beginPath();
     workerBlurCtx.ellipse(nx, ny, radius, radiusY, 0, 0, Math.PI * 2);
     workerBlurCtx.clip();
 
-    // Apply filter and draw the source bitmap onto the result canvas
-    // This blurs only the clipped area
-    workerBlurCtx.filter = `blur(${blurAmount}px)`;
-
-    // To handle feathering properly with just Canvas2D, we'd need a mask.
-    // For now, let's fix the crash first.
-    // Optimization: Draw only the relevant patch if possible, but drawImage(bitmap, ...) is fast.
+    // Draw the source bitmap onto the result canvas
+    // The blur is applied, then the result is clipped to the ellipse
     workerBlurCtx.drawImage(bitmap, 0, 0);
 
     workerBlurCtx.restore();
@@ -363,7 +409,7 @@ function dispose() {
     // onnxruntime-web session release is implicit or via delete
     session = null;
   }
-  currentDevice = 'wasm';
+  currentDevice = "wasm";
 }
 
 // Message handler
@@ -371,28 +417,26 @@ self.onmessage = async (event) => {
   const { type, payload } = event.data;
 
   const sendProgress = (progress, message) => {
-    self.postMessage({ type: 'progress', progress, message });
+    self.postMessage({ type: "progress", progress, message });
   };
 
   try {
     switch (type) {
-      case 'init': {
-        const variant = payload?.variant || 'nano';
-        currentVariant = variant;
+      case "init": {
+        const variant = payload?.variant || "nano";
         await initDetector(variant, sendProgress);
         self.postMessage({
-          type: 'ready',
+          type: "ready",
           device: currentDevice,
           variant: currentVariant,
         });
         break;
       }
 
-      case 'detect': {
+      case "detect": {
         const { bitmap, width, height, variant } = payload;
 
         if (variant && variant !== currentVariant) {
-          currentVariant = variant;
           session = null;
           await initDetector(variant, sendProgress);
         } else {
@@ -403,7 +447,7 @@ self.onmessage = async (event) => {
         bitmap.close();
 
         self.postMessage({
-          type: 'detections',
+          type: "detections",
           detections,
           count: detections.length,
           device: currentDevice,
@@ -411,94 +455,137 @@ self.onmessage = async (event) => {
         break;
       }
 
-      case 'blur': {
-        const { bitmap, width, height, blurAmount = 20, radiusScale = 1.0, feathering = 0.75, shape = 1.0, variant } = payload;
+      case "blur": {
+        const {
+          bitmap,
+          width,
+          height,
+          blurAmount = 20,
+          radiusScale = 1.0,
+          feathering = 0.75,
+          shape = 1.0,
+          variant,
+        } = payload;
 
         if (variant && variant !== currentVariant) {
-          currentVariant = variant;
           session = null;
           await initDetector(variant, sendProgress);
         } else {
           await initDetector(currentVariant, sendProgress);
         }
 
-        sendProgress(0.7, 'Detecting...');
+        sendProgress(0.7, "Detecting...");
         const detections = await detectFaces(bitmap, width, height);
 
         if (detections.length === 0) {
-          sendProgress(1, 'No faces/persons detected');
+          sendProgress(1, "No faces/persons detected");
           // Create a copy of the bitmap to send back as result
           const resultBitmap = await createImageBitmap(bitmap);
           bitmap.close();
-          self.postMessage({
-            type: 'complete',
-            resultBitmap,
-            width,
-            height,
-            detections: [],
-            count: 0,
-            device: currentDevice,
-          }, [resultBitmap]);
+          self.postMessage(
+            {
+              type: "complete",
+              resultBitmap,
+              width,
+              height,
+              detections: [],
+              count: 0,
+              device: currentDevice,
+            },
+            [resultBitmap],
+          );
           break;
         }
 
         sendProgress(0.95, `Blurring ${detections.length} face(s)...`);
-        const resultBitmap = await applyBlur(bitmap, width, height, detections, {
-          blurAmount,
-          radiusScale,
-          feathering,
-          shape
-        });
+        const resultBitmap = await applyBlur(
+          bitmap,
+          width,
+          height,
+          detections,
+          {
+            blurAmount,
+            radiusScale,
+            feathering,
+            shape,
+          },
+        );
         bitmap.close();
 
         sendProgress(1, `Blurred ${detections.length} face(s)`);
 
-        self.postMessage({
-          type: 'complete',
-          resultBitmap,
-          detections,
-          count: detections.length,
-          device: currentDevice,
-        }, [resultBitmap]);
+        self.postMessage(
+          {
+            type: "complete",
+            resultBitmap,
+            detections,
+            count: detections.length,
+            device: currentDevice,
+          },
+          [resultBitmap],
+        );
         break;
       }
 
-      case 'reblur': {
-        const { bitmap, width, height, detections, blurAmount = 20, radiusScale = 1.0, feathering = 0.75, shape = 1.0 } = payload;
+      case "reblur": {
+        const {
+          bitmap,
+          width,
+          height,
+          detections,
+          blurAmount = 20,
+          radiusScale = 1.0,
+          feathering = 0.75,
+          shape = 1.0,
+        } = payload;
 
-        const resultBitmap = await applyBlur(bitmap, width, height, detections, {
-          blurAmount,
-          radiusScale,
-          feathering,
-          shape
-        });
+        const resultBitmap = await applyBlur(
+          bitmap,
+          width,
+          height,
+          detections,
+          {
+            blurAmount,
+            radiusScale,
+            feathering,
+            shape,
+          },
+        );
         bitmap.close();
 
-        self.postMessage({
-          type: 'complete',
-          resultBitmap,
-          detections,
-          count: detections.length,
-          device: currentDevice,
-        }, [resultBitmap]);
+        self.postMessage(
+          {
+            type: "complete",
+            resultBitmap,
+            detections,
+            count: detections.length,
+            device: currentDevice,
+          },
+          [resultBitmap],
+        );
         break;
       }
 
-      case 'dispose': {
+      case "dispose": {
         dispose();
-        self.postMessage({ type: 'disposed' });
+        self.postMessage({ type: "disposed" });
+        break;
+      }
+
+      case "dispose": {
+        dispose();
+        console.info('[Blur Worker] Model disposed.');
         break;
       }
 
       default:
-        console.warn('Unknown message type:', type);
+        console.warn("Unknown message type:", type);
     }
-
   } catch (error) {
-    console.error('Worker error:', error);
+    console.error("Worker error:", error);
     self.postMessage({
-      type: 'error',
-      error: error.message || 'Processing failed',
+      type: "error",
+      error: error.message || "Processing failed",
     });
   }
 };

@@ -1,3 +1,6 @@
+import { createProgressReporter } from '../../core/worker-utils.js';
+import MagicEraseWorker from './worker.js?worker';
+
 export default {
     id: 'magic-erase',
     worker: null,
@@ -11,7 +14,7 @@ export default {
       }
   
       this.workerInitPromise = new Promise((resolve, reject) => {
-        const worker = new Worker(new URL('/workers/magic-erase.worker.js', import.meta.url));
+        const worker = new MagicEraseWorker();
         
         worker.onmessage = (e) => {
           const { type, payload, info, error } = e.data;
@@ -21,11 +24,17 @@ export default {
           } else if (type === 'ready') {
             resolve(worker);
           } else if (type === 'error') {
+            // Clear the promise so the next call to initWorker retries instead of
+            // returning the same rejected promise indefinitely.
+            this.workerInitPromise = null;
             reject(new Error(error));
           }
         };
   
-        worker.onerror = (e) => reject(new Error(e.message));
+        worker.onerror = (e) => {
+          this.workerInitPromise = null;
+          reject(new Error(e.message));
+        };
   
         worker.postMessage({
           type: 'init',
@@ -37,9 +46,10 @@ export default {
       return this.worker;
     },
   
-    async process(originalCanvas, options, progressCallback) {
-      const worker = await this.initWorker(progressCallback);
-      progressCallback(0.1, 'Extracting mask...');
+    async process(originalCanvas, options, onProgress) {
+      const report = createProgressReporter(onProgress);
+      const worker = await this.initWorker(onProgress);
+      report(0.1, 0.1, 'Extracting mask...')();
   
       // Get the mask from the overlay canvas in the DOM
       const maskCanvas = document.getElementById('magic-erase-mask');
@@ -85,7 +95,7 @@ export default {
       const originalData = new Uint8ClampedArray(imageData.data);
       const maskData = new Uint8ClampedArray(maskImageData.data);
   
-      progressCallback(0.3, 'Running AI Inference...');
+      report(0.3, 0.3, 'Running AI Inference...')();
       
       return new Promise((resolve, reject) => {
           const messageHandler = (e) => {
@@ -93,18 +103,20 @@ export default {
               
               if (type === 'complete') {
                   worker.removeEventListener('message', messageHandler);
-                  progressCallback(0.8, 'Compositing result...');
+                  report(0.8, 0.8, 'Compositing result...')();
                   
                   // Compute standard optimization constants and scale ranges
                   const finalImageData = new ImageData(512, 512);
-                  let min = 999, max = -999;
+                  let min = Infinity, max = -Infinity;
                   const ch2 = 262144;
                   const ch3 = 524288;
                   const strength = typeof options.strength === 'number' ? options.strength : 1.0;
-  
-                  for(let i=0; i<output.length; i+=100) {
-                      if(output[i] < min) min = output[i];
-                      if(output[i] > max) max = output[i];
+
+                  // Iterate ALL values for accurate min/max — sampling every 100th value
+                  // is not statistically reliable and can cause wrong scale mode selection.
+                  for (let i = 0; i < output.length; i++) {
+                      if (output[i] < min) min = output[i];
+                      if (output[i] > max) max = output[i];
                   }
                   
                   const range = max - min;
@@ -166,7 +178,7 @@ export default {
                   // Map inverse
                   finalCtx.drawImage(outTempCanvas, padX, padY, targetW, targetH, 0, 0, imgW, imgH);
                   
-                  progressCallback(1.0, 'Complete');
+                  report(1, 1, 'Complete')();
                   resolve(finalOutCanvas);
   
               } else if (type === 'error') {
@@ -177,17 +189,16 @@ export default {
           
           worker.addEventListener('message', messageHandler);
   
-          // Use ArrayBuffers mapping like lama.html to maintain zero-copy
-          const imageBuffer = imageData.data.buffer;
-          const maskBuffer = maskImageData.data.buffer;
-          
+          // Send ImageData arrays as plain (non-transferred) copies since
+          // the compositing loop on this side still needs originalData/maskData.
+          // The worker receives structured clones — acceptable for 512x512 (~1MB each).
           worker.postMessage({
               type: 'inpaint',
               payload: {
                   image: imageData.data,
                   mask: maskImageData.data
               }
-          }, [imageBuffer, maskBuffer]);
+          });
       });
     },
   

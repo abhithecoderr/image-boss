@@ -9,10 +9,18 @@
  * - Progress callbacks for UI feedback
  */
 
-let worker = null;
+import BlurWorker from './worker.js?worker';
+import { workerRegistry } from '../../core/worker-registry.js';
+
+const SERVICE_ID = 'blur';
+
 let isReady = false;
 let pendingInit = null;
 let currentVariant = 'nano';
+
+function getWorker() {
+  return workerRegistry.getWorker(SERVICE_ID, BlurWorker);
+}
 
 /**
  * Model variants - trade-off between speed and accuracy
@@ -32,7 +40,8 @@ export const MODEL_VARIANTS = {
  * @returns {Promise<{device: string, variant: string}>}
  */
 export async function init(variant = 'nano', onProgress) {
-  if (worker && isReady && currentVariant === variant) {
+  const worker = getWorker();
+  if (isReady && currentVariant === variant) {
     return { device: 'cached', variant: currentVariant };
   }
 
@@ -42,10 +51,6 @@ export async function init(variant = 'nano', onProgress) {
   }
 
   pendingInit = new Promise((resolve, reject) => {
-    // Create worker if needed
-    if (!worker) {
-      worker = new Worker(new URL('./worker.js', import.meta.url), { type: 'module' });
-    }
 
     // Handle messages
     const handleMessage = (event) => {
@@ -83,6 +88,7 @@ export async function init(variant = 'nano', onProgress) {
  * Detect faces in an image (returns bounding boxes only)
  */
 export async function detectFaces(source, options = {}, onProgress) {
+  const worker = getWorker();
   const { variant = currentVariant } = options;
 
   if (!isReady || variant !== currentVariant) {
@@ -112,22 +118,22 @@ export async function detectFaces(source, options = {}, onProgress) {
   });
 }
 
+let lastDetections = [];
+let lastSourceBitmap = null;
+let lastWidth = 0;
+let lastHeight = 0;
+
 /**
  * Get results and cache source for fast tweaking
  */
 async function prepareExecution(source) {
     const bitmap = await createImageBitmap(source);
     if (lastSourceBitmap) lastSourceBitmap.close();
-    lastSourceBitmap = await createImageBitmap(bitmap); // Cache a clone for reblur
+    lastSourceBitmap = bitmap; // Cache the bitmap directly — no redundant re-decode
     lastWidth = bitmap.width;
     lastHeight = bitmap.height;
-    return { bitmap, width: lastWidth, height: lastHeight };
+    return { bitmap: await createImageBitmap(lastSourceBitmap), width: lastWidth, height: lastHeight };
 }
-
-let lastDetections = [];
-let lastSourceBitmap = null;
-let lastWidth = 0;
-let lastHeight = 0;
 
 /**
  * Blur faces in an image
@@ -137,6 +143,7 @@ let lastHeight = 0;
  * @returns {Promise<{canvas: HTMLCanvasElement, detections: Array}>}
  */
 export async function process(source, options = {}, onProgress) {
+  const worker = getWorker();
   const { blurAmount = 20, radiusScale = 1.0, feathering = 0.75, shape = 1.0, variant = currentVariant } = options;
 
   // Ensure initialized
@@ -186,7 +193,8 @@ export async function process(source, options = {}, onProgress) {
  * Re-blur with existing detections for fast UI feedback
  */
 export async function updateBlurTransform(options = {}) {
-  if (!worker || !lastDetections.length || !lastSourceBitmap) return;
+  const worker = getWorker();
+  if (!isReady || !lastDetections.length || !lastSourceBitmap) return;
   const { blurAmount = 20, radiusScale = 1.0, feathering = 0.75, shape = 1.0 } = options;
 
   const bitmap = await createImageBitmap(lastSourceBitmap);
@@ -221,64 +229,17 @@ export async function updateBlurTransform(options = {}) {
 }
 
 /**
- * Get ImageData from various source types
- */
-async function getImageData(source) {
-  let canvas, ctx, width, height;
-
-  if (source instanceof HTMLCanvasElement) {
-    canvas = source;
-    width = canvas.width;
-    height = canvas.height;
-    ctx = canvas.getContext('2d');
-  } else if (source instanceof ImageBitmap) {
-    width = source.width;
-    height = source.height;
-    canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    ctx = canvas.getContext('2d');
-    ctx.drawImage(source, 0, 0);
-  } else if (source instanceof HTMLImageElement) {
-    width = source.naturalWidth || source.width;
-    height = source.naturalHeight || source.height;
-    canvas = document.createElement('canvas');
-    canvas.width = width;
-    canvas.height = height;
-    ctx = canvas.getContext('2d');
-    ctx.drawImage(source, 0, 0);
-  } else {
-    throw new Error('Unsupported source type');
-  }
-
-  const imageData = ctx.getImageData(0, 0, width, height);
-  return {
-    imageData: imageData.data,
-    width,
-    height,
-  };
-}
-
-/**
  * Dispose worker and free resources
  */
 export async function dispose() {
+  const worker = getWorker();
   if (!worker) return;
-
-  return new Promise((resolve) => {
-    const handleMessage = (event) => {
-      if (event.data.type === 'disposed') {
-        worker.removeEventListener('message', handleMessage);
-        if (lastSourceBitmap) lastSourceBitmap.close();
-        lastSourceBitmap = null;
-        worker.terminate();
-        resolve();
-      }
-    };
-
-    worker.addEventListener('message', handleMessage);
-    worker.postMessage({ type: 'dispose' });
-  });
+  // Just signal model eviction — don't terminate the worker thread itself
+  // (the registry manages the worker lifetime)
+  if (lastSourceBitmap) { lastSourceBitmap.close(); lastSourceBitmap = null; }
+  worker.postMessage({ type: 'dispose' });
+  isReady = false;
+  pendingInit = null;
 }
 
 /**

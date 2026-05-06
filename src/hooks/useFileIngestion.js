@@ -6,6 +6,7 @@ export const useFileIngestion = () => {
   const {
     setOriginalImage,
     setOriginalCanvas,
+    setOriginalFile,
     setResultCanvas,
     showToast
   } = useApp();
@@ -21,6 +22,7 @@ export const useFileIngestion = () => {
       const img = await loadImage(file);
       setOriginalImage(img);
       setOriginalCanvas(imageToCanvas(img).canvas);
+      setOriginalFile(file);
       setResultCanvas(null);
       showToast('Image loaded successfully!', 'success');
     } catch (err) {

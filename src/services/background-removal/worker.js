@@ -1,5 +1,5 @@
 import { pipeline, AutoModel, AutoProcessor, env, RawImage } from "@huggingface/transformers";
-import { getGPUConfig, rawImageToBitmap, bitmapToRawImage } from '../../core/worker-utils.js';
+import { getGPUConfig, rawImageToBitmap, bitmapToRawImage, createProgressReporter } from '../../core/worker-utils.js';
 
 // v4: Remote model downloads are the default. allowLocalModels is still valid.
 env.allowLocalModels = false;
@@ -46,22 +46,13 @@ async function loadPipelineModel(modelId, onProgress, device, dtype) {
   const config = PIPELINE_CONFIGS[modelId];
   const { model_id, task, size } = config;
 
-  onProgress?.(0.05, `Initializing ${modelId} (${device.toUpperCase()})...`);
-
-  const makeProgressCb = () => (p) => {
-    if (p.status === "progress") {
-      const pct = p.total ? ((p.loaded ?? 0) / p.total) * 100 : (p.progress ?? 0);
-      onProgress?.(
-        0.1 + (pct / 100) * 0.4,
-        `Downloading ${modelId}... ${Math.round(pct)}%`,
-      );
-    }
-  };
+  const report = createProgressReporter(onProgress);
+  report(0.05, 0.05, `Initializing ${modelId} (${device.toUpperCase()})...`)(0);
 
   const segmenter = await pipeline(task, model_id, {
     device,
     dtype,
-    progress_callback: makeProgressCb(),
+    progress_callback: report(0.1, 0.5, `Downloading ${modelId}...`),
   });
 
   console.info(`[Worker] ✓ ${modelId} loaded via pipeline (${device}, ${dtype})`);
@@ -76,32 +67,21 @@ async function loadPipelineModel(modelId, onProgress, device, dtype) {
 // ---------------------------------------------------------------------------
 
 const BIREFNET_MODEL_ID = "onnx-community/BiRefNet_512x512-ONNX";
-const BIREFNET_SIZE = 384;
+const BIREFNET_SIZE = 512; // Must match model name: BiRefNet_512x512
 
 async function loadBiRefNet(onProgress, device, dtype) {
-  onProgress?.(0.05, `Initializing BiRefNet (${device.toUpperCase()}, ${dtype})...`);
-
-  const makeProgressCb = (phase) => (p) => {
-    if (p.status === "progress") {
-      const pct = p.total ? ((p.loaded ?? 0) / p.total) * 100 : (p.progress ?? 0);
-      if (pct > 0) {
-        onProgress?.(
-          0.1 + (pct / 100) * 0.35,
-          `Downloading BiRefNet ${phase}... ${Math.round(pct)}%`,
-        );
-      }
-    }
-  };
+  const report = createProgressReporter(onProgress);
+  report(0.05, 0.05, `Initializing BiRefNet (${device.toUpperCase()}, ${dtype})...`)(0);
 
   const loadOpts = { device, dtype };
 
   const [biModel, biProcessor] = await Promise.all([
     AutoModel.from_pretrained(BIREFNET_MODEL_ID, {
       ...loadOpts,
-      progress_callback: makeProgressCb("model"),
+      progress_callback: report(0.1, 0.45, "Downloading BiRefNet model..."),
     }),
     AutoProcessor.from_pretrained(BIREFNET_MODEL_ID, {
-      progress_callback: makeProgressCb("processor"),
+      progress_callback: report(0.1, 0.45, "Downloading BiRefNet processor..."),
     }),
   ]);
 
@@ -265,6 +245,16 @@ self.onmessage = async ({ data }) => {
         });
       }
       self.postMessage({ type: "clear-complete" });
+    }
+
+    if (type === "dispose") {
+      Object.keys(segmenters).forEach(id => {
+        const m = segmenters[id];
+        if (m.segmenter?.dispose) m.segmenter.dispose();
+        if (m.biModel?.dispose) m.biModel.dispose();
+        delete segmenters[id];
+      });
+      console.info('[Background Removal Worker] All models disposed.');
     }
   } catch (err) {
     console.error("Worker Error:", err);
