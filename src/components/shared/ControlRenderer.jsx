@@ -5,18 +5,17 @@ import React from 'react';
  * Renders an input based on the 'type' field in the config.
  */
 const ControlRenderer = ({ control, value, onChange }) => {
-  if (control.disabled) return null;
+  const isDisabled = control.disabled;
 
   return (
-    <div className="control-group" key={control.id}>
-      <label className="control-label">
-        {control.label} {control.type === 'range' && `: ${value}`}
-      </label>
+    <div className={`control-group ${isDisabled ? 'control-disabled' : ''}`} key={control.id}>
+      <label className="control-label">{control.label}</label>
       
       {control.type === 'select' && (
         <select
           className="control-select"
           value={value}
+          disabled={isDisabled}
           onChange={(e) => onChange(control.id, e.target.value, control.parse)}
         >
           {control.options.map(opt => (
@@ -33,6 +32,7 @@ const ControlRenderer = ({ control, value, onChange }) => {
             max={control.max}
             step={control.step}
             value={value}
+            disabled={isDisabled}
             onChange={(e) => onChange(control.id, e.target.value, parseFloat)}
             className="control-input"
           />
@@ -46,25 +46,18 @@ const ControlRenderer = ({ control, value, onChange }) => {
           className="control-input"
           placeholder={control.placeholder}
           value={value || ''}
+          disabled={isDisabled}
           onChange={(e) => onChange(control.id, e.target.value)}
-          style={{ 
-            width: '100%', 
-            padding: '8px', 
-            background: '#222', 
-            border: '1px solid #333', 
-            borderRadius: '4px', 
-            color: '#fff' 
-          }}
         />
       )}
       
       {control.type === 'toggle' && (
         <button 
-          className={`btn btn-secondary ${value ? 'active' : ''}`}
+          className={`btn btn-secondary toggle-btn ${value ? 'active' : ''}`}
+          disabled={isDisabled}
           onClick={() => onChange(control.id, !value)}
-          style={{ width: '100%' }}
         >
-          {value ? '✅ ' : '❌ '} {control.label}
+          {value ? 'ON' : 'OFF'}
         </button>
       )}
     </div>

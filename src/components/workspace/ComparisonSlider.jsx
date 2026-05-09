@@ -1,4 +1,4 @@
-import React, { useState, useRef, useEffect } from 'react';
+import React, { useState, useRef, useEffect, useCallback } from 'react';
 import { useApp } from '../../context/AppContext';
 
 const ComparisonSlider = () => {
@@ -28,25 +28,25 @@ const ComparisonSlider = () => {
     }
   }, [originalCanvas, resultCanvas]);
 
-  const handleMove = (clientX) => {
+  const handleMove = useCallback((clientX) => {
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
     const x = Math.max(0, Math.min(rect.width, clientX - rect.left));
     setPosition((x / rect.width) * 100);
-  };
+  }, []);
 
   const onMouseDown = (e) => {
     setIsDragging(true);
     handleMove(e.clientX);
   };
 
-  const onMouseMove = (e) => {
-    if (isDragging) handleMove(e.clientX);
-  };
-
-  const onMouseUp = () => setIsDragging(false);
-
   useEffect(() => {
+    const onMouseMove = (e) => {
+      handleMove(e.clientX);
+    };
+
+    const onMouseUp = () => setIsDragging(false);
+
     if (isDragging) {
       window.addEventListener('mousemove', onMouseMove);
       window.addEventListener('mouseup', onMouseUp);
@@ -58,7 +58,7 @@ const ComparisonSlider = () => {
       window.removeEventListener('mousemove', onMouseMove);
       window.removeEventListener('mouseup', onMouseUp);
     };
-  }, [isDragging]);
+  }, [isDragging, handleMove]);
 
   if (currentService.id !== 'upscaling' || !resultCanvas) return null;
 

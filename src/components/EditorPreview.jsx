@@ -5,48 +5,61 @@ import React, {
   useRef,
   useEffect,
 } from 'react';
-import ReactCrop from 'react-image-crop';
+import ReactCrop, { centerCrop, makeAspectCrop } from 'react-image-crop';
 import 'react-image-crop/dist/ReactCrop.css';
 import { useApp } from '../context/AppContext';
+import { getEditorStyles } from '../core/editorFilters';
 
 // ---------------------------------------------------------------------------
 // Unified Adjustable Crop Component
 // ---------------------------------------------------------------------------
-const UnifiedCrop = ({ imgSrc, filterStyle, aspectRatio, onCropReady }) => {
+const UnifiedCrop = ({ imgSrc, filterStyle, aspectRatio, onCropReady, onInteraction }) => {
   const imgRef = useRef(null);
+  const isInteracting = useRef(false);
   const [crop, setCrop] = useState(null);
-  
+  const [naturalAspect, setNaturalAspect] = useState(undefined);
+
   const aspect = useMemo(() => {
     if (!aspectRatio || aspectRatio === 'free') return undefined;
-    if (aspectRatio === 'original' && imgRef.current) {
-      return imgRef.current.naturalWidth / imgRef.current.naturalHeight;
-    }
+    if (aspectRatio === 'original') return naturalAspect;
     const parts = aspectRatio.split(':');
     if (parts.length === 2) return parseFloat(parts[0]) / parseFloat(parts[1]);
     return undefined;
-  }, [aspectRatio]);
+  }, [aspectRatio, naturalAspect]);
 
   const [isReady, setIsReady] = useState(false);
+
+  const resetToDefaultCrop = useCallback(() => {
+    if (!imgRef.current) return;
+    const { naturalWidth: nw, naturalHeight: nh } = imgRef.current;
+
+    let initialCrop;
+    if (aspectRatio === 'original') {
+      initialCrop = { unit: '%', x: 0, y: 0, width: 100, height: 100 };
+    } else if (aspect) {
+      initialCrop = centerCrop(makeAspectCrop({ unit: '%', width: 90 }, aspect, nw, nh), nw, nh);
+    } else {
+      initialCrop = centerCrop({ unit: '%', width: 80, height: 80 }, nw, nh);
+    }
+
+    setCrop(initialCrop);
+    setIsReady(true);
+  }, [aspect, aspectRatio]);
 
   const onImageLoad = useCallback((e) => {
     const { naturalWidth: nw, naturalHeight: nh } = e.currentTarget;
     imgRef.current = e.currentTarget;
-    let initialCrop;
-    if (aspect) {
-      const imgAspect = nw / nh;
-      if (imgAspect > aspect) {
-        const w = (nh * aspect / nw) * 100;
-        initialCrop = { unit: '%', x: (100 - w) / 2, y: 0, width: w, height: 100 };
-      } else {
-        const h = (nw / aspect / nh) * 100;
-        initialCrop = { unit: '%', x: 0, y: (100 - h) / 2, width: 100, height: h };
-      }
-    } else {
-      initialCrop = { unit: '%', x: 10, y: 10, width: 80, height: 80 };
+    const aspectVal = nw / nh;
+    setNaturalAspect(aspectVal);
+    resetToDefaultCrop();
+  }, [resetToDefaultCrop]);
+
+  // Handle programmatic ratio changes (from dropdown)
+  useEffect(() => {
+    if (!isInteracting.current) {
+      resetToDefaultCrop();
     }
-    setCrop(initialCrop);
-    setIsReady(true);
-  }, [aspect]);
+  }, [aspectRatio, resetToDefaultCrop]);
 
   useEffect(() => {
     if (isReady && crop && imgRef.current) {
@@ -75,11 +88,20 @@ const UnifiedCrop = ({ imgSrc, filterStyle, aspectRatio, onCropReady }) => {
   }, [onCropReady]);
 
   return (
-    <div style={styles.cropWrapper}>
+    <div className="editor-preview-crop-wrapper">
       <ReactCrop
         crop={crop}
-        onChange={c => setCrop(c)}
-        onComplete={onComplete}
+        onChange={c => {
+          if (aspectRatio === 'original') {
+            isInteracting.current = true;
+            onInteraction?.();
+          }
+          setCrop(c);
+        }}
+        onComplete={(c) => {
+          isInteracting.current = false;
+          onComplete(c);
+        }}
         aspect={aspect}
         keepSelection
       >
@@ -87,7 +109,8 @@ const UnifiedCrop = ({ imgSrc, filterStyle, aspectRatio, onCropReady }) => {
           ref={imgRef}
           src={imgSrc}
           onLoad={onImageLoad}
-          style={{ ...styles.img, filter: filterStyle }}
+          className="editor-preview-img"
+          style={{ filter: filterStyle }}
           alt="Crop Source"
           draggable={false}
         />
@@ -101,140 +124,70 @@ const UnifiedCrop = ({ imgSrc, filterStyle, aspectRatio, onCropReady }) => {
 // ---------------------------------------------------------------------------
 const EditorPreview = ({ sourceCanvas }) => {
   const { serviceSettings, updateServiceSetting, activeEditorTab } = useApp();
-  const settings = serviceSettings['image-editor'] || {};
-  const { 
-    aspectRatio = 'free', rotation = 0, flipX = false, flipY = false, 
-    intensity = 100, preset = 'none',
-    exposure = 0, contrast = 0, saturation = 0, hue = 0, blur = 0,
-    temperature = 0, tint = 0, highlights = 0, shadows = 0, whites = 0, blacks = 0,
-    vibrance = 0, clarity = 0, texture = 0, sharpening = 0, vignette = 0, dehaze = 0
+  const settings = useMemo(() => serviceSettings['image-editor'] || {}, [serviceSettings]);
+  const {
+    aspectRatio = 'free', rotation = 0, flipX = false, flipY = false,
+    vignette = 0
   } = settings;
 
   const [imgSrc, setImgSrc] = useState('');
   useEffect(() => {
     if (!sourceCanvas) { setImgSrc(''); return; }
-    setImgSrc(sourceCanvas.toDataURL());
+    let objectUrl = '';
+    let isMounted = true;
+    sourceCanvas.toBlob((blob) => {
+      if (blob && isMounted) {
+        objectUrl = URL.createObjectURL(blob);
+        setImgSrc(objectUrl);
+      }
+    }, 'image/jpeg', 0.9);
+    
+    return () => {
+      isMounted = false;
+      if (objectUrl) URL.revokeObjectURL(objectUrl);
+    };
   }, [sourceCanvas]);
 
-  const filterStyle = useMemo(() => {
-    // 1. CSS
-    let css = [];
-    css.push(`brightness(${100 + (exposure * 5)}%)`);
-    css.push(`contrast(${100 + (contrast * 3)}%)`);
-    
-    const totalSat = Math.max(0, 100 + (saturation * 4) + (vibrance * 2));
-    css.push(`saturate(${totalSat}%)`);
-    
-    if (hue) css.push(`hue-rotate(${hue}deg)`);
-    
-    const finalBlur = blur + (sharpening < 0 ? Math.abs(sharpening) / 4 : 0);
-    if (finalBlur) css.push(`blur(${finalBlur}px)`);
+  const { css: filterStyle, svg: svgFilterContent } = useMemo(() => {
+    return getEditorStyles(settings);
+  }, [settings]);
 
-    if (preset !== 'none') {
-      const alpha = intensity / 100;
-      if (preset === 'bw')        css.push(`grayscale(${100 * alpha}%)`);
-      if (preset === 'sepia')     css.push(`sepia(${100 * alpha}%)`);
-      if (preset === 'vintage') {
-        css.push(`sepia(${30 * alpha}%)`);
-        css.push(`contrast(${100 + (90 - 100) * alpha}%)`);
-        css.push(`brightness(${100 + (110 - 100) * alpha}%)`);
-      }
-      if (preset === 'cinematic') {
-        css.push(`contrast(${100 + (120 - 100) * alpha}%)`);
-        css.push(`saturate(${100 + (80 - 100) * alpha}%)`);
-        css.push(`hue-rotate(${-10 * alpha}deg)`);
-      }
-    }
-
-    // 2. SVG Advanced
-    const t = temperature / 100;
-    const ti = tint / 100;
-    const rMod = 1 + (t > 0 ? t : 0) + (ti > 0 ? ti * 0.5 : 0);
-    const gMod = 1 + (t > 0 ? t * 0.5 : t * -0.5) + (ti < 0 ? -ti : 0);
-    const bMod = 1 + (t < 0 ? -t : 0) + (ti > 0 ? ti * 0.5 : 0);
-
-    // Tone Curve
-    let table = [0, 0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7, 0.8, 0.9, 1.0];
-    
-    const blackOffset = blacks / 100; 
-    table[0] = Math.max(0, table[0] + blackOffset);
-    table[1] = Math.max(0, table[1] + blackOffset * 0.5);
-
-    const shadowMod = shadows / 60;
-    table[1] += shadowMod * 0.8; table[2] += shadowMod * 0.6; table[3] += shadowMod * 0.4;
-    
-    const highlightMod = highlights / 60;
-    table[6] += highlightMod * 0.2; table[7] += highlightMod * 0.4; table[8] += highlightMod * 0.6; table[9] += highlightMod * 0.8;
-    
-    const whiteOffset = whites / 100;
-    if (whiteOffset > 0) {
-      table[9] += whiteOffset * 0.4; table[8] += whiteOffset * 0.2;
-    } else {
-      table[10] = Math.max(0, table[10] + whiteOffset);
-      table[9] += whiteOffset * 0.5;
-    }
-
-    const clMod = clarity / 100;
-    table[3] -= clMod * 0.05; table[4] -= clMod * 0.1; table[5] += clMod * 0.1; table[6] += clMod * 0.1; table[7] += clMod * 0.05;
-
-    const dMod = dehaze / 100;
-    table[0] = Math.max(0, table[0] - dMod * 0.2); table[1] -= dMod * 0.15; table[2] -= dMod * 0.1; table[8] += dMod * 0.1; table[9] += dMod * 0.15;
-
-    const toneTable = table.map(v => Math.max(0, Math.min(1, v))).join(' ');
-
-    const svgFilter = `
-      <svg xmlns="http://www.w3.org/2000/svg">
-        <filter id="f" color-interpolation-filters="sRGB">
-          <feColorMatrix type="matrix" values="${rMod} 0 0 0 0 0 ${gMod} 0 0 0 0 0 ${bMod} 0 0 0 0 0 1 0"/>
-          <feComponentTransfer><feFuncR type="table" tableValues="${toneTable}"/><feFuncG type="table" tableValues="${toneTable}"/><feFuncB type="table" tableValues="${toneTable}"/></feComponentTransfer>
-          ${texture !== 0 ? `<feConvolveMatrix order="3" kernelMatrix="0 -${texture/40} 0 -${texture/40} ${1 + (texture/10)} -${texture/40} 0 -${texture/40} 0" preserveAlpha="true"/>` : ''}
-          ${sharpening > 0 ? `
-          <feConvolveMatrix order="3" kernelMatrix="
-            -${sharpening/20} -${sharpening/20} -${sharpening/20}
-            -${sharpening/20} ${1 + (sharpening/2.5)} -${sharpening/20}
-            -${sharpening/20} -${sharpening/20} -${sharpening/20}
-          " preserveAlpha="true"/>` : ''}
-        </filter>
-      </svg>
-    `.replace(/\s+/g, ' ').trim();
-    
-    const encoded = btoa(svgFilter);
-    return `${css.join(' ')} url('data:image/svg+xml;base64,${encoded}#f')`;
-  }, [settings, preset, intensity, exposure, contrast, saturation, hue, blur, temperature, tint, highlights, shadows, whites, blacks, vibrance, clarity, texture, sharpening, dehaze]);
 
   const onCropReady = useCallback((pixels) => {
     updateServiceSetting('image-editor', 'cropPixels', pixels);
   }, [updateServiceSetting]);
 
-  if (!imgSrc) return <div className="result-placeholder">Load image</div>;
+  const handleInteraction = useCallback(() => {
+    updateServiceSetting('image-editor', 'aspectRatio', 'free');
+  }, [updateServiceSetting]);
+
+  if (!imgSrc) return <div className="editor-preview-placeholder">Load image</div>;
 
   return (
-    <div style={styles.container}>
-      {vignette !== 0 && (
-        <div style={{
-          position: 'absolute', inset: 0, zIndex: 10, pointerEvents: 'none',
-          background: `radial-gradient(circle, transparent 40%, rgba(${vignette > 0 ? '0,0,0' : '255,255,255'}, ${Math.abs(vignette)/40}) 100%)`
-        }} />
+    <div className="editor-preview-container">
+      {svgFilterContent && (
+        <div style={{ height: 0, width: 0, overflow: 'hidden' }} dangerouslySetInnerHTML={{ __html: svgFilterContent }} />
       )}
-      <div style={{
-          transform: `rotate(${rotation}deg) scale(${flipX ? -1 : 1}, ${flipY ? -1 : 1})`,
-          transition: 'transform 0.3s ease-out',
-          width: '100%', height: '100%', display: 'flex', alignItems: 'center', justifyContent: 'center'
-      }}>
+      {vignette !== 0 && (
+        <div
+          className="editor-preview-vignette"
+          style={{
+            background: `radial-gradient(circle, transparent 40%, rgba(${vignette > 0 ? '0,0,0' : '255,255,255'}, ${Math.abs(vignette)/40}) 100%)`
+          }}
+        />
+      )}
+      <div
+        className="editor-preview-transform-wrapper"
+        style={{ transform: `rotate(${rotation}deg) scale(${flipX ? -1 : 1}, ${flipY ? -1 : 1})` }}
+      >
         {activeEditorTab === 'composition' ? (
-          <UnifiedCrop key={aspectRatio} imgSrc={imgSrc} filterStyle={filterStyle} aspectRatio={aspectRatio} onCropReady={onCropReady} />
+          <UnifiedCrop imgSrc={imgSrc} filterStyle={filterStyle} aspectRatio={aspectRatio} onCropReady={onCropReady} onInteraction={handleInteraction} />
         ) : (
-          <img src={imgSrc} style={{ ...styles.img, filter: filterStyle }} alt="Preview" draggable={false} />
+          <img src={imgSrc} className="editor-preview-img" style={{ filter: filterStyle }} alt="Preview" draggable={false} />
         )}
       </div>
     </div>
   );
-};
-
-const styles = {
-  container: { position: 'relative', width: '100%', height: '100%', minHeight: '400px', display: 'flex', alignItems: 'center', justifyContent: 'center', background: '#111', overflow: 'hidden' },
-  img: { display: 'block', maxWidth: '100%', maxHeight: '100%', userSelect: 'none' },
-  cropWrapper: { display: 'inline-block', lineHeight: 0 },
 };
 
 export default EditorPreview;

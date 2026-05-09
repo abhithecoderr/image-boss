@@ -198,9 +198,9 @@ export const CONTROLS_CONFIG = {
   'workflows': [], // Workflows handles its own custom control panel in the WorkflowBuilder
   'image-editor': [
     // --- Composition ---
-    { id: 'aspectRatio', label: 'Aspect Ratio', type: 'select', category: 'composition', defaultValue: 'free', options: [
-      { value: 'free', label: 'Free' },
+    { id: 'aspectRatio', label: 'Aspect Ratio', type: 'select', category: 'composition', defaultValue: 'original', options: [
       { value: 'original', label: 'Original' },
+      { value: 'free', label: 'Free' },
       { value: '1:1', label: '1:1 (Square)' },
       { value: '16:9', label: '16:9 (Wide)' },
       { value: '4:3', label: '4:3 (Standard)' },

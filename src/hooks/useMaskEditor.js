@@ -15,13 +15,23 @@ export const useMaskEditor = (resRef) => {
 
   // Initialize mask canvas when result changes
   useEffect(() => {
-    if (resultCanvas && !maskCanvasRef.current) {
-      const canvas = document.createElement('canvas');
+    if (resultCanvas) {
+      const isValid = 
+        resultCanvas instanceof HTMLCanvasElement ||
+        resultCanvas instanceof OffscreenCanvas ||
+        resultCanvas instanceof ImageBitmap;
+        
+      if (!isValid) return;
+
+      let canvas = maskCanvasRef.current;
+      if (!canvas) {
+        canvas = document.createElement('canvas');
+        maskCanvasRef.current = canvas;
+      }
       canvas.width = resultCanvas.width;
       canvas.height = resultCanvas.height;
       const ctx = canvas.getContext('2d');
       ctx.drawImage(resultCanvas, 0, 0);
-      maskCanvasRef.current = canvas;
     }
   }, [resultCanvas]);
 

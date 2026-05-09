@@ -1,97 +1,89 @@
-import { useCallback, useMemo } from 'react';
-import { useApp } from '../context/AppContext';
-import { useProcessor } from './useProcessor';
-import { useBatchProcessor } from './useBatchProcessor';
-import { useWorkflowProcessor } from './useWorkflowProcessor';
+import { useCallback, useMemo, useState, useEffect } from 'react';
+import { useUI, useWorkspace, useService } from '../context/AppContext';
+import { useUnifiedProcessor } from './useUnifiedProcessor';
 import { OPERATION_MODE } from '../config/app';
 
-/**
- * useAppEngine — The unified orchestrator hook.
- * Standardizes the API for processing regardless of whether the user is in 
- * Single, Batch, or Workflow mode.
- */
 export const useAppEngine = () => {
-  const { currentService, originalCanvas, resultCanvas } = useApp();
-  
-  const single = useProcessor();
-  const batch = useBatchProcessor();
-  const workflow = useWorkflowProcessor();
+  const { originalCanvas, resultCanvas, items, workflowSteps, setActiveItemId, activeItemId, selectedIds, batchMode, setBatchMode } = useWorkspace();
+  const { currentService } = useService();
+
+  const unified = useUnifiedProcessor();
+
+  const batchAvailable = useMemo(() => {
+    return !['image-editor', 'object-segmentation', 'magic-erase'].includes(currentService.id);
+  }, [currentService.id]);
 
   const activeMode = useMemo(() => {
     if (currentService.id === 'workflows') return OPERATION_MODE.WORKFLOW;
-    return batch.mode === 'batch' ? OPERATION_MODE.BATCH : OPERATION_MODE.SINGLE;
-  }, [currentService.id, batch.mode]);
+    if (!batchAvailable) return OPERATION_MODE.SINGLE;
+    return batchMode === 'batch' ? OPERATION_MODE.BATCH : OPERATION_MODE.SINGLE;
+  }, [currentService.id, batchMode, batchAvailable]);
 
-  const activeEngine = useMemo(() => {
-    const singleEngine = {
-      mode: 'single',
-      items: originalCanvas ? [{
-        id: 'single-item',
-        sourceCanvas: originalCanvas,
-        resultCanvas,
-        status: resultCanvas ? 'done' : 'pending',
-      }] : [],
-      activeItemId: originalCanvas ? 'single-item' : null,
-      selectedIds: new Set(),
-      batchAvailable: batch.batchAvailable,
-      doneCount: resultCanvas ? 1 : 0,
-      pendingCount: originalCanvas && !resultCanvas ? 1 : 0,
-      setMode: batch.setMode,
-      addFiles: batch.addFiles,
-      removeItem: () => {},
-      reorderItems: () => {},
-      selectItem: () => {},
-      toggleItemSelection: () => {},
-      selectAllItems: () => {},
-      deselectAllItems: () => {},
-      processAll: (options) => single.process(options),
-      rerunAll: (options) => single.process(options),
-      downloadSelected: () => {},
-      downloadAll: () => {},
-      resetBatch: () => {},
-      clearMemory: () => {},
+  // --- Service State Isolation ---
+  // When switching between individual services, clear batch results to prevent leakage.
+  // We DO NOT clear results in WORKFLOW mode because workflows depend on passing data between steps.
+  useEffect(() => {
+    if (activeMode !== OPERATION_MODE.WORKFLOW) {
+       unified.resetItemsStatus();
+    }
+  }, [currentService.id, activeMode]); // Run when service OR mode changes (excluding workflow)
+
+  // Stable unified methods - extract these so they don't depend on the volatile 'engine' object
+  const { 
+    addFiles, removeItem, selectItem, toggleItemSelection, 
+    selectAllItems, deselectAllItems, reorderItems, 
+    downloadSelected, downloadAll, resetItemsStatus
+  } = unified;
+
+  const engine = useMemo(() => {
+    const isWorkflow = activeMode === OPERATION_MODE.WORKFLOW;
+    const isBatch = activeMode === OPERATION_MODE.BATCH;
+    
+    return {
+      mode: isWorkflow ? 'workflow' : (isBatch ? 'batch' : 'single'),
+      items: (isWorkflow || isBatch) ? items : [],
+      activeItemId: isWorkflow ? items[0]?.id : (isBatch ? (items.find(i => i.id === activeItemId)?.id || null) : null),
+      selectedIds,
+      doneCount: ((isWorkflow || isBatch) ? items : []).filter(i => i.status === 'done').length,
+      batchAvailable,
+      setMode: setBatchMode,
+      // Stable methods
+      addFiles,
+      removeItem,
+      selectItem,
+      toggleItemSelection,
+      selectAllItems,
+      deselectAllItems,
+      reorderItems,
+      downloadSelected,
+      downloadAll,
+      resetItemsStatus,
+      processAll: (options) => {
+        if (activeMode === OPERATION_MODE.WORKFLOW) return unified.executeWorkflow();
+        return unified.executeBatch(currentService.id, options);
+      },
+      rerunAll: (options) => {
+        if (activeMode === OPERATION_MODE.WORKFLOW) return unified.executeWorkflow({ forceReset: true });
+        return unified.executeBatch(currentService.id, options, { forceReset: true });
+      },
     };
+    // Removed 'unified' from dependencies as we extracted its methods
+  }, [activeMode, batchMode, items, activeItemId, selectedIds, currentService.id, setBatchMode, unified.executeWorkflow, unified.executeBatch]);
 
-    switch (activeMode) {
-      case OPERATION_MODE.WORKFLOW: return workflow;
-      case OPERATION_MODE.BATCH: return batch;
-      default: return singleEngine;
-    }
-  }, [activeMode, workflow, batch, originalCanvas, resultCanvas, single]);
 
-  const execute = useCallback(async (options = {}) => {
-    switch (activeMode) {
-      case OPERATION_MODE.WORKFLOW:
-        return await workflow.processWorkflow();
-      case OPERATION_MODE.BATCH:
-        return await batch.processAll(options);
-      default:
-        return await single.process(options);
-    }
-  }, [activeMode, single, batch, workflow]);
 
-  const reset = useCallback(() => {
-    switch (activeMode) {
-      case OPERATION_MODE.WORKFLOW:
-        workflow.resetQueue();
-        break;
-      case OPERATION_MODE.BATCH:
-        batch.resetBatch();
-        break;
-      default:
-        // single-mode reset is handled by global resetWorkspace in context
-        break;
-    }
-  }, [activeMode, workflow, batch]);
+  const execute = useCallback(async (options = {}, runOptions = {}) => {
+    if (activeMode === OPERATION_MODE.WORKFLOW) return unified.executeWorkflow(runOptions);
+    if (activeMode === OPERATION_MODE.BATCH) return unified.executeBatch(currentService.id, options, runOptions);
+    return unified.executeSingle(currentService.id, options, originalCanvas);
+  }, [activeMode, currentService.id, originalCanvas, unified.executeWorkflow, unified.executeBatch, unified.executeSingle]);
 
   return {
     mode: activeMode,
-    engine: activeEngine,
+    engine,
     execute,
-    reset,
-    // Direct access for specialized UI components
-    single,
-    batch,
-    workflow
+    unified
   };
 };
+
+

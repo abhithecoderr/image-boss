@@ -1,37 +1,30 @@
 import { useParams } from "react-router-dom";
 import { useApp } from "../../context/AppContext";
 import { SERVICES } from "../../config/services";
-import React, { useEffect } from "react";
+import React, { useEffect, useMemo } from "react";
 import Sidebar from "./Sidebar";
 import Workspace from "./Workspace";
 import ControlPanel from "./ControlPanel";
 import WorkflowBuilder from "../WorkflowBuilder";
 import { OPERATION_MODE } from "../../config/app";
 import { useAppEngine } from "../../hooks/useAppEngine";
+import { downloadCanvas } from "../../core/canvas-utils";
+import ErrorBoundary from "../ErrorBoundary";
 
 export default function MainAppLayout() {
-  const { serviceId } = useParams();
-  const { 
-    currentService, 
-    selectService,
-    toast, 
-    resetWorkspace, 
-    resultCanvas, 
-    getDownloadMetadata 
+  const {
+    currentService,
+    toast,
+    resetWorkspace,
+    resultCanvas,
+    getDownloadMetadata
   } = useApp();
-  
-  // Sync URL to Service Context
-  useEffect(() => {
-    if (serviceId && SERVICES[serviceId] && serviceId !== currentService.id) {
-      selectService(serviceId);
-    }
-  }, [serviceId, currentService.id, selectService]);
 
-  const { execute, reset, engine, mode } = useAppEngine();
 
-  const handleProcess = (options) => execute(options);
+  const { execute, engine, mode, unified } = useAppEngine();
+
+  const handleProcess = (options, itemsOverride = null) => execute(options, itemsOverride);
   const handleReset = () => {
-    reset();
     resetWorkspace();
   };
 
@@ -54,24 +47,26 @@ export default function MainAppLayout() {
           </div>
 
           <>
-            {mode === OPERATION_MODE.WORKFLOW && (
-              <WorkflowBuilder
-                workflow={engine}
-                onProcess={handleProcess}
+            <ErrorBoundary>
+              {mode === OPERATION_MODE.WORKFLOW && (
+                <WorkflowBuilder
+                  workflow={unified}
+                  onProcess={handleProcess}
+                />
+              )}
+
+              <Workspace
+                batch={useMemo(() => (
+                  mode === OPERATION_MODE.WORKFLOW
+                    ? { ...engine, mode: "batch" }
+                    : engine
+                ), [mode, engine])}
               />
-            )}
 
-            <Workspace
-              batch={
-                mode === OPERATION_MODE.WORKFLOW 
-                  ? { ...engine, mode: "batch" } 
-                  : engine
-              }
-            />
-
-            {mode !== OPERATION_MODE.WORKFLOW && (
-              <ControlPanel />
-            )}
+              {mode !== OPERATION_MODE.WORKFLOW && (
+                <ControlPanel />
+              )}
+            </ErrorBoundary>
 
             <div className="actions actions-row">
               <button
@@ -105,9 +100,7 @@ export default function MainAppLayout() {
                     className="btn btn-primary"
                     onClick={() => {
                       const { filename, mimeType } = getDownloadMetadata(null, currentService.id, resultCanvas);
-                      import("../../core/canvas-utils").then((m) =>
-                        m.downloadCanvas(resultCanvas, filename, mimeType),
-                      );
+                      downloadCanvas(resultCanvas, filename, mimeType);
                     }}
                   >
                     📥 Download Result

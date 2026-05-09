@@ -1,0 +1,14 @@
+/**
+ * Global Layout Components
+ */
+
+.marketing-container {
+  max-width: 1200px;
+  margin: 0 auto;
+  padding: 0 var(--space-4);
+  width: 100%;
+}
+
+.section-padding {
+  padding: var(--space-12) 0;
+}

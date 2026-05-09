@@ -1,10 +1,10 @@
 import { useNavigate } from 'react-router-dom';
-import { useApp } from "../../context/AppContext";
+import { useService } from "../../context/AppContext";
 import { SERVICE_ORDER } from "../../config/app";
 import { SERVICES } from "../../config/services";
 
 const Sidebar = () => {
-  const { currentService } = useApp();
+  const { currentService } = useService();
   const navigate = useNavigate();
 
   return (

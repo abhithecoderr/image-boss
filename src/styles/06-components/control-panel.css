@@ -1,0 +1,50 @@
+/**
+ * Control Panel & Service Controls Styles
+ * Relies on 01-base/variables.css
+ */
+
+.control-panel-stats-box {
+  background: var(--bg-surface);
+  padding: var(--space-3);
+  border-radius: var(--radius-md);
+  margin-top: var(--space-3);
+  border: 1px dashed var(--border-medium);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.control-panel-stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 0.85em;
+}
+
+.control-panel-stat-label {
+  color: var(--text-muted);
+}
+
+.control-panel-stat-value {
+  color: var(--text-main);
+  font-weight: 600;
+}
+
+.control-panel-stat-success {
+  color: #4CAF50; /* Valid semantic green */
+  font-weight: bold;
+}
+
+/* Specific to Compression */
+.compression-quality-bar-bg {
+  margin-top: var(--space-2);
+  height: 4px;
+  background: var(--bg-elevated);
+  border-radius: var(--radius-sm);
+  overflow: hidden;
+}
+
+.compression-quality-bar-fill {
+  height: 100%;
+  background: linear-gradient(90deg, #4CAF50, #8BC34A); /* Can stay as is for the visual effect */
+  transition: width var(--transition-normal);
+}

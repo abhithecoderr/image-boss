@@ -32,8 +32,14 @@ const SAMOverlay = ({ srcRef }) => {
     };
 
     sync();
+    const ro = new ResizeObserver(sync);
+    if (srcRef.current) ro.observe(srcRef.current);
     window.addEventListener('resize', sync);
-    return () => window.removeEventListener('resize', sync);
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', sync);
+    };
   }, [srcRef, samPoints, brushCanvasRef]);
 
   const getCanvasCoords = useCallback((e) => {
@@ -61,7 +67,7 @@ const SAMOverlay = ({ srcRef }) => {
 
     // Right-click or holding modified keys makes it a negative point (label: 0)
     const isNegative = e.button === 2 || e.shiftKey || e.ctrlKey || e.metaKey;
-    
+
     addPoint(x, y, isNegative);
   }, [currentService, addPoint]);
 

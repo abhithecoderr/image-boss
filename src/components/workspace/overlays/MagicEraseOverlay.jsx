@@ -38,8 +38,14 @@ const MagicEraseOverlay = ({ srcRef }) => {
     };
 
     sync();
+    const ro = new ResizeObserver(sync);
+    if (srcRef.current) ro.observe(srcRef.current);
     window.addEventListener('resize', sync);
-    return () => window.removeEventListener('resize', sync);
+
+    return () => {
+      ro.disconnect();
+      window.removeEventListener('resize', sync);
+    };
   }, [srcRef, currentService]);
 
   const getCanvasCoords = useCallback((e) => {

@@ -1,46 +1,33 @@
-import { useApp } from "../../context/AppContext";
+import { useService, useWorkspace } from "../../context/AppContext";
 import { useAppEngine } from "../../hooks/useAppEngine";
 import { useSAM } from "../../hooks/useSAM";
 import { OPERATION_MODE } from "../../config/app";
 import { CONTROLS_CONFIG } from "../../config/controls";
-
-import CompressionControls from "../controls/CompressionControls";
-import BackgroundRemovalControls from "../controls/BackgroundRemovalControls";
-import FileConversionControls from "../controls/FileConversionControls";
-import ObjectSegmentationControls from "../controls/ObjectSegmentationControls";
-import ImageEditorControls from "../controls/ImageEditorControls";
-import ManualTouchupControls from "../controls/ManualTouchupControls";
+import React from "react";
+import ManualTouchupControls from "../shared/ManualTouchupControls";
+import ServiceControlGrid from "../shared/ServiceControlGrid";
 
 const ControlPanel = () => {
-  const { currentService, serviceSettings } = useApp();
+  const {
+    currentService,
+    serviceSettings,
+    updateServiceSetting,
+  } = useService();
+  const {
+    originalCanvas,
+    resultCanvas
+  } = useWorkspace();
   const { executeSmartSelect } = useSAM();
   const { execute, engine: batch, mode } = useAppEngine();
 
   const activeMode = mode;
 
-  const renderServiceControls = () => {
-    const hasConfigs = !!CONTROLS_CONFIG[currentService.id];
-    if (!hasConfigs) {
-      return <p className="control-hint">No specialized settings for this service.</p>;
-    }
-
-    switch (currentService.id) {
-      case 'compression':
-        return <CompressionControls />;
-      case 'background-removal':
-        return <BackgroundRemovalControls />;
-      case 'file-conversion':
-        return <FileConversionControls />;
-      case 'object-segmentation':
-        return <ObjectSegmentationControls />;
-      case 'image-editor':
-        return <ImageEditorControls />;
-      default:
-        return <p className="control-hint">No specialized settings for this service.</p>;
-    }
+  const handleControlChange = (id, val, parse) => {
+    const parsedVal = parse ? parse(val) : val;
+    updateServiceSetting(currentService.id, id, parsedVal);
   };
 
-  const showManualTouchup = ['background-removal', 'object-segmentation', 'image-editor'].includes(currentService.id);
+  const showManualTouchup = ['background-removal', 'object-segmentation'].includes(currentService.id);
 
   const getProcessAction = () => {
     if (currentService.id === 'object-segmentation') return executeSmartSelect;
@@ -88,7 +75,13 @@ const ControlPanel = () => {
           </div>
         )}
 
-        {renderServiceControls()}
+        <ServiceControlGrid
+          serviceId={currentService.id}
+          options={serviceSettings[currentService.id]}
+          onChange={handleControlChange}
+          sourceCanvas={originalCanvas}
+          resultCanvas={resultCanvas}
+        />
 
         {activeMode === OPERATION_MODE.BATCH && batch.items.length > 0 && (
           <div className="control-group" style={{ alignItems: 'flex-end', justifyContent: 'flex-end' }}>
@@ -102,7 +95,7 @@ const ControlPanel = () => {
                    if (confirm('Clear all batch results? This marks them as pending for rerunning.')) {
                      batch.rerunAll(serviceSettings[currentService.id]);
                    }
-                }}
+                 }}
               >
                 ♻️ Reset
               </button>
@@ -126,4 +119,5 @@ const ControlPanel = () => {
   );
 };
 
-export default ControlPanel;
+export default React.memo(ControlPanel);
+

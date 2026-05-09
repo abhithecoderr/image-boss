@@ -17,11 +17,8 @@ const CandidateCard = ({ candidate, idx, isSelected, onSelect }) => {
 
   return (
     <div
-      className={`candidate-card ${isSelected ? 'active' : ''}`}
+      className={`candidate-card ${isSelected ? 'is-selected' : ''}`}
       onClick={() => onSelect(idx)}
-      style={{
-        border: isSelected ? '2px solid var(--highlight)' : '2px solid transparent'
-      }}
     >
       <div ref={thumbRef} className="layer-thumb-canvas" />
       <div className="candidate-label">
@@ -79,9 +76,9 @@ const SegmentationCandidates = () => {
   const candidates = segmentationResult.options;
 
   return (
-    <div className="layer-picker">
-      <div className="picker-label">Select Subject Candidate</div>
-      <div className="layers-container">
+    <div className="segmentation-picker">
+      <div className="segmentation-picker-label">Select Subject Candidate</div>
+      <div className="segmentation-layers-container">
         {candidates.map((candidate, idx) => (
           <CandidateCard
             key={idx}

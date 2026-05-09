@@ -214,12 +214,11 @@ const BatchStrip = ({
         </div>
       </div>
 
-      <div className="batch-actions" style={{ marginLeft: '12px', display: 'flex', gap: '8px' }}>
+      <div className="batch-actions">
          <button 
-           className="btn btn-secondary btn-tiny" 
+           className="btn btn-secondary btn-tiny batch-clear-btn" 
            onClick={onClearMemory}
            title="Free up RAM by clearing intermediate workflow results and AI models"
-           style={{ whiteSpace: 'nowrap', opacity: 0.8 }}
          >
            🧹 Clear Memory
          </button>

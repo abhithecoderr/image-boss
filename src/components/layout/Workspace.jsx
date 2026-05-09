@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from "react";
-import { useApp } from "../../context/AppContext";
+import { useUI, useWorkspace, useService } from "../../context/AppContext";
 import { useFileIngestion } from "../../hooks/useFileIngestion";
 import SAMOverlay from "../workspace/overlays/SAMOverlay";
 import SegmentationCandidates from "../SegmentationCandidates";
@@ -10,53 +10,79 @@ import EditorPreview from "../EditorPreview";
 import BatchStrip from "../workspace/BatchStrip";
 import { downloadCanvas } from "../../core/canvas-utils";
 
+const StatusBar = React.memo(() => {
+  const { progress } = useUI();
+  const { isProcessing } = useWorkspace();
+  if (!isProcessing) return null;
+  return (
+    <div className="status-bar">
+      <div className="progress-container">
+        <div
+          className="progress-fill"
+          style={{ width: `${progress.percent * 100}%` }}
+        ></div>
+      </div>
+      <div className="progress-text">
+        {progress.message || "Processing..."}
+      </div>
+    </div>
+  );
+});
+
 const Workspace = ({ batch }) => {
+  const { currentService, getDownloadMetadata } = useService();
   const {
-    currentService,
-    getDownloadMetadata,
-    progress,
     originalCanvas: srcCanvasState,
     resultCanvas: resCanvasState,
     isProcessing,
-  } = useApp();
+  } = useWorkspace();
 
   const { handleFile } = useFileIngestion();
   const srcRef = useRef(null);
   const resRef = useRef(null);
 
   const isBatchView = batch.mode === 'batch';
+  const isWorkflowView = batch.mode === 'workflow';
+  const isMultiMode = isBatchView || isWorkflowView;
+
+  const activeItem = batch.items.find(i => i.id === batch.activeItemId);
+  const srcCanvas = activeItem ? activeItem.sourceCanvas : srcCanvasState;
+  
+  // Prioritize the resCanvasState (from useWorkspace) as it may contain 
+  // live edits or specific step previews. Fall back to the item's result.
+  const resCanvas = resCanvasState || (activeItem ? activeItem.resultCanvas : null);
 
   // Sync state canvases to DOM canvases
   useEffect(() => {
-    if (srcCanvasState && srcRef.current) {
+    if (srcCanvas && srcRef.current) {
       const ctx = srcRef.current.getContext("2d");
-      srcRef.current.width = srcCanvasState.width;
-      srcRef.current.height = srcCanvasState.height;
-      ctx.drawImage(srcCanvasState, 0, 0);
+      srcRef.current.width = srcCanvas.width;
+      srcRef.current.height = srcCanvas.height;
+      ctx.drawImage(srcCanvas, 0, 0);
     }
-  }, [srcCanvasState]);
+  }, [srcCanvas]);
 
   useEffect(() => {
     if (!resRef.current) return;
     const ctx = resRef.current.getContext("2d");
 
-    if (resCanvasState) {
-      resRef.current.width = resCanvasState.width;
-      resRef.current.height = resCanvasState.height;
+    if (resCanvas) {
+      resRef.current.width = resCanvas.width;
+      resRef.current.height = resCanvas.height;
 
       const isValidSource =
-        resCanvasState instanceof HTMLCanvasElement ||
-        resCanvasState instanceof OffscreenCanvas ||
-        resCanvasState instanceof ImageBitmap;
+        resCanvas instanceof HTMLCanvasElement ||
+        resCanvas instanceof OffscreenCanvas ||
+        resCanvas instanceof ImageBitmap;
 
       if (isValidSource) {
-        ctx.drawImage(resCanvasState, 0, 0);
+        ctx.drawImage(resCanvas, 0, 0);
       }
     } else {
       // Clear canvas if no result
       ctx.clearRect(0, 0, resRef.current.width, resRef.current.height);
     }
-  }, [resCanvasState]);
+  }, [resCanvas]);
 
   const onDrop = (e) => {
     e.preventDefault();
@@ -73,7 +99,7 @@ const Workspace = ({ batch }) => {
     }
   };
 
-  const showUploadArea = !srcCanvasState && (!isBatchView || batch.items.length === 0);
+  const showUploadArea = !srcCanvas && (!isMultiMode || batch.items.length === 0);
 
   if (showUploadArea) {
     return (
@@ -109,19 +135,7 @@ const Workspace = ({ batch }) => {
 
   return (
     <div className="workspace">
-      {isProcessing && (
-        <div className="status-bar">
-          <div className="progress-container">
-            <div
-              className="progress-fill"
-              style={{ width: `${progress.percent * 100}%` }}
-            ></div>
-          </div>
-          <div className="progress-text">
-            {progress.message || "Processing..."}
-          </div>
-        </div>
-      )}
+      <StatusBar />
 
       <div className="preview-container">
         <div className="preview-panel">
@@ -138,7 +152,6 @@ const Workspace = ({ batch }) => {
               onRemove={batch.removeItem}
               onAddFiles={batch.addFiles}
               onClearMemory={() => {
-                batch.clearMemory();
                 // Send global dispose to all AI workers to free GPU memory
                 import("../../core/worker-registry").then(({ workerRegistry }) => {
                   workerRegistry.activate(""); // switches to 'null' service, evicting all others
@@ -203,14 +216,14 @@ const Workspace = ({ batch }) => {
             </div>
             <div className="preview-image-wrapper">
               <MaskEditorOverlay resRef={resRef} />
-              {!resCanvasState && !isProcessing && (
+              {!resCanvas && !isProcessing && (
                 <div className="result-placeholder">
                   Waiting for processing...
                 </div>
               )}
               <canvas
                 ref={resRef}
-                className={!resCanvasState ? "hidden" : ""}
+                className={!resCanvas ? "hidden" : ""}
               ></canvas>
             </div>
           </div>
@@ -222,5 +235,5 @@ const Workspace = ({ batch }) => {
   );
 };
 
-export default Workspace;
+export default React.memo(Workspace);
 

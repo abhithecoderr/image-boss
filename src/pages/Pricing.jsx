@@ -55,28 +55,26 @@ const Pricing = () => {
   ];
 
   return (
-    <div className="pricing-page">
+    <div className="pricing-page marketing-container section-padding animate-fade-in">
       <header className="pricing-header">
-        <Link to="/" className="back-link">← Back to Home</Link>
-        <h1>Simple, Transparent Pricing</h1>
-        <p>Choose the plan that fits your needs</p>
+        <h1 className="pricing-title">Simple, Transparent Pricing</h1>
+        <p className="pricing-subtitle">Choose the plan that fits your needs</p>
       </header>
 
       <section className="pricing-section">
         <div className="pricing-grid">
           {plans.map((plan, index) => (
-            <div key={index} className={`pricing-card ${plan.popular ? 'popular' : ''}`}>
-              {plan.popular && <div className="popular-badge">Most Popular</div>}
-              <h3 className="plan-name">{plan.name}</h3>
-              <div className="plan-price">
-                <span className="price-amount">{plan.price}</span>
-                {plan.period && <span className="price-period">{plan.period}</span>}
+            <div key={index} className={`pricing-card ${plan.popular ? 'is-popular' : ''}`}>
+              {plan.popular && <div className="pricing-badge">Most Popular</div>}
+              <h3 className="pricing-plan-name">{plan.name}</h3>
+              <div className="pricing-price">
+                {plan.price}
+                {plan.period && <span className="pricing-period">{plan.period}</span>}
               </div>
-              <p className="plan-description">{plan.description}</p>
-              <ul className="plan-features">
+              <p className="pricing-desc">{plan.description}</p>
+              <ul className="pricing-features">
                 {plan.features.map((feature, idx) => (
-                  <li key={idx} className="feature">
-                    <span className="feature-icon">✓</span>
+                  <li key={idx} className="pricing-feature">
                     {feature}
                   </li>
                 ))}
@@ -89,31 +87,31 @@ const Pricing = () => {
         </div>
       </section>
 
-      <section className="faq-section">
-        <h2>Frequently Asked Questions</h2>
-        <div className="faq-grid">
+      <section className="faq-section mt-4 p-4" style={{ background: 'var(--bg-surface)', borderRadius: 'var(--radius-lg)' }}>
+        <h2 className="pricing-title" style={{ fontSize: '2rem', textAlign: 'center', marginBottom: 'var(--space-6)' }}>Frequently Asked Questions</h2>
+        <div className="faq-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 'var(--space-6)', maxWidth: '900px', margin: '0 auto' }}>
           <div className="faq-item">
-            <h3>What image formats are supported?</h3>
-            <p>We support PNG, JPEG, WebP, and most common image formats.</p>
+            <h3 style={{ marginBottom: 'var(--space-2)', color: 'var(--text-main)' }}>What image formats are supported?</h3>
+            <p className="text-muted">We support PNG, JPEG, WebP, and most common image formats.</p>
           </div>
           <div className="faq-item">
-            <h3>Is my data secure?</h3>
-            <p>Yes, all processing happens in your browser. Your images never leave your device.</p>
+            <h3 style={{ marginBottom: 'var(--space-2)', color: 'var(--text-main)' }}>Is my data secure?</h3>
+            <p className="text-muted">Yes, all processing happens in your browser. Your images never leave your device.</p>
           </div>
           <div className="faq-item">
-            <h3>Can I cancel anytime?</h3>
-            <p>Absolutely. You can cancel your subscription at any time with no penalties.</p>
+            <h3 style={{ marginBottom: 'var(--space-2)', color: 'var(--text-main)' }}>Can I cancel anytime?</h3>
+            <p className="text-muted">Absolutely. You can cancel your subscription at any time with no penalties.</p>
           </div>
           <div className="faq-item">
-            <h3>Do you offer refunds?</h3>
-            <p>We offer a 7-day money-back guarantee for all paid plans.</p>
+            <h3 style={{ marginBottom: 'var(--space-2)', color: 'var(--text-main)' }}>Do you offer refunds?</h3>
+            <p className="text-muted">We offer a 7-day money-back guarantee for all paid plans.</p>
           </div>
         </div>
       </section>
 
-      <section className="cta-section">
-        <h2>Not sure which plan to choose?</h2>
-        <p>Start with our free plan and upgrade when you're ready</p>
+      <section className="cta-section section-padding" style={{ textAlign: 'center' }}>
+        <h2 className="pricing-title" style={{ fontSize: '2rem' }}>Not sure which plan to choose?</h2>
+        <p className="pricing-subtitle" style={{ marginBottom: 'var(--space-6)' }}>Start with our free plan and upgrade when you're ready</p>
         <Link to="/services" className="btn btn-primary btn-large">
           Try for Free
         </Link>
