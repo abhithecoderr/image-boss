@@ -80,17 +80,6 @@ export const SERVICES = {
     usesWorker: true,
     warmup: false,
   },
-  'style-transfer': {
-    id: 'style-transfer',
-    name: 'Style Transfer',
-    icon: '🎨',
-    description: 'Coming Soon - Apply artistic styles',
-    model: null, // Currently unavailable in transformers.js
-    pipeline: 'disabled',
-    disabled: true,
-    usesWorker: false,
-    warmup: false,
-  },
   'file-conversion': {
     id: 'file-conversion',
     name: 'Convert',

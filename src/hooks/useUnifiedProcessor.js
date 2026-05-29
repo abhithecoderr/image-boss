@@ -1,49 +1,50 @@
 import { useCallback, useEffect } from 'react';
 import { useUI, useWorkspace, useService } from '../context/AppContext';
 import { processorEngine } from '../core/processor-engine';
-import { ProcessingItem } from '../core/ProcessingItem';
-import { loadImage, imageToCanvas, downloadCanvas } from '../core/canvas-utils';
+import { createBatchItem, disposeBatchItem } from '../core/BatchItem';
+import { loadImage, imageToCanvas, downloadCanvas, canvasToThumbURL } from '../core/canvas-utils';
 
-/**
- * useUnifiedProcessor — The single source of truth for all image processing logic.
- * Handles Single, Batch, and Workflow pipelines using a standardized state.
- */
+// Import strategy-specific sub-hooks (Delegate Pattern)
+import { useSingleProcessor } from './useSingleProcessor';
+import { useBatchProcessor } from './useBatchProcessor';
+import { useWorkflowProcessor } from './useWorkflowProcessor';
+
+/* 
+ useUnifiedProcessor:
+ The single source of truth for all image processing logic.
+ Orchestrates Single, Batch, and Workflow pipelines using a unified state and routing system.
+*/
 export const useUnifiedProcessor = () => {
-  const { updateProgress, showToast } = useUI();
-  const { 
-    items, setItems, 
-    activeItemId, setActiveItemId, 
+  // --- Context Hooks Extraction ---
+  const uiContext = useUI();                 // UI states (progress tracking, notifications, toasts)
+  const workspaceContext = useWorkspace();   // Active workspace files, canvases, and step queues
+  const serviceContext = useService();       // Current AI services configurations and metadata
+
+  const { updateProgress, showToast } = uiContext;
+  const {
+    items, setItems,
+    activeItemId, setActiveItemId,
     selectedIds, setSelectedIds,
-    workflowSteps, setWorkflowSteps,
+    workflowSteps,
     originalCanvas, originalFile,
     setOriginalCanvas, setResultCanvas,
-    setIsProcessing
-  } = useWorkspace();
+    setIsProcessing,
+    batchMode, setBatchMode
+  } = workspaceContext;
 
-  const { getDownloadMetadata } = useService();
+  const { currentService, getDownloadMetadata } = serviceContext;
 
-  // --- Auto-Sync Single Image to Multi-Mode Queue ---
-  useEffect(() => {
-    if (items.length === 0 && originalFile && originalCanvas) {
-      const item = new ProcessingItem({
-        name: originalFile.name,
-        file: originalFile,
-        sourceCanvas: originalCanvas
-      });
-      setItems([item]);
-      setActiveItemId(item.id);
-    }
-  }, [items.length, originalFile, originalCanvas, setItems, setActiveItemId]);
-
-
-  /**
-   * Internal helper to run a single item through a specific service
-   */
+  /* 
+   processItem:
+   Shared helper callback that runs a single image item through an AI service engine.
+   Feeds progress reports back to the UI progress bar.
+  */
   const processItem = useCallback(async (item, serviceId, options, progressPrefix = '', overrideCanvas = null) => {
     const source = overrideCanvas || item.sourceCanvas;
     if (!source) return null;
 
     try {
+      // Execute the low-level processing engine
       const result = await processorEngine.process(
         serviceId,
         source,
@@ -51,6 +52,7 @@ export const useUnifiedProcessor = () => {
         (prog, msg) => updateProgress(prog, `${progressPrefix}${msg}`)
       );
 
+      // Verify the returned object is a renderable canvas variant
       const finalCanvas = result.canvas || result;
       const isValid = finalCanvas && (
         finalCanvas instanceof HTMLCanvasElement ||
@@ -65,188 +67,37 @@ export const useUnifiedProcessor = () => {
     }
   }, [updateProgress]);
 
-  /**
-   * STRATEGY: Process Workflow (Pipeline)
-   */
-  /**
-   * Internal helper to reset items status
-   */
+  /* 
+   _resetItems:
+   Resets status, step details, and results of all queue items back to 'pending'.
+  */
   const _resetItems = useCallback((itemsList) => {
-    return itemsList.map(item => {
-      const newItem = Object.assign(
-        Object.create(Object.getPrototypeOf(item)),
-        item,
-        { 
-          status: 'pending', 
-          error: null, 
-          progress: 0,
-          resultCanvas: null,
-          stepResults: {}
-        }
-      );
-      return newItem;
-    });
+    return itemsList.map(item => ({
+      ...item,
+      status: 'pending',
+      error: null,
+      progress: 0,
+      resultCanvas: null,
+      stepResults: {}
+    }));
   }, []);
 
-  /**
-   * STRATEGY: Process Workflow (Pipeline)
-   */
-  const executeWorkflow = useCallback(async (options = {}) => {
-    const { forceReset = false } = options;
-    if (workflowSteps.length === 0) return showToast('Add steps to your pipeline first', 'warning');
-    
-    let currentItems = [...items];
-    if (forceReset) {
-      currentItems = _resetItems(currentItems);
-      setItems(currentItems);
-    }
-
-    const pendingItems = currentItems.filter(i => i.status !== 'done');
-    if (pendingItems.length === 0) {
-       if (items.length === 0) return showToast('No images uploaded', 'info');
-       return showToast('All images already processed', 'info');
-    }
-
-    setIsProcessing(true);
-    
-    // Work on a local copy to avoid closure issues during the long loop
-    const workingItems = [...currentItems];
-    
-    for (let i = 0; i < pendingItems.length; i++) {
-      const item = pendingItems[i];
-      const itemIdx = workingItems.findIndex(ni => ni.id === item.id);
-      
-      workingItems[itemIdx] = Object.assign(
-        Object.create(Object.getPrototypeOf(item)),
-        item,
-        { status: 'processing' }
-      );
-      setItems([...workingItems]);
-
-      let currentCanvas = item.sourceCanvas;
-      
-      try {
-        for (let j = 0; j < workflowSteps.length; j++) {
-          const step = workflowSteps[j];
-          const prefix = `[${i + 1}/${pendingItems.length}] Step ${j + 1}: `;
-          
-          const result = await processItem(item, step.serviceId, step.options, prefix, currentCanvas);
-          if (result) {
-            currentCanvas = result;
-            workingItems[itemIdx].stepResults = {
-               ...workingItems[itemIdx].stepResults,
-               [step.id]: { resultCanvas: result, status: 'done' }
-            };
-          }
-        }
-        
-        workingItems[itemIdx] = Object.assign(
-          Object.create(Object.getPrototypeOf(workingItems[itemIdx])),
-          workingItems[itemIdx],
-          { 
-            resultCanvas: currentCanvas,
-            status: 'done' 
-          }
-        );
-
-        if (item.id === activeItemId) {
-          setResultCanvas(currentCanvas);
-        }
-      } catch (err) {
-        workingItems[itemIdx] = Object.assign(
-          Object.create(Object.getPrototypeOf(workingItems[itemIdx])),
-          workingItems[itemIdx],
-          { 
-            status: 'error',
-            error: err.message
-          }
-        );
-      }
-      
-      setItems([...workingItems]);
-    }
-
-    setIsProcessing(false);
-    showToast('Workflow pipeline complete', 'success');
-  }, [items, workflowSteps, setItems, setIsProcessing, showToast, processItem, activeItemId, setResultCanvas, _resetItems]);
+  // --- Sub-Hooks Strategy Instantiation ---
+  const { executeSingle } = useSingleProcessor(workspaceContext, uiContext);
+  const { executeBatch } = useBatchProcessor(workspaceContext, uiContext, processItem, _resetItems);
+  const {
+    executeWorkflow,
+    addStep,
+    removeStep,
+    updateStepOptions,
+    reorderSteps
+  } = useWorkflowProcessor(workspaceContext, uiContext, processItem, _resetItems);
 
   /**
-   * STRATEGY: Process Batch (Single Service)
+   * --- Queue Management Actions ---
    */
-  const executeBatch = useCallback(async (serviceId, options, runOptions = {}) => {
-    const { forceReset = false } = runOptions;
-    
-    let currentItems = [...items];
-    if (forceReset) {
-      currentItems = _resetItems(currentItems);
-      setItems(currentItems);
-    }
 
-    const pendingItems = currentItems.filter(i => i.status !== 'done');
-    if (pendingItems.length === 0) return showToast('No images to process', 'info');
-
-    setIsProcessing(true);
-    const workingItems = [...currentItems];
-
-    for (let i = 0; i < pendingItems.length; i++) {
-      const item = pendingItems[i];
-      const itemIdx = workingItems.findIndex(ni => ni.id === item.id);
-      
-      workingItems[itemIdx].status = 'processing';
-      setItems([...workingItems]);
-
-      try {
-        const result = await processItem(item, serviceId, options, `[${i + 1}/${pendingItems.length}] `);
-        workingItems[itemIdx].resultCanvas = result;
-        workingItems[itemIdx].status = 'done';
-      } catch (err) {
-        workingItems[itemIdx].status = 'error';
-        workingItems[itemIdx].error = err.message;
-      }
-      
-      setItems([...workingItems]);
-    }
-
-    setIsProcessing(false);
-    showToast('Batch processing complete', 'success');
-  }, [items, setItems, setIsProcessing, showToast, processItem, _resetItems]);
-
-  /**
-   * STRATEGY: Process Single
-   */
-  const executeSingle = useCallback(async (serviceId, options, sourceCanvas) => {
-    setIsProcessing(true);
-    try {
-      const result = await processorEngine.process(
-        serviceId,
-        sourceCanvas,
-        options,
-        (prog, msg) => updateProgress(prog, msg)
-      );
-      
-      const canvas = result.canvas || result;
-      const isValid = canvas && (
-        canvas instanceof HTMLCanvasElement ||
-        canvas instanceof OffscreenCanvas ||
-        canvas instanceof ImageBitmap
-      );
-
-      if (isValid) {
-        setResultCanvas(canvas);
-        showToast('Processing complete', 'success');
-      }
-      
-      return result;
-    } catch (err) {
-      showToast(`Error: ${err.message}`, 'error');
-    } finally {
-      setIsProcessing(false);
-    }
-  }, [setIsProcessing, updateProgress, setResultCanvas, showToast]);
-
-  /**
-   * Queue Management
-   */
+  // Adds multiple files to the workspace processing queue, generating thumbnails asynchronously
   const addFiles = useCallback(async (files) => {
     const newItems = [];
     for (const file of files) {
@@ -255,15 +106,16 @@ export const useUnifiedProcessor = () => {
         showToast(`File ${file.name} is too large (max 5MB)`, 'warning');
         continue;
       }
-      
+
       const img = await loadImage(file);
       const { canvas } = imageToCanvas(img);
-      
-      const item = new ProcessingItem({
+
+      const item = createBatchItem({
         name: file.name,
         file: file,
         sourceCanvas: canvas
       });
+      item.thumbnailUrl = canvasToThumbURL(canvas);
       newItems.push(item);
     }
 
@@ -275,10 +127,11 @@ export const useUnifiedProcessor = () => {
     showToast(`Added ${newItems.length} image(s)`, 'success');
   }, [activeItemId, setItems, setActiveItemId, setOriginalCanvas, showToast]);
 
+  // Removes a specific image from the queue and disposes of its allocated canvases to free RAM/VRAM
   const removeItem = useCallback((id) => {
     setItems(prev => {
       const itemToDispose = prev.find(item => item.id === id);
-      if (itemToDispose) itemToDispose.dispose();
+      if (itemToDispose) disposeBatchItem(itemToDispose);
       return prev.filter(item => item.id !== id);
     });
     if (activeItemId === id) {
@@ -288,6 +141,7 @@ export const useUnifiedProcessor = () => {
     }
   }, [activeItemId, setActiveItemId, setOriginalCanvas, setResultCanvas, setItems]);
 
+  // Selects an image from the queue to load as the active canvas in the editor viewport
   const selectItem = useCallback((id) => {
     const item = items.find(i => i.id === id);
     if (item) {
@@ -297,6 +151,7 @@ export const useUnifiedProcessor = () => {
     }
   }, [items, setActiveItemId, setOriginalCanvas, setResultCanvas]);
 
+  // Toggles the selection checkbox of a specific queued item for bulk actions
   const toggleItemSelection = useCallback((id) => {
     setSelectedIds(prev => {
       const next = new Set(prev);
@@ -306,14 +161,17 @@ export const useUnifiedProcessor = () => {
     });
   }, [setSelectedIds]);
 
+  // Checks/Selects all loaded items inside the current batch view
   const selectAllItems = useCallback(() => {
     setSelectedIds(new Set(items.map(i => i.id)));
   }, [items, setSelectedIds]);
 
+  // Unchecks/Deselects all loaded items inside the current batch view
   const deselectAllItems = useCallback(() => {
     setSelectedIds(new Set());
   }, [setSelectedIds]);
 
+  // Reorders items in the queue list (supporting drag-and-drop actions)
   const reorderItems = useCallback((startIndex, endIndex) => {
     const result = Array.from(items);
     const [removed] = result.splice(startIndex, 1);
@@ -322,8 +180,10 @@ export const useUnifiedProcessor = () => {
   }, [items, setItems]);
 
   /**
-   * Downloading Logic
+   * --- Bulk Downloading Actions ---
    */
+
+  // Triggers client-side downloads for all explicitly checked items that have successfully processed
   const downloadSelected = useCallback(() => {
     items.forEach(item => {
       if (selectedIds.has(item.id) && item.resultCanvas) {
@@ -333,6 +193,7 @@ export const useUnifiedProcessor = () => {
     });
   }, [items, selectedIds, getDownloadMetadata]);
 
+  // Triggers client-side downloads for all processed items in the queue
   const downloadAll = useCallback(() => {
     items.forEach(item => {
       if (item.resultCanvas) {
@@ -342,64 +203,48 @@ export const useUnifiedProcessor = () => {
     });
   }, [items, getDownloadMetadata]);
 
-  /**
-   * Workflow API
-   */
-  const addStep = useCallback((serviceId, options) => {
-    setWorkflowSteps(prev => [...prev, { id: `step_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`, serviceId, options }]);
-  }, [setWorkflowSteps]);
-
-  const removeStep = useCallback((id) => {
-    setWorkflowSteps(prev => prev.filter(step => step.id !== id));
-  }, [setWorkflowSteps]);
-
-  const updateStepOptions = useCallback((id, options) => {
-    setWorkflowSteps(prev => prev.map(step => step.id === id ? { ...step, options } : step));
-  }, [setWorkflowSteps]);
-
-  const reorderStepsWorkflow = useCallback((startIndex, endIndex) => {
-    setWorkflowSteps(prev => {
-      const result = Array.from(prev);
-      const [removed] = result.splice(startIndex, 1);
-      result.splice(endIndex, 0, removed);
-      return result;
-    });
-  }, [setWorkflowSteps]);
-
-  const previewStep = useCallback((stepId) => {
-    const activeItem = items.find(i => i.id === activeItemId);
-    if (!activeItem) return showToast('No active item selected', 'info');
-    
-    const stepResult = activeItem.stepResults?.[stepId]?.resultCanvas;
-    if (stepResult) {
-      setResultCanvas(stepResult);
-      showToast('Previewing step result', 'info');
-    } else {
-      showToast('Step result not available yet. Please run the workflow.', 'warning');
-    }
-  }, [items, activeItemId, setResultCanvas, showToast]);
-
-  const downloadStep = useCallback((stepId) => {
-    const activeItem = items.find(i => i.id === activeItemId);
-    if (!activeItem) return showToast('No active item selected', 'info');
-    
-    const stepResult = activeItem.stepResults?.[stepId]?.resultCanvas;
-    if (stepResult) {
-      const step = workflowSteps.find(s => s.id === stepId);
-      const { filename, mimeType } = getDownloadMetadata(activeItem, step?.serviceId, stepResult);
-      downloadCanvas(stepResult, filename, mimeType);
-    } else {
-      showToast('Step result not available yet. Please run the workflow.', 'warning');
-    }
-  }, [items, activeItemId, workflowSteps, getDownloadMetadata, showToast]);
-
+  // Helper utility to completely reset the status indicators of all queue items
   const resetItemsStatus = useCallback(() => {
     const newItems = _resetItems(items);
     setItems(newItems);
     return newItems;
   }, [items, setItems, _resetItems]);
 
-  return {
+  // --- Mapped Execution Router & Active State Detections ---
+  
+  // Checks if the current AI service is compatible with batch processing modes
+  const batchAvailable = !['image-editor', 'object-segmentation', 'magic-erase'].includes(currentService.id);
+  
+  // Computes which processing screen mode is active
+  const activeMode = currentService.id === 'workflows'
+    ? 'workflow'
+    : (batchAvailable && batchMode === 'batch' ? 'batch' : 'single');
+
+  // Automatically resets item processing status when shifting between single-image and batch services
+  useEffect(() => {
+    if (activeMode !== 'workflow') {
+      resetItemsStatus();
+    }
+  }, [currentService.id, activeMode]);
+
+  // Central Router: Delegates execution flow dynamically to correct strategy hooks
+  const execute = useCallback(async (options = {}, runOptions = {}) => {
+    switch (activeMode) {
+      case 'workflow':
+        return executeWorkflow(runOptions);
+      case 'batch':
+        return executeBatch(currentService.id, options, runOptions);
+      default:
+        return executeSingle(currentService.id, options, originalCanvas);
+    }
+  }, [activeMode, currentService.id, originalCanvas, executeWorkflow, executeBatch, executeSingle]);
+
+  // Context-compatible properties derived dynamically for UI elements
+  const activeItemIdDerived = activeMode === 'workflow' ? (items[0]?.id || null) : (items.find(i => i.id === activeItemId)?.id || null);
+  const doneCount = activeMode === 'single' ? 0 : items.filter(i => i.status === 'done').length;
+
+  // --- Final Unified Interface API Return ---
+  const result = {
     executeSingle,
     executeBatch,
     executeWorkflow,
@@ -414,14 +259,28 @@ export const useUnifiedProcessor = () => {
     downloadSelected,
     downloadAll,
     items,
+    selectedIds,
     workflowSteps,
     addStep,
     removeStep,
     updateStepOptions,
-    reorderSteps: reorderStepsWorkflow,
-    previewStep,
-    downloadStep
+    reorderSteps,
+
+    // Expose collapsed legacy useAppEngine router properties:
+    mode: activeMode,
+    execute,
+    batchAvailable,
+    batchMode,
+    setMode: setBatchMode,
+    activeItemId: activeItemIdDerived,
+    doneCount,
+    processAll: (options) => execute(options),
+    rerunAll: (options) => execute(options, { forceReset: true }),
+  };
+
+  return {
+    ...result,
+    engine: result,
+    unified: result,
   };
 };
-
-

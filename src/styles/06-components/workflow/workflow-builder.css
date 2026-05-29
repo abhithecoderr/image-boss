@@ -1,0 +1,129 @@
+/* 
+  Component: Workflow Builder Pipeline Styles
+  Calm & Carbon Dark Theme
+*/
+
+.workflow-builder-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+}
+
+.workflow-header-panel {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: var(--bg-surface);
+  padding: var(--space-3) var(--space-4);
+  border-radius: var(--radius-md);
+  border: 1px solid var(--border);
+}
+
+.workflow-header-title {
+  margin: 0;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--text-main);
+}
+
+.workflow-add-step {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.workflow-add-step-label {
+  font-size: 12px;
+  color: var(--text-muted);
+}
+
+.workflow-steps-list {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.workflow-empty-hint {
+  text-align: center;
+  padding: var(--space-6);
+  background-color: var(--bg-surface);
+  border-radius: var(--radius-md);
+  border: 1px dashed var(--border);
+  color: var(--text-muted);
+  font-size: 13px;
+}
+
+.workflow-step-card {
+  background-color: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  padding: var(--space-4);
+  transition: border-color var(--transition-fast);
+}
+
+.workflow-step-card:hover {
+  border-color: var(--border-light);
+}
+
+.workflow-step-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: var(--space-3);
+  border-bottom: 1px solid var(--border);
+  padding-bottom: var(--space-2);
+}
+
+.workflow-step-title {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  color: var(--text-main);
+  font-size: 14px;
+  font-weight: 600;
+}
+
+.workflow-step-number {
+  background-color: var(--bg-input);
+  color: var(--text-main);
+  border-radius: var(--radius-pill);
+  width: 20px;
+  height: 20px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 11px;
+  font-weight: 700;
+  border: 1px solid var(--border);
+}
+
+.workflow-step-actions {
+  display: flex;
+  gap: var(--space-1);
+}
+
+.workflow-step-actions .btn {
+  background: var(--bg-input);
+  color: var(--text-muted);
+}
+
+.workflow-step-actions .btn:hover {
+  color: var(--text-main);
+  background: var(--bg-hover);
+}
+
+.workflow-step-action-delete {
+  color: var(--error) !important;
+}
+
+.workflow-step-action-delete:hover {
+  background: rgba(239, 68, 68, 0.08) !important;
+  border-color: var(--error) !important;
+}
+
+.workflow-no-options {
+  font-size: 12px;
+  color: var(--text-dim);
+  grid-column: 1 / -1;
+  padding: var(--space-2) 0;
+}

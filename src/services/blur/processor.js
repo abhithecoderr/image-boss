@@ -11,6 +11,7 @@
 
 import BlurWorker from './worker.js?worker';
 import { workerRegistry } from '../../core/worker-registry.js';
+import { runWorkerJob } from '../../core/worker-utils.js';
 
 const SERVICE_ID = 'blur';
 
@@ -21,6 +22,13 @@ let currentVariant = 'nano';
 function getWorker() {
   return workerRegistry.getWorker(SERVICE_ID, BlurWorker);
 }
+
+// Reset our ready-state whenever the registry evicts this worker so that
+// the next process() call re-initializes the model properly.
+workerRegistry.onDispose(SERVICE_ID, () => {
+  isReady = false;
+  pendingInit = null;
+});
 
 /**
  * Model variants - trade-off between speed and accuracy
@@ -35,9 +43,6 @@ export const MODEL_VARIANTS = {
 
 /**
  * Initialize the face blur worker
- * @param {string} variant - Model variant to load
- * @param {Function} onProgress - Progress callback
- * @returns {Promise<{device: string, variant: string}>}
  */
 export async function init(variant = 'nano', onProgress) {
   const worker = getWorker();
@@ -45,40 +50,18 @@ export async function init(variant = 'nano', onProgress) {
     return { device: 'cached', variant: currentVariant };
   }
 
-  // If already initializing, wait for it
   if (pendingInit) {
     return pendingInit;
   }
 
-  pendingInit = new Promise((resolve, reject) => {
-
-    // Handle messages
-    const handleMessage = (event) => {
-      const { type, progress, message, device, variant: v, error } = event.data;
-
-      switch (type) {
-        case 'progress':
-          onProgress?.(progress, message);
-          break;
-        case 'ready':
-          isReady = true;
-          currentVariant = v;
-          worker.removeEventListener('message', handleMessage);
-          pendingInit = null;
-          resolve({ device, variant: v });
-          break;
-        case 'error':
-          worker.removeEventListener('message', handleMessage);
-          pendingInit = null;
-          reject(new Error(error));
-          break;
-      }
-    };
-
-    worker.addEventListener('message', handleMessage);
-
-    // Send init command
-    worker.postMessage({ type: 'init', payload: { variant } });
+  pendingInit = runWorkerJob(worker, 'init', { variant }, [], onProgress).then((res) => {
+    isReady = true;
+    currentVariant = variant;
+    pendingInit = null;
+    return res;
+  }).catch((err) => {
+    pendingInit = null;
+    throw err;
   });
 
   return pendingInit;
@@ -98,134 +81,118 @@ export async function detectFaces(source, options = {}, onProgress) {
   const bitmap = await createImageBitmap(source);
   const { width, height } = bitmap;
 
-  return new Promise((resolve, reject) => {
-    const handleMessage = (event) => {
-      const { type, detections, error } = event.data;
-      if (type === 'detections') {
-        worker.removeEventListener('message', handleMessage);
-        resolve(detections);
-      } else if (type === 'error') {
-        worker.removeEventListener('message', handleMessage);
-        reject(new Error(error));
-      }
-    };
-
-    worker.addEventListener('message', handleMessage);
-    worker.postMessage({
-      type: 'detect',
-      payload: { bitmap, width, height, variant },
-    }, [bitmap]);
-  });
+  try {
+    return await runWorkerJob(
+      worker,
+      'detect',
+      { bitmap, width, height, variant },
+      [bitmap],
+      onProgress
+    );
+  } finally {
+    bitmap.close();
+  }
 }
 
-let lastDetections = [];
-let lastSourceBitmap = null;
-let lastWidth = 0;
-let lastHeight = 0;
-
 /**
- * Get results and cache source for fast tweaking
+ * Get results and cache source for fast tweaking (canvas-scoped to prevent memory leaks)
  */
 async function prepareExecution(source) {
-    const bitmap = await createImageBitmap(source);
-    if (lastSourceBitmap) lastSourceBitmap.close();
-    lastSourceBitmap = bitmap; // Cache the bitmap directly — no redundant re-decode
-    lastWidth = bitmap.width;
-    lastHeight = bitmap.height;
-    return { bitmap: await createImageBitmap(lastSourceBitmap), width: lastWidth, height: lastHeight };
+  const bitmap = await createImageBitmap(source);
+
+  const oldCache = source._blurCache || {};
+  if (oldCache.lastSourceBitmap) {
+    try { oldCache.lastSourceBitmap.close(); } catch (_) {}
+  }
+
+  source._blurCache = {
+    lastSourceBitmap: await createImageBitmap(bitmap),
+    lastWidth: bitmap.width,
+    lastHeight: bitmap.height,
+    lastDetections: []
+  };
+
+  return {
+    bitmap,
+    width: bitmap.width,
+    height: bitmap.height
+  };
 }
 
 /**
  * Blur faces in an image
- * @param {HTMLCanvasElement|ImageBitmap} source - Source image
- * @param {Object} options - Processing options
- * @param {Function} onProgress - Progress callback
- * @returns {Promise<{canvas: HTMLCanvasElement, detections: Array}>}
  */
 export async function process(source, options = {}, onProgress) {
   const worker = getWorker();
   const { blurAmount = 20, radiusScale = 1.0, feathering = 0.75, shape = 1.0, variant = currentVariant } = options;
 
-  // Ensure initialized
   if (!isReady || variant !== currentVariant) {
     await init(variant, onProgress);
   }
 
-  // Get results and cache source for fast tweaking
   const { bitmap, width, height } = await prepareExecution(source);
 
-  return new Promise((resolve, reject) => {
-    const handleMessage = (event) => {
-      const { type, progress, message, resultBitmap, detections, count, error } = event.data;
+  try {
+    const result = await runWorkerJob(
+      worker,
+      'blur',
+      { bitmap, width, height, blurAmount, radiusScale, feathering, shape, variant },
+      [bitmap],
+      onProgress
+    );
 
-      switch (type) {
-        case 'progress':
-          onProgress?.(progress, message);
-          break;
-        case 'complete':
-          worker.removeEventListener('message', handleMessage);
-          lastDetections = detections;
+    if (source._blurCache) {
+      source._blurCache.lastDetections = result.detections;
+    }
 
-          // No manual canvas creation or putImageData needed
-          // The result is already a high-performance ImageBitmap
-          resolve({
-            canvas: resultBitmap,
-            detections,
-            count,
-          });
-          break;
-        case 'error':
-          worker.removeEventListener('message', handleMessage);
-          reject(new Error(error));
-          break;
-      }
+    return {
+      canvas: result.resultBitmap,
+      detections: result.detections,
+      count: result.count
     };
-
-    worker.addEventListener('message', handleMessage);
-    worker.postMessage({
-      type: 'blur',
-      payload: { bitmap, width, height, blurAmount, radiusScale, feathering, shape, variant },
-    }, [bitmap]);
-  });
+  } catch (err) {
+    console.error(`[Face Blur] Processing failed:`, err);
+    throw err;
+  }
 }
 
 /**
  * Re-blur with existing detections for fast UI feedback
  */
-export async function updateBlurTransform(options = {}) {
+export async function updateBlurTransform(source, options = {}) {
   const worker = getWorker();
-  if (!isReady || !lastDetections.length || !lastSourceBitmap) return;
+  const cache = source?._blurCache;
+  if (!isReady || !cache || !cache.lastDetections?.length || !cache.lastSourceBitmap) return;
+
   const { blurAmount = 20, radiusScale = 1.0, feathering = 0.75, shape = 1.0 } = options;
+  const bitmap = await createImageBitmap(cache.lastSourceBitmap);
 
-  const bitmap = await createImageBitmap(lastSourceBitmap);
-
-  return new Promise((resolve, reject) => {
-    const handleMessage = (event) => {
-      const { type, resultBitmap, detections, count, error } = event.data;
-      if (type === 'complete') {
-        worker.removeEventListener('message', handleMessage);
-        resolve({ canvas: resultBitmap, detections, count });
-      } else if (type === 'error') {
-        worker.removeEventListener('message', handleMessage);
-        reject(new Error(error));
-      }
-    };
-
-    worker.addEventListener('message', handleMessage);
-    worker.postMessage({
-      type: 'reblur',
-      payload: {
+  try {
+    const result = await runWorkerJob(
+      worker,
+      'reblur',
+      {
         bitmap,
-        width: lastWidth,
-        height: lastHeight,
-        detections: lastDetections,
+        width: cache.lastWidth,
+        height: cache.lastHeight,
+        detections: cache.lastDetections,
         blurAmount,
         radiusScale,
         feathering,
         shape
       },
-    }, [bitmap]);
-  });
+      [bitmap]
+    );
+
+    return {
+      canvas: result.resultBitmap,
+      detections: result.detections,
+      count: result.count
+    };
+  } catch (err) {
+    console.error(`[Face Blur] Re-blur failed:`, err);
+    throw err;
+  }
 }
 
 /**
@@ -234,9 +201,6 @@ export async function updateBlurTransform(options = {}) {
 export async function dispose() {
   const worker = getWorker();
   if (!worker) return;
-  // Just signal model eviction — don't terminate the worker thread itself
-  // (the registry manages the worker lifetime)
-  if (lastSourceBitmap) { lastSourceBitmap.close(); lastSourceBitmap = null; }
   worker.postMessage({ type: 'dispose' });
   isReady = false;
   pendingInit = null;

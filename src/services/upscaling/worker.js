@@ -11,12 +11,16 @@ import { createProgressReporter } from '../../core/worker-utils.js';
 // Configure ONNX Runtime for stability
 ort.env.wasm.numThreads = 1;
 
-// Point to a reliable CDN for WASM files
+// Point to a local directory for WASM files (prevents COEP blocks)
 const ORT_VERSION = '1.20.1';
-ort.env.wasm.wasmPaths = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/`;
+ort.env.wasm.wasmPaths = '/onnx/';
 
-const MODEL_ONNX_URL = 'https://huggingface.co/TheGuy444/Real-ESRGAN-ONNX/resolve/main/onnx/model.onnx';
-const MODEL_DATA_URL = 'https://huggingface.co/TheGuy444/Real-ESRGAN-ONNX/resolve/main/onnx/model.data';
+import { UPSCALING_MODELS } from '../config/models.js';
+
+const MODEL_ONNX_URL = UPSCALING_MODELS.onnx.url;
+const MODEL_DATA_URL = UPSCALING_MODELS.data.url;
+
+
 const MAX_INPUT_SIZE = 128; // Model expects exactly 128x128
 const SCALE_FACTOR = 4;
 const OVERLAP = 16;         // Standard overlap for Real-ESRGAN
@@ -91,8 +95,6 @@ async function getSession(onProgress) {
 
     session = await ort.InferenceSession.create(modelBuffer, sessionOptions);
     currentDevice = useWebGPU ? 'webgpu' : 'wasm';
-    console.info(`✓ Real-ESRGAN loaded (${deviceLabel})`);
-
     report(0.4, 0.4, 'Model ready')(0);
     return session;
 
@@ -366,6 +368,5 @@ self.onmessage = async ({ data }) => {
       session = null;
       currentDevice = null;
     }
-    console.info('[Upscaling Worker] Model disposed.');
   }
 };

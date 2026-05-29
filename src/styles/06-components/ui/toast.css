@@ -1,0 +1,76 @@
+/* 
+  UI Component: Toast Notification Styles
+  Calm & Carbon Dark Theme
+*/
+
+.toast {
+  position: fixed;
+  bottom: var(--space-6);
+  left: 50%;
+  transform: translateX(-50%) translateY(40px);
+  display: flex;
+  align-items: center;
+  gap: var(--space-3);
+  padding: 10px 16px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  box-shadow: var(--shadow-lg);
+  font-size: 13px;
+  color: var(--text-main);
+  opacity: 0;
+  pointer-events: none;
+  transition: transform var(--transition-normal), opacity var(--transition-normal);
+  z-index: 1000;
+  max-width: 90vw;
+  width: max-content;
+}
+
+.toast.show {
+  transform: translateX(-50%) translateY(0);
+  opacity: 1;
+  pointer-events: auto;
+}
+
+.toast-icon-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.toast-message {
+  font-weight: 500;
+}
+
+/* Toast Semantic Colors */
+.toast-success {
+  border-color: rgba(16, 185, 129, 0.3);
+  background-color: #0c100e; /* Solid dark carbon green context */
+}
+.toast-success .toast-icon-wrapper {
+  color: #10b981;
+}
+
+.toast-error {
+  border-color: rgba(239, 68, 68, 0.3);
+  background-color: #140d0d;
+}
+.toast-error .toast-icon-wrapper {
+  color: #ef4444;
+}
+
+.toast-warning {
+  border-color: rgba(245, 166, 35, 0.3);
+  background-color: #14110c;
+}
+.toast-warning .toast-icon-wrapper {
+  color: #f5a623;
+}
+
+.toast-info {
+  border-color: rgba(59, 130, 246, 0.3);
+  background-color: #0d0f14;
+}
+.toast-info .toast-icon-wrapper {
+  color: #3b82f6;
+}

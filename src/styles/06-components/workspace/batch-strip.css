@@ -1,0 +1,233 @@
+/* 
+  Component: Batch Queue Thumbnail Strip Styles
+  Calm & Carbon Dark Theme
+*/
+
+.batch-strip {
+  padding: var(--space-xs) 0;
+  background: var(--bg-surface);
+  border-bottom: 1px solid var(--border);
+  min-height: 64px;
+  display: flex;
+  align-items: center;
+  width: 100%;
+  margin-bottom: var(--space-4);
+}
+
+.batch-strip--empty {
+  justify-content: center;
+  min-height: 72px;
+}
+
+.batch-strip-scroll {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  overflow-x: auto;
+  overflow-y: hidden;
+  padding: 4px 0;
+  scrollbar-width: thin;
+  scrollbar-color: var(--border) transparent;
+  flex: 1;
+}
+
+.batch-strip-scroll::-webkit-scrollbar {
+  height: 3px;
+}
+
+.batch-strip-scroll::-webkit-scrollbar-thumb {
+  background: var(--border-light);
+  border-radius: var(--radius-xs);
+}
+
+.batch-thumb {
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-sm);
+  border: 1.5px solid var(--border);
+  background: var(--bg-input);
+  cursor: grab;
+  position: relative;
+  overflow: hidden;
+  transition: all var(--transition-fast);
+  user-select: none;
+}
+
+.batch-thumb:hover {
+  border-color: var(--border-strong);
+  transform: scale(1.04);
+}
+
+.batch-thumb--active {
+  border-color: var(--highlight) !important;
+}
+
+.batch-thumb--selected {
+  border-color: var(--success) !important;
+}
+
+.batch-thumb--drag-over {
+  border-color: var(--highlight) !important;
+  border-style: dashed;
+  transform: scale(1.06);
+}
+
+.batch-thumb:active {
+  cursor: grabbing;
+}
+
+.batch-thumb-img {
+  width: 100%;
+  height: 100%;
+  object-fit: cover;
+  display: block;
+}
+
+.batch-thumb-placeholder {
+  width: 100%;
+  height: 100%;
+  background: var(--bg-elevated);
+}
+
+/* Status badge overrides in strip list context */
+.batch-status {
+  position: absolute !important;
+  bottom: 2px;
+  right: 2px;
+  padding: 1px 2px !important;
+  border-radius: var(--radius-xs) !important;
+  height: 12px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: none !important;
+  font-size: 8px !important;
+  z-index: 5;
+}
+
+.batch-spinner {
+  display: inline-block;
+  width: 8px;
+  height: 8px;
+  border: 1.2px solid var(--highlight);
+  border-right-color: transparent;
+  border-radius: 50%;
+  animation: spin 0.6s linear infinite;
+}
+
+.batch-status-icon {
+  width: 8px;
+  height: 8px;
+  display: block;
+}
+
+/* Selection checkmark icon */
+.batch-check {
+  position: absolute;
+  top: 2px;
+  left: 2px;
+  width: 14px;
+  height: 14px;
+  background: var(--success);
+  color: var(--bg-deep);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  line-height: 1;
+  z-index: 5;
+}
+
+.batch-check svg {
+  color: var(--bg-deep);
+}
+
+/* Hover close item trigger */
+.batch-remove {
+  position: absolute !important;
+  top: 2px;
+  right: 2px;
+  width: 14px !important;
+  height: 14px !important;
+  background: rgba(9, 9, 11, 0.85) !important;
+  color: var(--text-dim) !important;
+  border-radius: 50% !important;
+  cursor: pointer;
+  display: flex !important;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  padding: 0 !important;
+  z-index: 10;
+  border: 1px solid var(--border) !important;
+}
+
+.batch-thumb:hover .batch-remove {
+  opacity: 1;
+}
+
+.batch-remove:hover {
+  background: var(--error) !important;
+  color: #ffffff !important;
+  border-color: var(--error) !important;
+}
+
+.batch-add-box {
+  flex: 0 0 48px;
+  width: 48px;
+  height: 48px;
+  border-radius: var(--radius-sm);
+  border: 1.5px dashed var(--border-light);
+  background: transparent;
+  cursor: pointer;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 2px;
+  transition: all var(--transition-fast);
+}
+
+.batch-add-box:hover {
+  border-color: var(--highlight);
+  background: var(--bg-hover);
+}
+
+.batch-add-box--large {
+  flex: 0 0 auto;
+  width: 180px;
+  height: 48px;
+  flex-direction: row !important;
+  gap: var(--space-2);
+}
+
+.batch-add-icon {
+  color: var(--text-dim);
+  display: flex;
+  align-items: center;
+}
+
+.batch-add-box:hover .batch-add-icon {
+  color: var(--highlight);
+}
+
+.batch-add-label {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.batch-add-box:hover .batch-add-label {
+  color: var(--highlight);
+}
+
+.batch-actions {
+  margin-left: var(--space-4);
+  display: flex;
+  gap: var(--space-2);
+  align-items: center;
+}
+
+.batch-clear-btn {
+  white-space: nowrap;
+}

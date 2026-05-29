@@ -1,0 +1,114 @@
+.sidebar {
+  width: 180px;
+  background: var(--bg-surface);
+  border-right: 1px solid var(--border);
+  padding: var(--space-4) var(--space-2);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-4);
+  height: 100vh;
+  position: sticky;
+  top: 0;
+  overflow-y: auto;
+  scrollbar-width: none; /* Hide scrollbar for clean strip look */
+}
+
+.sidebar::-webkit-scrollbar {
+  display: none;
+}
+
+/* Sidebar Header Area */
+.sidebar-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-2);
+  width: 100%;
+  padding: 0 var(--space-2) var(--space-3) var(--space-2);
+  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+}
+
+.sidebar .brand-logo {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
+  background: radial-gradient(circle, rgba(255, 170, 0, 0.15) 0%, transparent 70%);
+  border-radius: var(--radius-md);
+  font-size: 1.25rem;
+}
+
+/* Navigation Services Column */
+.sidebar .nav-services {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: var(--space-2) 0;
+}
+
+/* Vertically Stacked Slabs / Blocks */
+.sidebar .nav-item {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: flex-start;
+  width: 160px;
+  height: 38px;
+  padding: 0 var(--space-3);
+  border-radius: var(--radius-md);
+  background: rgba(255, 255, 255, 0.02);
+  color: var(--text-muted);
+  border: 1px solid rgba(255, 255, 255, 0.04);
+  transition: all var(--transition-fast) cubic-bezier(0.16, 1, 0.3, 1);
+  cursor: pointer;
+  gap: var(--space-2);
+  text-align: left;
+}
+
+.sidebar .nav-item:hover {
+  color: var(--text-main);
+  background: rgba(255, 170, 0, 0.05);
+  border-color: rgba(255, 170, 0, 0.2);
+  transform: translateX(2px);
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.sidebar .nav-item.active {
+  color: var(--highlight);
+  background: radial-gradient(circle at center, rgba(255, 170, 0, 0.08) 0%, rgba(255, 170, 0, 0.03) 100%);
+  border-color: rgba(255, 170, 0, 0.4);
+  box-shadow: 0 0 16px rgba(255, 170, 0, 0.1);
+}
+
+.sidebar .nav-item .icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  font-size: 1.1rem;
+  width: 18px;
+  height: 18px;
+  transition: transform var(--transition-fast) ease;
+}
+
+.sidebar .nav-item:hover .icon {
+  transform: scale(1.1);
+}
+
+.sidebar .nav-item .label {
+  font-size: 11px;
+  font-weight: 500;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  flex: 1;
+}
+
+.sidebar .nav-item.disabled {
+  opacity: 0.25;
+  cursor: not-allowed;
+}

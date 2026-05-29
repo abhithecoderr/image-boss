@@ -1,0 +1,42 @@
+/* 
+  UI Component: Input Styles
+  Calm & Carbon Dark Theme
+*/
+
+.premium-input-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  width: 100%;
+}
+
+.control-input {
+  width: 100%;
+  padding: 8px 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 14px;
+  outline: none;
+  transition: all var(--transition-fast);
+}
+
+.control-input:hover:not(:disabled) {
+  border-color: var(--border-light);
+  background: var(--bg-hover);
+}
+
+.control-input:focus {
+  border-color: var(--highlight);
+  background: var(--bg-surface);
+}
+
+.control-input::placeholder {
+  color: var(--text-dim);
+}
+
+.control-input:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

@@ -74,3 +74,47 @@ export function createProgressReporter(onProgress) {
   };
 }
 
+/**
+ * Standardized generic runner for Web Worker tasks.
+ * Abstracts Promises, listeners, cleanups, progress reporting, and errors.
+ */
+export function runWorkerJob(worker, actionType, payload, transferables = [], onProgress = null) {
+  const PROGRESS_THROTTLE = 100;
+  let lastProgressTime = 0;
+
+  return new Promise((resolve, reject) => {
+    const cleanup = () => {
+      worker.removeEventListener('message', messageHandler);
+      worker.removeEventListener('error', errorHandler);
+    };
+
+    const messageHandler = ({ data }) => {
+      const { type, progress, message, result, error } = data;
+
+      if (type === 'progress') {
+        const now = Date.now();
+        if (now - lastProgressTime > PROGRESS_THROTTLE || progress === 1) {
+          onProgress?.(progress, message);
+          lastProgressTime = now;
+        }
+      } else if (type === 'complete') {
+        cleanup();
+        resolve(result);
+      } else if (type === 'error') {
+        cleanup();
+        reject(new Error(error));
+      }
+    };
+
+    const errorHandler = (err) => {
+      cleanup();
+      reject(new Error(err.message || 'Worker task execution failure.'));
+    };
+
+    worker.addEventListener('message', messageHandler);
+    worker.addEventListener('error', errorHandler, { once: true });
+
+    worker.postMessage({ type: actionType, payload }, transferables);
+  });
+}
+

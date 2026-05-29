@@ -1,9 +1,10 @@
-import React, { useRef, useEffect } from 'react';
-import { useApp } from '../../../context/AppContext';
-import { useMaskEditor } from '../../../hooks/useMaskEditor';
+import React, { useRef, useEffect } from "react";
+import { useWorkspace, useSegmentation } from "../../../context/AppContext";
+import { useMaskEditor } from "../../../hooks/useMaskEditor";
 
 const MaskEditorOverlay = ({ resRef }) => {
-  const { editing, resultCanvas } = useApp();
+  const { resultCanvas } = useWorkspace();
+  const { editing } = useSegmentation();
   const { startDrawing, moveDrawing, endDrawing } = useMaskEditor(resRef);
   const brushPreviewRef = useRef(null);
 
@@ -16,7 +17,7 @@ const MaskEditorOverlay = ({ resRef }) => {
       const y = e.clientY;
       const size = editing.brushSize;
 
-      brushPreviewRef.current.style.display = 'block';
+      brushPreviewRef.current.style.display = "block";
       brushPreviewRef.current.style.left = `${x}px`;
       brushPreviewRef.current.style.top = `${y}px`;
       brushPreviewRef.current.style.width = `${size}px`;
@@ -24,23 +25,24 @@ const MaskEditorOverlay = ({ resRef }) => {
     };
 
     const onLeave = () => {
-      if (brushPreviewRef.current) brushPreviewRef.current.style.display = 'none';
+      if (brushPreviewRef.current)
+        brushPreviewRef.current.style.display = "none";
     };
 
-    if (editing.activeTool !== 'none' && resRef.current) {
-      resRef.current.addEventListener('mousemove', onMove);
-      resRef.current.addEventListener('mouseleave', onLeave);
+    if (editing.activeTool !== "none" && resRef.current) {
+      resRef.current.addEventListener("mousemove", onMove);
+      resRef.current.addEventListener("mouseleave", onLeave);
     }
 
     return () => {
       if (resRef.current) {
-        resRef.current.removeEventListener('mousemove', onMove);
-        resRef.current.removeEventListener('mouseleave', onLeave);
+        resRef.current.removeEventListener("mousemove", onMove);
+        resRef.current.removeEventListener("mouseleave", onLeave);
       }
     };
   }, [editing.activeTool, editing.brushSize, resRef]);
 
-  if (editing.activeTool === 'none' || !resultCanvas) return null;
+  if (editing.activeTool === "none" || !resultCanvas) return null;
 
   return (
     <>
@@ -51,10 +53,7 @@ const MaskEditorOverlay = ({ resRef }) => {
         onMouseUp={endDrawing}
         onMouseLeave={endDrawing}
       />
-      <div
-        ref={brushPreviewRef}
-        className="brush-preview"
-      />
+      <div ref={brushPreviewRef} className="brush-preview" />
     </>
   );
 };

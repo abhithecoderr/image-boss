@@ -1,6 +1,6 @@
 import Worker from './worker.js?worker';
 import { applySobelFilter } from '../../core/canvas-utils.js';
-import { createProgressReporter } from '../../core/worker-utils.js';
+import { createProgressReporter, runWorkerJob } from '../../core/worker-utils.js';
 import { workerRegistry } from '../../core/worker-registry.js';
 
 const SERVICE_ID = 'line-art';
@@ -54,52 +54,14 @@ async function processSobel(sourceCanvas, options, onProgress) {
 async function processAI(sourceCanvas, options, onProgress) {
   workerRegistry.activate(SERVICE_ID);
   const w = getWorker();
-  let lastProgressTime = 0;
-  const PROGRESS_THROTTLE = 100;
-
   const bitmap = await createImageBitmap(sourceCanvas);
 
-  return new Promise((resolve, reject) => {
-    const cleanup = () => {
-      w.removeEventListener('message', messageHandler);
-      w.removeEventListener('error', errorHandler);
-      bitmap.close();
-    };
-
-    const messageHandler = ({ data }) => {
-      const { type, progress, message, result, error } = data;
-
-      if (type === 'progress') {
-        const now = Date.now();
-        if (now - lastProgressTime > PROGRESS_THROTTLE || progress === 1) {
-            onProgress?.(progress, message);
-            lastProgressTime = now;
-        }
-      } else if (type === 'complete') {
-        cleanup();
-        resolve(resultToCanvas(sourceCanvas, result));
-      } else if (type === 'error') {
-        cleanup();
-        reject(new Error(error));
-      }
-    };
-
-    const errorHandler = (err) => {
-      cleanup();
-      reject(new Error(err.message || 'Worker error'));
-    };
-
-    w.addEventListener('message', messageHandler);
-    w.addEventListener('error', errorHandler);
-
-    w.postMessage({
-      type: 'process',
-      payload: {
-        bitmap,
-        options
-      }
-    }, [bitmap]);
-  });
+  try {
+    const result = await runWorkerJob(w, 'process', { bitmap, options }, [bitmap], onProgress);
+    return resultToCanvas(sourceCanvas, result);
+  } finally {
+    bitmap.close();
+  }
 }
 
 /**

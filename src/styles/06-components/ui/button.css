@@ -1,0 +1,117 @@
+/* 
+  UI Component: Button Styles
+  Calm & Carbon Dark Theme
+*/
+
+.btn {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--space-2);
+  padding: var(--space-2) var(--space-4);
+  font-weight: 500;
+  font-size: 14px;
+  border-radius: var(--radius-sm);
+  transition: all var(--transition-fast);
+  cursor: pointer;
+  border: 1px solid var(--border);
+  background-color: var(--bg-surface);
+  color: var(--text-main);
+  outline: none;
+  user-select: none;
+}
+
+.btn:hover:not(:disabled) {
+  background-color: var(--bg-hover);
+  border-color: var(--border-light);
+}
+
+.btn:active:not(:disabled) {
+  transform: scale(0.96);
+}
+
+.btn:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+/* Button Variants */
+.btn-primary {
+  background-color: var(--text-main);
+  color: var(--bg-deep);
+  border-color: var(--text-main);
+  font-weight: 600;
+}
+
+.btn-primary:hover:not(:disabled) {
+  background-color: var(--text-muted);
+  border-color: var(--text-muted);
+  color: var(--bg-deep);
+}
+
+.btn-secondary {
+  background-color: var(--bg-input);
+  border-color: var(--border);
+  color: var(--text-muted);
+}
+
+.btn-secondary:hover:not(:disabled) {
+  color: var(--text-main);
+  background-color: var(--bg-hover);
+  border-color: var(--border-light);
+}
+
+.btn-tertiary {
+  background-color: transparent;
+  border-color: transparent;
+  color: var(--text-muted);
+}
+
+.btn-tertiary:hover:not(:disabled) {
+  color: var(--text-main);
+  background-color: var(--bg-surface);
+}
+
+.btn-danger {
+  background-color: rgba(239, 68, 68, 0.1);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.2);
+}
+
+.btn-danger:hover:not(:disabled) {
+  background-color: #ef4444;
+  color: #ffffff;
+  border-color: #ef4444;
+}
+
+/* Button Sizes */
+.btn-large {
+  padding: var(--space-3) var(--space-6);
+  font-size: 15px;
+  border-radius: var(--radius-md);
+}
+
+.btn-tiny {
+  padding: var(--space-1) var(--space-2);
+  font-size: 11px;
+  border-radius: var(--radius-xs);
+  height: 22px;
+  gap: 2px;
+}
+
+/* Loading Spinners */
+.btn-spinner {
+  display: inline-flex;
+  margin-right: 4px;
+}
+
+.spinner-svg {
+  animation: spin 0.8s linear infinite;
+  color: currentColor;
+}
+
+@keyframes spin {
+  to {
+    transform: rotate(360deg);
+  }
+}

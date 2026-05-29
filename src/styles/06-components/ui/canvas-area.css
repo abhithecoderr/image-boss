@@ -1,0 +1,118 @@
+/* 
+  UI Component: Canvas Area & Upload Dropzone Styles
+  Calm & Carbon Dark Theme
+*/
+
+.upload-area {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  max-width: 680px;
+  width: 100%;
+  aspect-ratio: 1.6 / 1;
+  margin: 0 auto;
+  background: var(--bg-surface);
+  border: 1px dashed var(--border-light);
+  border-radius: var(--radius-lg);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  padding: var(--space-6);
+  text-align: center;
+}
+
+.upload-area:hover,
+.upload-area--drag-active {
+  border-color: var(--highlight);
+  background: var(--bg-hover);
+}
+
+.upload-content {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  color: var(--text-muted);
+}
+
+.upload-icon-wrapper {
+  color: var(--text-dim);
+  margin-bottom: var(--space-4);
+  transition: color var(--transition-fast);
+}
+
+.upload-area:hover .upload-icon-wrapper,
+.upload-area--drag-active .upload-icon-wrapper {
+  color: var(--highlight);
+}
+
+.upload-content h2 {
+  font-size: 18px;
+  font-weight: 600;
+  color: var(--text-main);
+  margin-bottom: var(--space-1);
+  letter-spacing: -0.02em;
+}
+
+.upload-content p {
+  font-size: 13px;
+  color: var(--text-muted);
+  margin-bottom: var(--space-4);
+}
+
+.upload-hint {
+  font-size: 11px;
+  color: var(--text-dim);
+  max-width: 320px;
+  line-height: 1.5;
+}
+
+/* File Upload Previews */
+.upload-preview-pane {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: var(--space-2);
+}
+
+.upload-preview-thumb {
+  max-width: 140px;
+  max-height: 140px;
+  object-fit: contain;
+  border-radius: var(--radius-sm);
+  border: 1px solid var(--border);
+  box-shadow: var(--shadow-sm);
+  background: #000;
+}
+
+.upload-preview-placeholder {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 80px;
+  height: 80px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-dim);
+}
+
+.upload-preview-filename {
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--text-main);
+  max-width: 240px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.upload-preview-size {
+  font-size: 12px;
+  color: var(--text-dim);
+}
+
+.upload-preview-status {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--highlight);
+}

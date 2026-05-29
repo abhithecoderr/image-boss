@@ -1,0 +1,28 @@
+/* 
+  UI Component: Logo Styles
+  Calm & Carbon Dark Theme
+*/
+
+.brand-logo-wrapper {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  user-select: none;
+}
+
+.brand-logo-icon {
+  color: var(--text-main);
+  transition: transform var(--transition-normal);
+  flex-shrink: 0;
+}
+
+.brand-logo-link:hover .brand-logo-icon {
+  transform: rotate(-10deg) scale(1.05);
+}
+
+.brand-logo-text {
+  font-size: 16px;
+  font-weight: 600;
+  color: var(--text-main);
+  letter-spacing: -0.02em;
+}

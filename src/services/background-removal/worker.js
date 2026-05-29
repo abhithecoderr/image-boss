@@ -1,5 +1,10 @@
-import { pipeline, AutoModel, AutoProcessor, env, RawImage } from "@huggingface/transformers";
+import { pipeline, AutoModel, AutoProcessor, env, RawImage } from '@huggingface/transformers';
 import { getGPUConfig, rawImageToBitmap, bitmapToRawImage, createProgressReporter } from '../../core/worker-utils.js';
+
+import { BACKGROUND_REMOVAL_MODELS } from '../config/models.js';
+
+const DEBUG = false;
+let cachedGPUConfig = null;
 
 // v4: Remote model downloads are the default. allowLocalModels is still valid.
 env.allowLocalModels = false;
@@ -21,26 +26,8 @@ const segmenters = {};
 // Pipeline path — MODNet, InSPyReNet (standard image-segmentation task)
 // ---------------------------------------------------------------------------
 
-const PIPELINE_CONFIGS = {
-  modnet: {
-    model_id: "Xenova/modnet",
-    task: "background-removal",
-    default_dtype: "fp32",
-    size: 512,
-  },
-  inspyrenet: {
-    model_id: "OS-Software/InSPyReNet-SwinB-Plus-Ultra-ONNX",
-    task: "background-removal",
-    default_dtype: "fp16",
-    size: 768,
-  },
-  inspyrenet_lite: {
-    model_id: "TheGuy444/InSpyReNet-Res2Net50",
-    task: "background-removal",
-    default_dtype: "fp32",
-    size: 384,
-  },
-};
+const PIPELINE_CONFIGS = BACKGROUND_REMOVAL_MODELS;
+
 
 async function loadPipelineModel(modelId, onProgress, device, dtype) {
   const config = PIPELINE_CONFIGS[modelId];
@@ -55,95 +42,151 @@ async function loadPipelineModel(modelId, onProgress, device, dtype) {
     progress_callback: report(0.1, 0.5, `Downloading ${modelId}...`),
   });
 
-  console.info(`[Worker] ✓ ${modelId} loaded via pipeline (${device}, ${dtype})`);
+  if (DEBUG) {
+    console.info(`[Worker] ✓ ${modelId} loaded via pipeline (${device}, ${dtype})`);
+  }
   return { segmenter, size, model_id };
 }
 
-// ---------------------------------------------------------------------------
-// BiRefNet — dedicated AutoModel path
-// onnx-community/BiRefNet-ONNX uses a non-standard input_image/output_image
-// interface that is NOT compatible with the generic pipeline() API.
-// It also supports fp16 and runs at 1024×1024.
-// ---------------------------------------------------------------------------
+// --- BiRefNet helpers ---
 
-const BIREFNET_MODEL_ID = "onnx-community/BiRefNet_512x512-ONNX";
-const BIREFNET_SIZE = 512; // Must match model name: BiRefNet_512x512
 
-async function loadBiRefNet(onProgress, device, dtype) {
+async function loadBiRefNet(modelId, onProgress, device, dtype) {
   const report = createProgressReporter(onProgress);
-  report(0.05, 0.05, `Initializing BiRefNet (${device.toUpperCase()}, ${dtype})...`)(0);
+  report(0.05, 0.05, `Initializing BiRefNet Custom (${device.toUpperCase()}, ${dtype})...`)(0);
 
   const loadOpts = { device, dtype };
 
   const [biModel, biProcessor] = await Promise.all([
-    AutoModel.from_pretrained(BIREFNET_MODEL_ID, {
+    AutoModel.from_pretrained(modelId, {
       ...loadOpts,
-      progress_callback: report(0.1, 0.45, "Downloading BiRefNet model..."),
+      progress_callback: report(0.1, 0.45, `Downloading ${modelId}...`),
     }),
-    AutoProcessor.from_pretrained(BIREFNET_MODEL_ID, {
-      progress_callback: report(0.1, 0.45, "Downloading BiRefNet processor..."),
+    AutoProcessor.from_pretrained(modelId, {
+      progress_callback: report(0.1, 0.45, `Downloading ${modelId} processor...`),
     }),
   ]);
 
-  console.info(`[Worker] ✓ BiRefNet loaded (${device}, ${dtype})`);
+  if (DEBUG) {
+    console.info(`[Worker] ✓ ${modelId} loaded (${device}, ${dtype})`);
+  }
   return { biModel, biProcessor };
 }
+
 
 async function runBiRefNet(biModel, biProcessor, image) {
   // BiRefNet expects pixel_values input via AutoProcessor
   const { pixel_values } = await biProcessor(image);
 
-  // Custom I/O: input_image → output_image (sigmoid → uint8 mask)
-  const { output_image } = await biModel({ input_image: pixel_values });
+  // Custom I/O: input_image → output_image or logits (sigmoid → uint8 mask)
+  const outputs = await biModel({ input_image: pixel_values });
+  const output = outputs.output_image || outputs.logits;
 
-  // Convert to uint8 mask: sigmoid output, multiply by 255, resize to original
-  const rawMaskTensor = output_image[0].sigmoid().mul(255).to("uint8");
+  if (!output) {
+    throw new Error(`BiRefNet output keys not found. Available keys: ${Object.keys(outputs).join(', ')}`);
+  }
+
+  // Convert to uint8 mask: sigmoid output if logits, multiply by 255, resize to original
+  // Explicitly assign intermediate tensors to prevent GPU/WebGPU buffer memory leaks
+  const outputSliced = output[0];
+  
+  // Auto-detect if sigmoid is already applied (ONNX models often bundle this activation)
+  const data = outputSliced.data;
+  let min = 0;
+  let max = 0;
+  if (data && data.length > 0) {
+    min = data[0];
+    max = data[0];
+    const step = Math.max(1, Math.floor(data.length / 100)); // Sample 100 points for speed
+    for (let i = 0; i < data.length; i += step) {
+      const val = data[i];
+      if (val < min) min = val;
+      if (val > max) max = val;
+    }
+  }
+  const alreadySigmoid = min >= -0.05 && max <= 1.05;
+  
+  const sigmoidTensor = alreadySigmoid ? outputSliced : outputSliced.sigmoid();
+  const mulTensor = sigmoidTensor.mul(255);
+  const rawMaskTensor = mulTensor.to("uint8");
   const mask = await RawImage.fromTensor(rawMaskTensor);
 
   // --- PREVENT MEMORY LEAKS ---
   // Manually dispose of WebGPU buffers while keeping the standard JS RawImage
   if (pixel_values?.dispose) pixel_values.dispose();
-  if (output_image?.dispose) output_image.dispose();
+  if (outputs.output_image?.dispose) outputs.output_image.dispose();
+  if (outputs.logits?.dispose) outputs.logits.dispose();
+
+  if (outputSliced?.dispose && !alreadySigmoid) outputSliced.dispose();
+  if (sigmoidTensor?.dispose) sigmoidTensor.dispose();
+  if (mulTensor?.dispose) mulTensor.dispose();
   if (rawMaskTensor?.dispose) rawMaskTensor.dispose();
+
   // ----------------------------
 
   // Resize mask back to original image dimensions
   const resizedMask = await mask.resize(image.width, image.height);
-  
+
   // Apply mask to original image, creating transparent background
   image.putAlpha(resizedMask);
   return image;
 }
 
 // ---------------------------------------------------------------------------
-// Unified loadModel entry point
+// Unified loadModel entry point and Disposal Helpers
 // ---------------------------------------------------------------------------
+
+/**
+ * Safely dispose of a loaded model's WebGPU/WASM and memory resources.
+ */
+async function disposeModel(m) {
+  if (!m) return;
+  try {
+    if (m.segmenter) {
+      if (m.segmenter.model?.dispose) await m.segmenter.model.dispose();
+      if (m.segmenter.processor?.dispose) await m.segmenter.processor.dispose();
+    }
+    if (m.biModel?.dispose) await m.biModel.dispose();
+    if (m.biProcessor?.dispose) await m.biProcessor.dispose();
+  } catch (err) {
+    console.warn(`[Worker] Error disposing model resource:`, err);
+  }
+}
+
 
 async function loadModel(modelId, onProgress) {
   if (segmenters[modelId]) return segmenters[modelId];
 
   // To prevent 2.7GB+ RAM bloat, enforce a cache size of 1 active model.
   // Dispose of any previously loaded model before loading a new one.
-  Object.keys(segmenters).forEach(id => {
+  for (const id of Object.keys(segmenters)) {
     if (id !== modelId) {
-      const m = segmenters[id];
-      if (m.segmenter?.dispose) m.segmenter.dispose();
-      if (m.biModel?.dispose) m.biModel.dispose();
+      await disposeModel(segmenters[id]);
       delete segmenters[id];
-      console.info(`[Worker] Evicted model '${id}' from memory to save RAM.`);
+      if (DEBUG) {
+        console.info(`[Worker] Evicted model '${id}' from memory to save RAM.`);
+      }
     }
-  });
+  }
 
-  const hw = await getGPUConfig();
+  const config = BACKGROUND_REMOVAL_MODELS[modelId] || BACKGROUND_REMOVAL_MODELS["modnet"];
+  if (!cachedGPUConfig) {
+    cachedGPUConfig = await getGPUConfig();
+  }
+  const hw = cachedGPUConfig;
   const device = hw.supported ? "webgpu" : "wasm";
 
-  if (modelId === "birefnet") {
-    // BiRefNet: fp16 available if adapter supports it — this is the main perf lever
-    const dtype = (device === "webgpu" && hw.fp16) ? "fp16" : "fp32";
-    const { biModel, biProcessor } = await loadBiRefNet(onProgress, device, dtype);
-    segmenters[modelId] = { biModel, biProcessor, size: BIREFNET_SIZE, device, dtype, model_id: BIREFNET_MODEL_ID };
+  if (config.method === "custom") {
+    // Custom logic (BiRefNet series)
+    let dtype = config.default_dtype;
+    if (device === "webgpu" && dtype === "fp16" && !hw.fp16) {
+      dtype = "fp32";
+    }
+    const { biModel, biProcessor } = await loadBiRefNet(config.model_id, onProgress, device, dtype);
+
+    segmenters[modelId] = { biModel, biProcessor, size: config.size, device, dtype, model_id: config.model_id };
   } else {
-    const config = PIPELINE_CONFIGS[modelId] || PIPELINE_CONFIGS["modnet"];
+    // Pipeline logic (RMBG, BEN2, etc.)
     let dtype = config.default_dtype;
     if (device === "webgpu" && dtype === "fp16" && !hw.fp16) {
       dtype = "fp32";
@@ -154,6 +197,7 @@ async function loadModel(modelId, onProgress) {
 
   return segmenters[modelId];
 }
+
 
 // ---------------------------------------------------------------------------
 // Worker message handler
@@ -181,18 +225,21 @@ self.onmessage = async ({ data }) => {
       const image = await bitmapToRawImage(payload.bitmap);
       const tPre1 = performance.now();
 
-      console.info(
-        `[Worker] ${modelId} run config: repo=${model_id}, device=${device}, dtype=${dtype}, ` +
-          `input=${image.width}x${image.height}, targetSize=${size}`
-      );
+      if (DEBUG) {
+        console.info(
+          `[Worker] ${modelId} run config: repo=${model_id}, device=${device}, dtype=${dtype}, ` +
+            `input=${image.width}x${image.height}, targetSize=${size}`
+        );
+      }
 
       self.postMessage({ type: "progress", progress: 0.55, message: "Removing background..." });
 
+      const config = BACKGROUND_REMOVAL_MODELS[modelId] || BACKGROUND_REMOVAL_MODELS["modnet"];
       const tInfer0 = performance.now();
       let outputRawImage;
       try {
-        if (modelId === "birefnet") {
-          // BiRefNet returns composited RawImage directly
+        if (config.method === "custom") {
+          // Custom logic (BiRefNet series)
           outputRawImage = await runBiRefNet(cached.biModel, cached.biProcessor, image);
         } else {
           // Standard pipeline handles compositing natively
@@ -202,6 +249,13 @@ self.onmessage = async ({ data }) => {
           outputRawImage = Array.isArray(res) ? res[0] : res;
           if (outputRawImage && !outputRawImage.data) {
             outputRawImage = outputRawImage.mask || outputRawImage.image || outputRawImage;
+          }
+          if (!outputRawImage || !outputRawImage.data) {
+            throw new Error(
+              `Pipeline returned an invalid image structure without pixel data. Keys: ${
+                outputRawImage ? Object.keys(outputRawImage).join(', ') : 'null'
+              }`
+            );
           }
         }
       } catch (err) {
@@ -216,11 +270,13 @@ self.onmessage = async ({ data }) => {
       if (payload?.bitmap?.close) payload.bitmap.close();
       const tPost1 = performance.now();
 
-      console.info(
-        `[Worker] ${modelId} timings (ms): pre=${(tPre1 - tPre0).toFixed(1)}, ` +
-          `infer=${(tInfer1 - tInfer0).toFixed(1)}, post=${(tPost1 - tPost0).toFixed(1)}, ` +
-          `total=${(tPost1 - tStart).toFixed(1)}`
-      );
+      if (DEBUG) {
+        console.info(
+          `[Worker] ${modelId} timings (ms): pre=${(tPre1 - tPre0).toFixed(1)}, ` +
+            `infer=${(tInfer1 - tInfer0).toFixed(1)}, post=${(tPost1 - tPost0).toFixed(1)}, ` +
+            `total=${(tPost1 - tStart).toFixed(1)}`
+        );
+      }
 
       self.postMessage(
         {
@@ -237,24 +293,19 @@ self.onmessage = async ({ data }) => {
 
     if (type === "clear") {
       if (payload.clearModels) {
-        Object.keys(segmenters).forEach(id => {
-          const m = segmenters[id];
-          if (m.segmenter?.dispose) m.segmenter.dispose();
-          if (m.biModel?.dispose) m.biModel.dispose();
+        for (const id of Object.keys(segmenters)) {
+          await disposeModel(segmenters[id]);
           delete segmenters[id];
-        });
+        }
       }
       self.postMessage({ type: "clear-complete" });
     }
 
     if (type === "dispose") {
-      Object.keys(segmenters).forEach(id => {
-        const m = segmenters[id];
-        if (m.segmenter?.dispose) m.segmenter.dispose();
-        if (m.biModel?.dispose) m.biModel.dispose();
+      for (const id of Object.keys(segmenters)) {
+        await disposeModel(segmenters[id]);
         delete segmenters[id];
-      });
-      console.info('[Background Removal Worker] All models disposed.');
+      }
     }
   } catch (err) {
     console.error("Worker Error:", err);

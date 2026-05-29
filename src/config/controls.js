@@ -3,19 +3,25 @@
  * Defines UI controls (sliders, selects, etc.) for each service
  */
 
+import { SEGMENTATION_MODELS } from '../services/config/models';
+
 export const CONTROLS_CONFIG = {
+
   'background-removal': [
     {
       id: 'model',
       label: 'RMBG Model',
       type: 'select',
-      defaultValue: 'inspyrenet',
+      defaultValue: 'inspyrenet_lite',
       options: [
+        { value: 'ben2', label: 'RMBG Ultra (BEN2)' },
+        { value: 'birefnet', label: 'RMBG Pro (BiRefNet)' },
+        { value: 'birefnet-lite', label: 'RMBG Lite (BiRefNet Lite)' },
         { value: 'modnet', label: 'RMBG Fast (MODNet)' },
-        { value: 'inspyrenet_lite', label: 'RMBG Lite (InSPyReNet Lite)' },
-        { value: 'inspyrenet', label: 'RMBG Ultra (InSPyReNet)' },
-        { value: 'birefnet', label: 'RMBG Pro (BiRefNet)' }
+        { value: 'inspyrenet_lite', label: 'RMBG Lite (InSPyReNet Lite)' }
+
       ]
+
     },
     { id: 'edgeShift', label: 'Edge Shift', type: 'range', min: -20, max: 20, step: 1, defaultValue: 0 },
     { id: 'edgeSmoothness', label: 'Edge Smoothness', type: 'range', min: 0, max: 20, step: 1, defaultValue: 0 },
@@ -30,23 +36,32 @@ export const CONTROLS_CONFIG = {
       id: 'modelId',
       label: 'SAM Model',
       type: 'select',
-      defaultValue: 'Xenova/slimsam-77-uniform',
+      defaultValue: SEGMENTATION_MODELS.slimsam.model_id,
       options: [
-        { value: 'Xenova/slimsam-77-uniform', label: 'SlimSAM (Fastest)' },
-        { value: 'facebook/sam-vit-base', label: 'SAM ViT-Base (Balanced)' },
-        { value: 'facebook/sam-vit-huge', label: 'SAM ViT-Huge (High Precision)' }
+        { value: SEGMENTATION_MODELS.slimsam.model_id, label: 'SlimSAM (Fastest)' },
+        { value: SEGMENTATION_MODELS.sam_base.model_id, label: 'SAM ViT-Base (Balanced)' }
+      ]
+    },
+    {
+      id: 'pointLabel',
+      label: 'Point Type',
+      type: 'select',
+      defaultValue: 1,
+      options: [
+        { value: 1, label: '🟢 Positive (Keep)' },
+        { value: 0, label: '🔴 Negative (Remove)' }
       ]
     }
   ],
+
   'upscaling': [
     {
       id: 'scale',
       label: 'Scale Factor',
       type: 'select',
-      defaultValue: 2,
+      defaultValue: 1.5,
       options: [
         { value: 1.5, label: '1.5x (Super Turbo)' },
-        { value: 2, label: '2x (Standard)' },
         { value: 3, label: '3x (High Detail)' },
         { value: 4, label: '4x (Ultra - Slow)' }
       ],

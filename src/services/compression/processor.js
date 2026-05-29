@@ -31,7 +31,6 @@ export async function process(sourceCanvas, options = {}, onProgress) {
       const pixel = sampleCtx.getImageData(0, 0, 1, 1).data;
       if (pixel[3] < 255) {
         mimeType = 'image/webp';
-        console.info('[Compression] Alpha channel detected — using WebP to preserve transparency.');
       }
     }
   } catch (_) { /* ignore — if sampling fails, default to jpeg */ }

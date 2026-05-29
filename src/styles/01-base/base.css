@@ -1,0 +1,177 @@
+/* 
+  Base: Reset, Variables, Typography
+*/
+
+/* --- Reset --- */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+}
+
+* {
+  margin: 0;
+  padding: 0;
+  font: inherit;
+}
+
+html, body {
+  height: 100%;
+}
+
+body {
+  line-height: 1.5;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: var(--bg-deep);
+  color: var(--text-main);
+}
+
+img, picture, video, canvas, svg {
+  display: block;
+  max-width: 100%;
+}
+
+input, button, textarea, select {
+  font: inherit;
+  color: inherit;
+}
+
+button {
+  cursor: pointer;
+  background: none;
+  border: none;
+}
+
+a {
+  text-decoration: none;
+  color: inherit;
+}
+
+p, h1, h2, h3, h4, h5, h6 {
+  overflow-wrap: break-word;
+}
+
+#root, #app {
+  isolation: isolate;
+  height: 100%;
+  display: flex;
+  flex-direction: column;
+}
+
+/* --- Design Tokens --- */
+
+:root {
+  /* Neutral Palette - Premium Carbon & Zinc */
+  --bg-deep: #09090b;
+  --bg-surface: #18181b;
+  --bg-elevated: #27272a;
+  --bg-input: #0f0f11;
+  
+  /* Borders & Dividers */
+  --border-subtle: rgba(255, 255, 255, 0.04);
+  --border-medium: #27272a;
+  --border-strong: #3f3f46;
+  
+  /* Primary Accent - Warm Minimal Amber */
+  --accent-primary: #f5a623;
+  --accent-hover: #d97706;
+  --accent-soft: rgba(245, 166, 35, 0.08);
+  
+  /* Typography Colors */
+  --text-main: #f4f4f5;
+  --text-muted: #a1a1aa;
+  --text-dim: #71717a;
+  --text-inverse: #09090b;
+  
+  /* Effects */
+  --shadow-tight: 0 1px 2px rgba(0, 0, 0, 0.8);
+  --shadow-layered: 0 4px 20px rgba(0, 0, 0, 0.9);
+  
+  /* Border Radius */
+  --radius-xs: 3px;
+  --radius-sm: 6px;
+  --radius-md: 8px;
+  --radius-lg: 12px;
+  --radius-pill: 9999px;
+  
+  /* Spacing System (8px grid) */
+  --space-1: 4px;
+  --space-2: 8px;
+  --space-3: 12px;
+  --space-4: 16px;
+  --space-5: 24px;
+  --space-6: 32px;
+  --space-8: 48px;
+  --space-12: 64px;
+  
+  /* Transitions */
+  --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-normal: 250ms cubic-bezier(0.4, 0, 0.2, 1);
+  --transition-expo: 400ms cubic-bezier(0.16, 1, 0.3, 1);
+
+  /* Legacy & Helper Variables Sync */
+  --bg-primary: #09090b;
+  --bg-secondary: #18181b;
+  --bg-tertiary: #202024;
+  --bg-hover: #27272a;
+
+  --accent: #f5a623;
+  --accent-dim: #a1a1aa;
+  --accent-glow: rgba(245, 166, 35, 0.05);
+
+  --highlight: #f5a623;
+  --highlight-soft: rgba(245, 166, 35, 0.08);
+  --highlight-hover: #d97706;
+  --highlight-rgb: 245, 166, 35;
+
+  --text-primary: #f4f4f5;
+  --text-secondary: #a1a1aa;
+
+  --border: #27272a;
+  --border-light: #3f3f46;
+  --border-heavy: #52525b;
+
+  --success: #10b981;
+  --error: #ef4444;
+  --warning: #f5a623;
+
+  --shadow-sm: 0 1px 2px rgba(0, 0, 0, 0.8);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.8);
+  --shadow-lg: 0 8px 24px rgba(0, 0, 0, 0.9);
+
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+
+  --radius-full: 9999px;
+
+  --font-sans: "Inter", -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif;
+  --font-mono: 'JetBrains Mono', 'Fira Code', Consolas, monospace;
+}
+
+/* --- Typography --- */
+
+body {
+  font-family: var(--font-sans);
+  font-size: 14px;
+  letter-spacing: -0.01em;
+}
+
+h1 { font-size: 2rem; font-weight: 600; letter-spacing: -0.02em; line-height: 1.2; }
+h2 { font-size: 1.5rem; font-weight: 600; letter-spacing: -0.02em; line-height: 1.3; }
+h3 { font-size: 1.25rem; font-weight: 500; letter-spacing: -0.01em; line-height: 1.4; }
+h4 { font-size: 1rem; font-weight: 500; line-height: 1.5; }
+
+.text-xs { font-size: 11px; line-height: 1.4; }
+.text-sm { font-size: 12px; line-height: 1.5; }
+.text-base { font-size: 14px; line-height: 1.5; }
+.text-lg { font-size: 16px; line-height: 1.5; }
+
+.font-medium { font-weight: 500; }
+.font-semibold { font-weight: 600; }
+
+.text-muted { color: var(--text-muted); }
+.text-dim { color: var(--text-dim); }

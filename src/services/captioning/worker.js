@@ -10,6 +10,7 @@ import {
   env
 } from '@huggingface/transformers';
 import { getGPUConfig, createProgressReporter } from '../../core/worker-utils.js';
+import { CAPTIONING_MODELS } from '../config/models.js';
 
 
 // v4: no wasm.proxy workaround needed — build system no longer double-proxies
@@ -73,13 +74,10 @@ async function loadLFM(modelId, hw) {
   const device = hw.supported ? 'webgpu' : 'wasm';
 
   // LFM uses per-component dtype for optimal performance
-  const dtype = hw.supported ? {
-    vision_encoder: 'fp16',
-    embed_tokens: 'fp16',
-    decoder_model_merged: 'q4',
-  } : 'fp32';
+  const dtype = hw.supported ? CAPTIONING_MODELS.lfm.default_dtype : 'fp32';
 
   const dtypeLabel = hw.supported ? 'fp16+q4' : 'fp32';
+
 
   model = await AutoModelForImageTextToText.from_pretrained(modelId, {
     device,
@@ -124,7 +122,6 @@ self.onmessage = async ({ data }) => {
 
   if (type === 'dispose') {
     await teardown();
-    console.info('[Captioning Worker] Model disposed.');
     return;
   }
 

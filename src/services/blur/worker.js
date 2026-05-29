@@ -12,21 +12,18 @@ import {
   createProgressReporter,
 } from "../../core/worker-utils.js";
 
-// Configure ONNX Runtime
+// Configure ONNX Runtime (Loaded locally to prevent COEP blocks)
 const ORT_VERSION = "1.20.1";
-ort.env.wasm.wasmPaths = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/`;
+ort.env.wasm.wasmPaths = '/onnx/';
 
 // Optional: HuggingFace Token if repo is private (not needed for onnx-community)
 // const HF_TOKEN = '';
 
+import { BLUR_MODELS } from '../config/models.js';
+
 // 2026 Optimized Pose Model
-const MODEL_VARIANTS = {
-  nano: "onnx-community/yolo26n-pose-ONNX",
-  small: "onnx-community/yolo26s-pose-ONNX",
-  medium: "onnx-community/yolo26m-pose-ONNX",
-  large: "onnx-community/yolo26l-pose-ONNX",
-  xlarge: "onnx-community/yolo26x-pose-ONNX",
-};
+const MODEL_VARIANTS = BLUR_MODELS;
+
 
 // Class labels we care about for blurring
 // YOLOv10 COCO classes include person, car, bus, truck, motorcycle
@@ -91,7 +88,9 @@ async function initDetector(variant = "nano", onProgress) {
 
   isInitializing = true;
   currentVariant = variant;
-  const modelId = MODEL_VARIANTS[variant] || MODEL_VARIANTS.nano;
+  const modelConfig = MODEL_VARIANTS[variant] || MODEL_VARIANTS.nano;
+  const modelId = modelConfig.model_id;
+
 
   const report = createProgressReporter(onProgress);
 
@@ -120,13 +119,12 @@ async function initDetector(variant = "nano", onProgress) {
 
     session = await ort.InferenceSession.create(modelBuffer, sessionOptions);
     currentDevice = useWebGPU ? "webgpu" : "wasm";
-    console.info(`✓ YOLO26 ${variant} loaded (${deviceLabel})`);
 
     report(0.8, 0.8, `Model ready (${currentDevice})`)(0);
     return session;
   } catch (error) {
     const errorMsg = error instanceof Error ? error.message : String(error);
-    console.error("Failed to initialize detector:", error);
+    // Error is thrown below; no need to log here
     throw new Error(`Initialization failed: ${errorMsg}`);
   } finally {
     isInitializing = false;
@@ -265,9 +263,6 @@ async function detectFaces(bitmap, width, height) {
   }
 
   const finalDetections = nms(rawDetections, 0.75);
-  console.log(
-    `[Domain: ${isPixelSpace ? "Pixel" : "Norm"}] Parsed ${rawDetections.length} raw -> ${finalDetections.length} after NMS. Shape: [${dims.join(", ")}]`,
-  );
 
   return finalDetections;
 }
@@ -402,13 +397,19 @@ async function applyBlur(bitmap, width, height, detections, options = {}) {
 }
 
 /**
- * Cleanup resources
+ * Cleanup resources — releases session and all cached canvases
  */
 function dispose() {
   if (session) {
-    // onnxruntime-web session release is implicit or via delete
+    try {
+      session.release();
+    } catch (_) {}
     session = null;
   }
+  workerBlurCanvas = null;
+  workerBlurCtx = null;
+  workerPatchCanvas = null;
+  workerMaskCanvas = null;
   currentDevice = "wasm";
 }
 
@@ -437,7 +438,7 @@ self.onmessage = async (event) => {
         const { bitmap, width, height, variant } = payload;
 
         if (variant && variant !== currentVariant) {
-          session = null;
+          if (session) { try { await session.release(); } catch (_) {} session = null; }
           await initDetector(variant, sendProgress);
         } else {
           await initDetector(currentVariant, sendProgress);
@@ -468,7 +469,7 @@ self.onmessage = async (event) => {
         } = payload;
 
         if (variant && variant !== currentVariant) {
-          session = null;
+          if (session) { try { await session.release(); } catch (_) {} session = null; }
           await initDetector(variant, sendProgress);
         } else {
           await initDetector(currentVariant, sendProgress);
@@ -571,18 +572,8 @@ self.onmessage = async (event) => {
         self.postMessage({ type: "disposed" });
         break;
       }
-
-      case "dispose": {
-        dispose();
-        console.info('[Blur Worker] Model disposed.');
-        break;
-      }
-
-      default:
-        console.warn("Unknown message type:", type);
     }
   } catch (error) {
-    console.error("Worker error:", error);
     self.postMessage({
       type: "error",
       error: error.message || "Processing failed",

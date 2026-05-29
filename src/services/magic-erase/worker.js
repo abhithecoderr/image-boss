@@ -13,12 +13,13 @@ let lastSessionOptions = null;
 const DEBUG = false;
 
 // Configure ORT
-// Note: We use the version from package.json for the bundle, 
-// but we set wasmPaths to a consistent CDN to avoid local wasm resolution issues in workers.
+// Note: We use the version from package.json for the bundle.
+// With Cross-Origin-Embedder-Policy enabled, cross-origin CDN requests for WASM workers are blocked.
+// We host these assets locally on the same origin under /onnx/ to resolve this.
 const ORT_VERSION = '1.20.1'; 
 ort.env.wasm.numThreads = self.crossOriginIsolated ? 4 : 1;
 ort.env.wasm.simd = true;
-ort.env.wasm.wasmPaths = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/`;
+ort.env.wasm.wasmPaths = '/onnx/';
 ort.env.debug = false;
 
 try {
@@ -170,7 +171,8 @@ self.onmessage = async (e) => {
     } else if (type === 'inpaint') {
         try {
             const t0 = performance.now();
-            const { image, mask } = payload; 
+            const { image, mask, options = {} } = payload; 
+            const strength = typeof options.strength === 'number' ? options.strength : 1.0;
 
             const imageKey = session.inputNames.find(n => {
                 const idx = session.inputNames.indexOf(n);
@@ -198,22 +200,26 @@ self.onmessage = async (e) => {
             const imageTensorData = self._lamaImageTensorData;
             const maskTensorData = self._lamaMaskTensorData;
 
-            for (let i = 0; i < 512 * 512; i++) {
-                const r = image[i * 4] / 255.0;
-                const g = image[i * 4 + 1] / 255.0;
-                const b = image[i * 4 + 2] / 255.0;
-
-                if (isNHWC) {
-                    imageTensorData[i * 3] = r;
-                    imageTensorData[i * 3 + 1] = g;
-                    imageTensorData[i * 3 + 2] = b;
-                } else {
-                    imageTensorData[i] = r;
-                    imageTensorData[i + 512 * 512] = g;
-                    imageTensorData[i + 1024 * 512] = b;
+            const len = 512 * 512;
+            const inv255 = 1.0 / 255.0;
+            if (isNHWC) {
+                for (let i = 0; i < len; i++) {
+                    const pi = i * 4;
+                    imageTensorData[i * 3] = image[pi] * inv255;
+                    imageTensorData[i * 3 + 1] = image[pi + 1] * inv255;
+                    imageTensorData[i * 3 + 2] = image[pi + 2] * inv255;
+                    maskTensorData[i] = mask[pi] > 128 ? 1.0 : 0.0;
                 }
-
-                maskTensorData[i] = mask[i * 4] > 128 ? 1.0 : 0.0;
+            } else {
+                const ch2_offset = len;
+                const ch3_offset = len * 2;
+                for (let i = 0; i < len; i++) {
+                    const pi = i * 4;
+                    imageTensorData[i] = image[pi] * inv255;
+                    imageTensorData[i + ch2_offset] = image[pi + 1] * inv255;
+                    imageTensorData[i + ch3_offset] = image[pi + 2] * inv255;
+                    maskTensorData[i] = mask[pi] > 128 ? 1.0 : 0.0;
+                }
             }
 
             const imageTensor = new ort.Tensor('float32', imageTensorData, imgShape);
@@ -230,21 +236,134 @@ self.onmessage = async (e) => {
             const outputLayout = detectLayout(outShape);
             const isOutNHWC = outputLayout === 'NHWC';
 
-            let finalData = outputTensor.data;
+            const finalData = outputTensor.data;
+
+            let min = finalData[0];
+            let max = finalData[0];
+            const outLen = finalData.length;
+            for (let i = 1; i < outLen; i++) {
+                const val = finalData[i];
+                if (val < min) min = val;
+                else if (val > max) max = val;
+            }
+
+            const range = max - min;
+            let scaleMode = 0;
+            if (min >= -1.05 && max <= 1.05) {
+                scaleMode = min < -0.1 ? 1 : 2;
+            } else if (min >= 0 && max <= 255.5) {
+                scaleMode = 3;
+            } else if (range > 0) {
+                scaleMode = 4;
+            }
+
+            const ch2 = 262144;
+            const ch3 = 524288;
+
             if (isOutNHWC) {
-                const reshaped = new Float32Array(3 * 512 * 512);
-                for (let i = 0; i < 512 * 512; i++) {
-                    reshaped[i] = finalData[i * 3];
-                    reshaped[i + 512 * 512] = finalData[i * 3 + 1];
-                    reshaped[i + 1024 * 512] = finalData[i * 3 + 2];
+                if (scaleMode === 1) {
+                    for (let i = 0; i < len; i++) {
+                        const pi = i * 4;
+                        if (mask[pi] <= 128) continue;
+                        const idx = i * 3;
+                        const r = (finalData[idx] + 1.0) * 127.5;
+                        const g = (finalData[idx + 1] + 1.0) * 127.5;
+                        const b = (finalData[idx + 2] + 1.0) * 127.5;
+                        image[pi] = image[pi] * (1.0 - strength) + r * strength;
+                        image[pi + 1] = image[pi + 1] * (1.0 - strength) + g * strength;
+                        image[pi + 2] = image[pi + 2] * (1.0 - strength) + b * strength;
+                    }
+                } else if (scaleMode === 2) {
+                    for (let i = 0; i < len; i++) {
+                        const pi = i * 4;
+                        if (mask[pi] <= 128) continue;
+                        const idx = i * 3;
+                        const r = finalData[idx] * 255.0;
+                        const g = finalData[idx + 1] * 255.0;
+                        const b = finalData[idx + 2] * 255.0;
+                        image[pi] = image[pi] * (1.0 - strength) + r * strength;
+                        image[pi + 1] = image[pi + 1] * (1.0 - strength) + g * strength;
+                        image[pi + 2] = image[pi + 2] * (1.0 - strength) + b * strength;
+                    }
+                } else if (scaleMode === 3) {
+                    for (let i = 0; i < len; i++) {
+                        const pi = i * 4;
+                        if (mask[pi] <= 128) continue;
+                        const idx = i * 3;
+                        const r = finalData[idx];
+                        const g = finalData[idx + 1];
+                        const b = finalData[idx + 2];
+                        image[pi] = image[pi] * (1.0 - strength) + r * strength;
+                        image[pi + 1] = image[pi + 1] * (1.0 - strength) + g * strength;
+                        image[pi + 2] = image[pi + 2] * (1.0 - strength) + b * strength;
+                    }
+                } else {
+                    const invRange = 1.0 / (range || 1);
+                    for (let i = 0; i < len; i++) {
+                        const pi = i * 4;
+                        if (mask[pi] <= 128) continue;
+                        const idx = i * 3;
+                        const r = (finalData[idx] - min) * invRange * 255.0;
+                        const g = (finalData[idx + 1] - min) * invRange * 255.0;
+                        const b = (finalData[idx + 2] - min) * invRange * 255.0;
+                        image[pi] = image[pi] * (1.0 - strength) + r * strength;
+                        image[pi + 1] = image[pi + 1] * (1.0 - strength) + g * strength;
+                        image[pi + 2] = image[pi + 2] * (1.0 - strength) + b * strength;
+                    }
                 }
-                finalData = reshaped;
+            } else {
+                if (scaleMode === 1) {
+                    for (let i = 0; i < len; i++) {
+                        const pi = i * 4;
+                        if (mask[pi] <= 128) continue;
+                        const r = (finalData[i] + 1.0) * 127.5;
+                        const g = (finalData[i + ch2] + 1.0) * 127.5;
+                        const b = (finalData[i + ch3] + 1.0) * 127.5;
+                        image[pi] = image[pi] * (1.0 - strength) + r * strength;
+                        image[pi + 1] = image[pi + 1] * (1.0 - strength) + g * strength;
+                        image[pi + 2] = image[pi + 2] * (1.0 - strength) + b * strength;
+                    }
+                } else if (scaleMode === 2) {
+                    for (let i = 0; i < len; i++) {
+                        const pi = i * 4;
+                        if (mask[pi] <= 128) continue;
+                        const r = finalData[i] * 255.0;
+                        const g = finalData[i + ch2] * 255.0;
+                        const b = finalData[i + ch3] * 255.0;
+                        image[pi] = image[pi] * (1.0 - strength) + r * strength;
+                        image[pi + 1] = image[pi + 1] * (1.0 - strength) + g * strength;
+                        image[pi + 2] = image[pi + 2] * (1.0 - strength) + b * strength;
+                    }
+                } else if (scaleMode === 3) {
+                    for (let i = 0; i < len; i++) {
+                        const pi = i * 4;
+                        if (mask[pi] <= 128) continue;
+                        const r = finalData[i];
+                        const g = finalData[i + ch2];
+                        const b = finalData[i + ch3];
+                        image[pi] = image[pi] * (1.0 - strength) + r * strength;
+                        image[pi + 1] = image[pi + 1] * (1.0 - strength) + g * strength;
+                        image[pi + 2] = image[pi + 2] * (1.0 - strength) + b * strength;
+                    }
+                } else {
+                    const invRange = 1.0 / (range || 1);
+                    for (let i = 0; i < len; i++) {
+                        const pi = i * 4;
+                        if (mask[pi] <= 128) continue;
+                        const r = (finalData[i] - min) * invRange * 255.0;
+                        const g = (finalData[i + ch2] - min) * invRange * 255.0;
+                        const b = (finalData[i + ch3] - min) * invRange * 255.0;
+                        image[pi] = image[pi] * (1.0 - strength) + r * strength;
+                        image[pi + 1] = image[pi + 1] * (1.0 - strength) + g * strength;
+                        image[pi + 2] = image[pi + 2] * (1.0 - strength) + b * strength;
+                    }
+                }
             }
 
             self.postMessage({
                 type: 'complete',
-                output: finalData
-            }, [finalData.buffer]);
+                output: image
+            }, [image.buffer]);
 
         } catch (error) {
             console.error("Worker inpainting failed:", error);

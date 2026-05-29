@@ -1,10 +1,7 @@
-/**
- * Auto Captioning Processor
- * Uses Web Worker for non-blocking processing
- */
-
 import Worker from './worker.js?worker';
 import { workerRegistry } from '../../core/worker-registry.js';
+import { CAPTIONING_MODELS } from '../config/models.js';
+import { runWorkerJob } from '../../core/worker-utils.js';
 
 const SERVICE_ID = 'captioning';
 
@@ -14,63 +11,35 @@ function getWorker() {
 
 /**
  * Generate caption or segmentation for image
- * @param {HTMLCanvasElement} sourceCanvas - Source image canvas
- * @param {Object} options - Processing options
- * @param {Function} onProgress - Progress callback
- * @returns {Promise<Object>} Result object with canvas and data
  */
 export async function process(sourceCanvas, options = {}, onProgress) {
-  console.log(`[Processor] Starting LFM 2.5 VL image captioning...`);
+  const w = getWorker();
 
-  return new Promise(async (resolve, reject) => {
-    const w = getWorker();
+  // Use zero-copy ImageBitmap transfer
+  const bitmap = await createImageBitmap(sourceCanvas);
 
-    // Use zero-copy ImageBitmap transfer
-    const bitmap = await createImageBitmap(sourceCanvas);
-
-    const messageHandler = ({ data }) => {
-      const { type, progress, message, result, error } = data;
-
-      if (type === 'progress') {
-        onProgress?.(progress, message);
-      } else if (type === 'complete') {
-        w.removeEventListener('message', messageHandler);
-        onProgress?.(0.95, 'Rendering result...');
-
-        const resultCanvas = createCaptionOverlay(sourceCanvas, result.value);
-        const finalValue = result.value;
-
-        // Detailed log of structured vision result
-        console.log(`[Processor] Result:`, result.raw);
-
-        onProgress?.(1, 'Complete!');
-        resolve({ canvas: resultCanvas, captioning: finalValue });
-      } else if (type === 'error') {
-        w.removeEventListener('message', messageHandler);
-        console.error('[Processor] Worker Error:', error);
-        reject(new Error(error));
-      }
-    };
-
-    const errorHandler = (err) => {
-      w.removeEventListener('message', messageHandler);
-      w.removeEventListener('error', errorHandler);
-      reject(new Error(err.message));
-    };
-
-    w.addEventListener('message', messageHandler);
-    w.addEventListener('error', errorHandler, { once: true });
-
-    // Send to worker
-    w.postMessage({
-      type: 'process',
-      payload: {
+  try {
+    const result = await runWorkerJob(
+      w,
+      'process',
+      {
         bitmap,
-        modelId: options.modelId || 'LiquidAI/LFM2.5-VL-450M-ONNX',
+        modelId: options.modelId || CAPTIONING_MODELS.lfm.model_id,
         lfmPrompt: options.lfmPrompt || 'Describe this image in detail.'
-      }
-    }, [bitmap]);
-  });
+      },
+      [bitmap],
+      onProgress
+    );
+
+    onProgress?.(0.95, 'Rendering result...');
+    const resultCanvas = createCaptionOverlay(sourceCanvas, result.value);
+    const finalValue = result.value;
+
+    onProgress?.(1, 'Complete!');
+    return { canvas: resultCanvas, captioning: finalValue };
+  } finally {
+    bitmap.close();
+  }
 }
 
 /**

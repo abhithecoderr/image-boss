@@ -6,15 +6,14 @@
 import * as ort from "onnxruntime-web/webgpu";
 import { getGPUConfig, createProgressReporter } from '../../core/worker-utils.js';
 
-// Configure ONNX Runtime
-// Using 1.20+ for best WebGPU support
+// Configure ONNX Runtime (Loaded locally to prevent COEP blocks)
 const ORT_VERSION = "1.20.1";
-ort.env.wasm.wasmPaths = `https://cdn.jsdelivr.net/npm/onnxruntime-web@${ORT_VERSION}/dist/`;
+ort.env.wasm.wasmPaths = '/onnx/';
 
-const MODEL_URLS = {
-  anime: "https://huggingface.co/x-Liola-x/informative-drawings-onnx/resolve/main/informative-drawings_anime_768x768.onnx",
-  contour: "https://huggingface.co/x-Liola-x/informative-drawings-onnx/resolve/main/informative-drawings_contour_768x768.onnx"
-};
+import { LINE_ART_MODELS } from '../config/models.js';
+
+const MODEL_URLS = LINE_ART_MODELS;
+
 const MODEL_SIZE = 768;
 
 let session = null;
@@ -64,7 +63,9 @@ async function initSession(variant = "anime", onProgress) {
 
   isInitializing = true;
   currentVariant = variant;
-  const modelUrl = MODEL_URLS[variant] || MODEL_URLS.anime;
+  const modelConfig = MODEL_URLS[variant] || MODEL_URLS.anime;
+  const modelUrl = modelConfig.url;
+
   const report = createProgressReporter(onProgress);
 
   try {
@@ -83,12 +84,12 @@ async function initSession(variant = "anime", onProgress) {
     report(0.85, 0.85, `Initializing session (${deviceLabel})...`)(0);
     session = await ort.InferenceSession.create(modelBuffer, sessionOptions);
     currentDevice = useWebGPU ? "webgpu" : "wasm";
-    
-    console.info(`[LineArt Worker] ✓ ${variant} model loaded (${deviceLabel})`);
+
     report(0.9, 0.9, "Ready")(0);
     return session;
   } catch (error) {
     console.error("[LineArt Worker] Initialization failed:", error);
+    if (session) { try { session.release(); } catch (_) {} }
     session = null;
     currentVariant = null;
     throw error;
@@ -128,7 +129,7 @@ async function runInference(bitmap, options, onProgress) {
   // 3. Postprocessing
   const data = output.data;
   const outData = new Uint8ClampedArray(MODEL_SIZE * MODEL_SIZE * 4);
-  
+
   // Details slider mapping: 0-100 -> 0-255 threshold
   // Higher details should mean more lines, so lower threshold?
   // Let's check original Sobel: threshold = Math.max(1, 200 - (details * 2));
@@ -137,14 +138,14 @@ async function runInference(bitmap, options, onProgress) {
 
   for (let i = 0; i < MODEL_SIZE * MODEL_SIZE; i++) {
     let val = Math.round(data[i] * 255);
-    
+
     if (outputStyle === 'clean') {
         // Model usually outputs dark for lines? Let's assume high value = clean background
         // Wait, Sobel: magnitude > threshold ? black : white
         // Informative drawings: output is usually lines.
         // Actually Informative Drawings output is closer to grayscale sketch.
         // If val > thresholdValue -> background (255), else line (0)
-        val = val > (255 - thresholdValue) ? 255 : 0; 
+        val = val > (255 - thresholdValue) ? 255 : 0;
     }
 
     outData[i * 4] = val;
@@ -155,11 +156,11 @@ async function runInference(bitmap, options, onProgress) {
 
   const resultCanvas = new OffscreenCanvas(MODEL_SIZE, MODEL_SIZE);
   resultCanvas.getContext('2d').putImageData(new ImageData(outData, MODEL_SIZE, MODEL_SIZE), 0, 0);
-  
+
   // Resize back to original if needed or just send the 768x768 and scale in UI
   // The system seems to favor sending ImageBitmap back.
   const resultBitmap = await createImageBitmap(resultCanvas);
-  
+
   return {
     resultBitmap,
     width,
@@ -181,10 +182,15 @@ self.onmessage = async (event) => {
         type: "complete",
         result
       }, [result.resultBitmap]);
-      
+
       bitmap.close();
     } else if (type === "dispose") {
-      session = null;
+      if (session) {
+        try {
+          session.release();
+        } catch (_) {}
+        session = null;
+      }
       self.postMessage({ type: "disposed" });
     }
   } catch (error) {

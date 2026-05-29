@@ -1,41 +1,31 @@
 import { useState, useEffect, useRef } from 'react';
-import { useApp } from '../context/AppContext';
-import { useAppEngine } from './useAppEngine';
+import { useWorkspace, useService } from '../context/AppContext';
+import { useUnifiedProcessor } from './useUnifiedProcessor';
+import { hasAlphaTransparency } from '../core/canvas-utils';
 
-/**
- * useServiceEffects — Headless hook that manages service-specific side effects
- * like compression estimation and background removal post-processing.
- * 
- * @param {string} serviceId 
- * @param {Object} options 
- * @param {Canvas} sourceCanvas 
- * @param {Canvas} resultCanvas 
- */
-export const useServiceEffects = (serviceId, options, sourceCanvas, resultCanvas, onOptionChange) => {
-  const { execute } = useAppEngine();
-  
-  // --- Compression Estimation ---
+/* 
+ useCompressionEstimator:
+ Debounces canvas rendering to calculate real-time estimates of output compressed file sizes
+ based on JPEG/WebP quality thresholds without writing intermediate files to disk.
+*/
+export const useCompressionEstimator = (options, sourceCanvas) => {
   const [estimatedSize, setEstimatedSize] = useState(null);
   const estimateDebounceRef = useRef(null);
 
   useEffect(() => {
-    if (serviceId !== 'compression' || !sourceCanvas) {
+    if (!sourceCanvas || !options) {
       setEstimatedSize(null);
       return;
     }
 
     const quality = (options?.quality ?? 80) / 100;
 
+    // Throttle calculation frequency (400ms debounce) to maintain UI frame rates
     clearTimeout(estimateDebounceRef.current);
     estimateDebounceRef.current = setTimeout(() => {
-      let mimeType = 'image/jpeg';
-      try {
-        const sampleCtx = sourceCanvas.getContext('2d', { willReadFrequently: true });
-        if (sampleCtx && sampleCtx.getImageData(0, 0, 1, 1).data[3] < 255) {
-          mimeType = 'image/webp';
-        }
-      } catch (e) {}
-      
+      // Use WebP if image supports alpha transparency, fallback to JPEG
+      const mimeType = hasAlphaTransparency(sourceCanvas) ? 'image/webp' : 'image/jpeg';
+
       sourceCanvas.toBlob(
         (blob) => { if (blob) setEstimatedSize(blob.size); },
         mimeType,
@@ -44,24 +34,33 @@ export const useServiceEffects = (serviceId, options, sourceCanvas, resultCanvas
     }, 400);
 
     return () => clearTimeout(estimateDebounceRef.current);
-  }, [serviceId, options?.quality, sourceCanvas]);
+  }, [options?.quality, sourceCanvas]);
 
-  // --- Background Removal Post-Processing ---
+  return estimatedSize;
+};
+
+/* 
+ useBgRemovalPostProcessor:
+ Listens to slider adjustments (edge shifts, smooth filters, contrasts) and debounces
+ post-processing passes to refine mask overlays smoothly.
+*/
+export const useBgRemovalPostProcessor = (options, sourceCanvas, resultCanvas) => {
+  const { currentService } = useService();
+  const { execute } = useUnifiedProcessor();
   const postProcessDebounceRef = useRef(null);
   const lastProcessedOptionsRef = useRef(null);
 
   useEffect(() => {
-    if (serviceId !== 'background-removal' || !sourceCanvas || !resultCanvas) return;
+    if (currentService?.id !== 'background-removal') return;
+    if (!sourceCanvas || !resultCanvas || !options) return;
 
-    // Check if relevant options actually changed
+    // Check if relevant edge sliders actually shifted
     const currentRelevant = {
       edgeShift: options?.edgeShift,
       edgeSmoothness: options?.edgeSmoothness,
       edgeContrast: options?.edgeContrast
     };
 
-    // If we have a result but haven't tracked options yet, it means the result
-    // is already synced with the current options (e.g., on mount or after manual run).
     if (!lastProcessedOptionsRef.current) {
       lastProcessedOptionsRef.current = currentRelevant;
       return;
@@ -75,6 +74,7 @@ export const useServiceEffects = (serviceId, options, sourceCanvas, resultCanvas
       return;
     }
 
+    // Debounce the edge refinement computations (80ms throttle) to keep slider dragging responsive
     clearTimeout(postProcessDebounceRef.current);
     postProcessDebounceRef.current = setTimeout(() => {
       execute({ ...options, _postProcess: true });
@@ -83,20 +83,27 @@ export const useServiceEffects = (serviceId, options, sourceCanvas, resultCanvas
 
     return () => clearTimeout(postProcessDebounceRef.current);
   }, [
-    serviceId,
     options?.edgeShift,
     options?.edgeSmoothness,
     options?.edgeContrast,
     sourceCanvas,
-    resultCanvas, // Added resultCanvas to dependencies to ensure we have it
+    resultCanvas,
     execute
   ]);
+};
 
-  // --- File Conversion Sync ---
-  const { originalFile, updateServiceSetting } = useApp();
+/* 
+ useFileConversionSync:
+ Detects the MIME type of a newly uploaded file and automatically binds it
+ as the "inputFormat" parameter in the file conversion context.
+*/
+export const useFileConversionSync = (options, onOptionChange) => {
+  const { originalFile } = useWorkspace();
+  const { updateServiceSetting } = useService();
+
   useEffect(() => {
-    if (serviceId !== 'file-conversion' || !originalFile) return;
-    
+    if (!originalFile || !options) return;
+
     const mime = originalFile.type || 'application/octet-stream';
     if (options?.inputFormat !== mime) {
       if (onOptionChange) {
@@ -105,10 +112,5 @@ export const useServiceEffects = (serviceId, options, sourceCanvas, resultCanvas
         updateServiceSetting('file-conversion', 'inputFormat', mime);
       }
     }
-  }, [serviceId, originalFile, options?.inputFormat, updateServiceSetting, onOptionChange]);
-
-  return {
-    estimatedSize
-  };
+  }, [originalFile, options?.inputFormat, updateServiceSetting, onOptionChange]);
 };
-

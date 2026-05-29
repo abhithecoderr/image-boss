@@ -1,0 +1,77 @@
+/* 
+  UI Component: Select Styles
+  Calm & Carbon Dark Theme
+*/
+
+.premium-select-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  width: 100%;
+}
+
+.select-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.select-wrapper {
+  position: relative;
+  width: 100%;
+}
+
+.premium-select-input {
+  width: 100%;
+  padding: 8px 32px 8px 12px;
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-sm);
+  color: var(--text-primary);
+  font-size: 14px;
+  appearance: none;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  outline: none;
+}
+
+.premium-select-input:hover:not(:disabled) {
+  border-color: var(--border-light);
+  background: var(--bg-hover);
+}
+
+.premium-select-input:focus {
+  border-color: var(--highlight);
+  background: var(--bg-surface);
+}
+
+.select-chevron {
+  position: absolute;
+  right: 12px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--text-dim);
+  pointer-events: none;
+  transition: color var(--transition-fast);
+  display: flex;
+  align-items: center;
+}
+
+.premium-select-input:hover ~ .select-chevron {
+  color: var(--text-muted);
+}
+
+.premium-select-input:focus ~ .select-chevron {
+  color: var(--highlight);
+}
+
+.premium-select-input:disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}
+
+.premium-select-input option {
+  background: var(--bg-surface);
+  color: var(--text-primary);
+  padding: 10px;
+}

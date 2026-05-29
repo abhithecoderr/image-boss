@@ -13,7 +13,7 @@ class ProcessorEngine {
 
   /**
    * Load a processor for a given service
-   * @param {string} serviceId 
+   * @param {string} serviceId
    * @returns {Promise<Object>}
    */
   async load(serviceId) {
@@ -36,13 +36,13 @@ class ProcessorEngine {
   /**
    * Mark a service as active and clean up the previous one.
    * Enforces the "one active model/processor" policy.
-   * @param {string} serviceId 
+   * @param {string} serviceId
    */
   async activate(serviceId) {
     // 1. Evict workers at the registry level first (broad stroke)
     workerRegistry.activate(serviceId);
 
-    if (this._activeId === serviceId) {
+    if (this._activeId === serviceId && this._processors[serviceId]) {
       return this._processors[serviceId];
     }
 
@@ -52,7 +52,6 @@ class ProcessorEngine {
       if (prev.dispose) {
         try {
           await prev.dispose();
-          console.info(`[ProcessorEngine] Disposed previous processor: ${this._activeId}`);
         } catch (err) {
           console.warn(`[ProcessorEngine] Error disposing processor: ${this._activeId}`, err);
         }

@@ -1,0 +1,9 @@
+/* 
+  Workspace Overlay: Magic Erase Overlay Styles
+  Calm & Carbon Dark Theme
+*/
+
+.magic-erase-overlay {
+  cursor: crosshair;
+  z-index: 150;
+}

@@ -22,7 +22,6 @@ export const SERVICE_ORDER = [
   'blur',
   'line-art',
   'compression',
-  'style-transfer',
   'file-conversion',
   'captioning',
   'image-editor',

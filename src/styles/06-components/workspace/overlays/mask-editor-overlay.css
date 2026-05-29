@@ -1,0 +1,22 @@
+/* 
+  Workspace Overlay: Mask Editor Overlay Styles
+  Calm & Carbon Dark Theme
+*/
+
+.mask-draw-overlay {
+  position: absolute;
+  inset: 0;
+  z-index: 150;
+  cursor: none;
+}
+
+.brush-preview {
+  position: fixed;
+  border: 2px solid var(--highlight);
+  border-radius: 50%;
+  pointer-events: none;
+  z-index: 9999;
+  display: none;
+  box-shadow: 0 0 5px rgba(0, 0, 0, 0.5);
+  background: rgba(255, 255, 255, 0.1);
+}

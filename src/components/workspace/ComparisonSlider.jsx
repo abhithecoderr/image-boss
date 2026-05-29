@@ -1,8 +1,9 @@
-import React, { useState, useRef, useEffect, useCallback } from 'react';
-import { useApp } from '../../context/AppContext';
+import React, { useState, useRef, useEffect, useCallback } from "react";
+import { useWorkspace, useService } from "../../context/AppContext";
 
 const ComparisonSlider = () => {
-  const { originalCanvas, resultCanvas, currentService } = useApp();
+  const { originalCanvas, resultCanvas } = useWorkspace();
+  const { currentService } = useService();
   const [position, setPosition] = useState(50);
   const [isDragging, setIsDragging] = useState(false);
   const containerRef = useRef(null);
@@ -11,8 +12,8 @@ const ComparisonSlider = () => {
 
   useEffect(() => {
     if (originalCanvas && resultCanvas && upRef.current && origRef.current) {
-      const upCtx = upRef.current.getContext('2d');
-      const origCtx = origRef.current.getContext('2d');
+      const upCtx = upRef.current.getContext("2d");
+      const origCtx = origRef.current.getContext("2d");
 
       upRef.current.width = resultCanvas.width;
       upRef.current.height = resultCanvas.height;
@@ -22,8 +23,14 @@ const ComparisonSlider = () => {
       origRef.current.height = resultCanvas.height;
       origCtx.drawImage(
         originalCanvas,
-        0, 0, originalCanvas.width, originalCanvas.height,
-        0, 0, resultCanvas.width, resultCanvas.height
+        0,
+        0,
+        originalCanvas.width,
+        originalCanvas.height,
+        0,
+        0,
+        resultCanvas.width,
+        resultCanvas.height,
       );
     }
   }, [originalCanvas, resultCanvas]);
@@ -48,19 +55,19 @@ const ComparisonSlider = () => {
     const onMouseUp = () => setIsDragging(false);
 
     if (isDragging) {
-      window.addEventListener('mousemove', onMouseMove);
-      window.addEventListener('mouseup', onMouseUp);
+      window.addEventListener("mousemove", onMouseMove);
+      window.addEventListener("mouseup", onMouseUp);
     } else {
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
     }
     return () => {
-      window.removeEventListener('mousemove', onMouseMove);
-      window.removeEventListener('mouseup', onMouseUp);
+      window.removeEventListener("mousemove", onMouseMove);
+      window.removeEventListener("mouseup", onMouseUp);
     };
   }, [isDragging, handleMove]);
 
-  if (currentService.id !== 'upscaling' || !resultCanvas) return null;
+  if (currentService.id !== "upscaling" || !resultCanvas) return null;
 
   const aspectRatio = resultCanvas.width / resultCanvas.height;
 
@@ -70,7 +77,7 @@ const ComparisonSlider = () => {
       className="comparison-slider-container"
       onMouseDown={onMouseDown}
       style={{
-        aspectRatio: `${aspectRatio}`
+        aspectRatio: `${aspectRatio}`,
       }}
     >
       {/* Upscaled Layer (Bottom) */}
@@ -83,7 +90,7 @@ const ComparisonSlider = () => {
         className="comparison-layer"
         style={{
           clipPath: `inset(0 0 0 ${position}%)`,
-          zIndex: 2
+          zIndex: 2,
         }}
       >
         <canvas ref={origRef} />
@@ -93,21 +100,15 @@ const ComparisonSlider = () => {
       <div
         className="slider-handle"
         style={{
-          left: `${position}%`
+          left: `${position}%`,
         }}
       >
-        <div className="slider-handle-circle">
-          ⬌
-        </div>
+        <div className="slider-handle-circle">⬌</div>
       </div>
 
       {/* Labels */}
-      <div className="slider-badge slider-badge-left">
-        UPSCALED
-      </div>
-      <div className="slider-badge slider-badge-right">
-        ORIGINAL
-      </div>
+      <div className="slider-badge slider-badge-left">UPSCALED</div>
+      <div className="slider-badge slider-badge-right">ORIGINAL</div>
     </div>
   );
 };

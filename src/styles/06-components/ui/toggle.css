@@ -1,0 +1,78 @@
+/* 
+  UI Component: Toggle Switch Styles
+  Calm & Carbon Dark Theme
+*/
+
+.premium-toggle-container {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-xs);
+  width: 100%;
+}
+
+.toggle-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+}
+
+.premium-toggle-switch {
+  display: flex;
+  align-items: center;
+  gap: var(--space-sm);
+  background: var(--bg-input);
+  border: 1px solid var(--border);
+  padding: 4px 10px 4px 4px;
+  border-radius: var(--radius-pill);
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  width: fit-content;
+  min-width: 64px;
+  height: 28px;
+  outline: none;
+}
+
+.premium-toggle-switch:hover:not(:disabled) {
+  border-color: var(--border-light);
+  background: var(--bg-hover);
+}
+
+.premium-toggle-switch.is-active {
+  background: rgba(245, 166, 35, 0.08);
+  border-color: var(--highlight);
+  padding: 4px 4px 4px 10px;
+  flex-direction: row-reverse;
+}
+
+.toggle-thumb {
+  width: 18px;
+  height: 18px;
+  background: var(--text-dim);
+  border-radius: 50%;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  color: var(--bg-deep);
+  transition: all var(--transition-fast);
+  box-shadow: 0 1px 2px rgba(0, 0, 0, 0.4);
+}
+
+.premium-toggle-switch.is-active .toggle-thumb {
+  background: var(--highlight);
+  color: var(--bg-deep);
+}
+
+.toggle-text {
+  font-size: 10px;
+  font-weight: 600;
+  color: var(--text-dim);
+}
+
+.premium-toggle-switch.is-active .toggle-text {
+  color: var(--highlight);
+}
+
+.is-disabled {
+  opacity: 0.4;
+  cursor: not-allowed;
+}

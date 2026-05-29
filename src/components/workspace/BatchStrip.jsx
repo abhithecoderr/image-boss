@@ -8,36 +8,29 @@
  * - Remove on hover (×)
  */
 
-import React, { useRef, useState, useCallback, useEffect } from 'react';
+import React, { useRef, useState, useCallback } from "react";
+import Button from "../ui/Button";
+import Badge from "../ui/Badge";
 
-const THUMB_SIZE = 56;
-
-/**
- * Generate a thumbnail data URL from a canvas
- */
-function canvasToThumbURL(canvas, size = THUMB_SIZE) {
-  if (!canvas) return null;
-  const thumb = document.createElement('canvas');
-  thumb.width = size;
-  thumb.height = size;
-  const ctx = thumb.getContext('2d');
-
-  // Fit the image within the square
-  const scale = Math.min(size / canvas.width, size / canvas.height);
-  const w = canvas.width * scale;
-  const h = canvas.height * scale;
-  const x = (size - w) / 2;
-  const y = (size - h) / 2;
-
-  ctx.drawImage(canvas, x, y, w, h);
-  return thumb.toDataURL('image/jpeg', 0.6);
-}
-
+// Premium thin-line vector status icons
 const STATUS_ICONS = {
-  pending: '⏳',
-  processing: '⚙️',
-  done: '✅',
-  error: '❌',
+  pending: (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <circle cx="12" cy="12" r="10" />
+      <polyline points="12 6 12 12 16 14" />
+    </svg>
+  ),
+  done: (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <polyline points="20 6 9 17 4 12" />
+    </svg>
+  ),
+  error: (
+    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+      <line x1="18" y1="6" x2="6" y2="18" />
+      <line x1="6" y1="6" x2="18" y2="18" />
+    </svg>
+  ),
 };
 
 const BatchStrip = ({
@@ -55,61 +48,50 @@ const BatchStrip = ({
   const [dragOverIdx, setDragOverIdx] = useState(null);
   const dragItemIdx = useRef(null);
 
-  // Cache thumbnails so they don't regenerate every render
-  const [thumbs, setThumbs] = useState({});
-
-  useEffect(() => {
-    const newThumbs = {};
-    let changed = false;
-    items.forEach(item => {
-      if (item.sourceCanvas && !thumbs[item.id]) {
-        newThumbs[item.id] = canvasToThumbURL(item.sourceCanvas);
-        changed = true;
-      } else if (thumbs[item.id]) {
-        newThumbs[item.id] = thumbs[item.id];
-      }
-    });
-    if (changed) setThumbs(newThumbs);
-  }, [items]); // intentionally not including thumbs to avoid loop
-
   // --- Drag Handlers ---
   const handleDragStart = useCallback((e, idx) => {
     dragItemIdx.current = idx;
-    e.dataTransfer.effectAllowed = 'move';
+    e.dataTransfer.effectAllowed = "move";
     // Make the drag image semi-transparent
-    e.currentTarget.style.opacity = '0.4';
+    e.currentTarget.style.opacity = "0.4";
   }, []);
 
   const handleDragEnd = useCallback((e) => {
-    e.currentTarget.style.opacity = '1';
+    e.currentTarget.style.opacity = "1";
     dragItemIdx.current = null;
     setDragOverIdx(null);
   }, []);
 
   const handleDragOver = useCallback((e, idx) => {
     e.preventDefault();
-    e.dataTransfer.dropEffect = 'move';
+    e.dataTransfer.dropEffect = "move";
     setDragOverIdx(idx);
   }, []);
 
-  const handleDrop = useCallback((e, toIdx) => {
-    e.preventDefault();
-    const fromIdx = dragItemIdx.current;
-    if (fromIdx !== null && fromIdx !== toIdx) {
-      onReorder(fromIdx, toIdx);
-    }
-    dragItemIdx.current = null;
-    setDragOverIdx(null);
-  }, [onReorder]);
+  const handleDrop = useCallback(
+    (e, toIdx) => {
+      e.preventDefault();
+      const fromIdx = dragItemIdx.current;
+      if (fromIdx !== null && fromIdx !== toIdx) {
+        onReorder(fromIdx, toIdx);
+      }
+      dragItemIdx.current = null;
+      setDragOverIdx(null);
+    },
+    [onReorder],
+  );
 
   // --- Click Handler ---
-  const handleClick = useCallback((e, id) => {
-    if (e.ctrlKey || e.metaKey) {
-      onToggleSelect(id);
-    } else {
-      onSelectItem(id);
-    }
-  }, [onSelectItem, onToggleSelect]);
+  const handleClick = useCallback(
+    (e, id) => {
+      if (e.ctrlKey || e.metaKey) {
+        onToggleSelect(id);
+      } else {
+        onSelectItem(id);
+      }
+    },
+    [onSelectItem, onToggleSelect],
+  );
 
   // --- File Add ---
   const handleAddClick = () => {
@@ -119,7 +101,7 @@ const BatchStrip = ({
   const handleFileChange = (e) => {
     if (e.target.files?.length > 0) {
       onAddFiles(e.target.files);
-      e.target.value = ''; // reset so same file can be re-added
+      e.target.value = ""; // reset so same file can be re-added
     }
   };
 
@@ -127,8 +109,16 @@ const BatchStrip = ({
     // Empty state: just the add button as a larger area
     return (
       <div className="batch-strip batch-strip--empty">
-        <div className="batch-add-box batch-add-box--large" onClick={handleAddClick}>
-          <span className="batch-add-icon">+</span>
+        <div
+          className="batch-add-box batch-add-box--large"
+          onClick={handleAddClick}
+        >
+          <span className="batch-add-icon">
+            <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </span>
           <span className="batch-add-label">Add images to batch</span>
         </div>
         <input
@@ -155,11 +145,13 @@ const BatchStrip = ({
             <div
               key={item.id}
               className={[
-                'batch-thumb',
-                isActive && 'batch-thumb--active',
-                isSelected && 'batch-thumb--selected',
-                isDragTarget && 'batch-thumb--drag-over',
-              ].filter(Boolean).join(' ')}
+                "batch-thumb",
+                isActive && "batch-thumb--active",
+                isSelected && "batch-thumb--selected",
+                isDragTarget && "batch-thumb--drag-over",
+              ]
+                .filter(Boolean)
+                .join(" ")}
               draggable
               onDragStart={(e) => handleDragStart(e, idx)}
               onDragEnd={handleDragEnd}
@@ -168,9 +160,9 @@ const BatchStrip = ({
               onClick={(e) => handleClick(e, item.id)}
               title={`${item.name}\nCtrl+Click to select for download`}
             >
-              {thumbs[item.id] ? (
+              {item.thumbnailUrl ? (
                 <img
-                  src={thumbs[item.id]}
+                  src={item.thumbnailUrl}
                   alt={item.name}
                   className="batch-thumb-img"
                   draggable={false}
@@ -180,48 +172,87 @@ const BatchStrip = ({
               )}
 
               {/* Status badge */}
-              <span className={`batch-status batch-status--${item.status}`}>
-                {item.status === 'processing' ? (
-                  <span className="batch-spinner" />
-                ) : (
-                  STATUS_ICONS[item.status]
-                )}
-              </span>
+              <Badge
+                variant={
+                  item.status === "done"
+                    ? "success"
+                    : item.status === "error"
+                    ? "error"
+                    : item.status === "processing"
+                    ? "primary"
+                    : "warning"
+                }
+                pill
+                className="batch-status"
+                icon={
+                  item.status === "processing" ? (
+                    <span className="batch-spinner" />
+                  ) : (
+                    STATUS_ICONS[item.status]
+                  )
+                }
+              />
 
               {/* Selection checkmark */}
               {isSelected && (
-                <span className="batch-check">✓</span>
+                <span className="batch-check">
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="3" strokeLinecap="round" strokeLinejoin="round">
+                    <polyline points="20 6 9 17 4 12" />
+                  </svg>
+                </span>
               )}
 
               {/* Remove button on hover */}
-              <button
+              <Button
+                variant="secondary"
+                size="tiny"
                 className="batch-remove"
                 onClick={(e) => {
                   e.stopPropagation();
                   onRemove(item.id);
                 }}
                 title="Remove from batch"
-              >
-                ×
-              </button>
+                icon={
+                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                    <line x1="18" y1="6" x2="6" y2="18" />
+                    <line x1="6" y1="6" x2="18" y2="18" />
+                  </svg>
+                }
+              />
             </div>
           );
         })}
 
         {/* Add more button */}
-        <div className="batch-add-box" onClick={handleAddClick} title="Add more images">
-          <span className="batch-add-icon">+</span>
+        <div
+          className="batch-add-box"
+          onClick={handleAddClick}
+          title="Add more images"
+        >
+          <span className="batch-add-icon">
+            <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <line x1="12" y1="5" x2="12" y2="19" />
+              <line x1="5" y1="12" x2="19" y2="12" />
+            </svg>
+          </span>
         </div>
       </div>
 
       <div className="batch-actions">
-         <button 
-           className="btn btn-secondary btn-tiny batch-clear-btn" 
-           onClick={onClearMemory}
-           title="Free up RAM by clearing intermediate workflow results and AI models"
-         >
-           🧹 Clear Memory
-         </button>
+        <Button
+          variant="secondary"
+          size="tiny"
+          className="batch-clear-btn"
+          onClick={onClearMemory}
+          title="Free up RAM by clearing intermediate workflow results and AI models"
+          icon={
+            <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+              <path d="M3 6h18M19 6v14a2 2 0 0 1-2 2H7a2 2 0 0 1-2-2V6m3 0V4a2 2 0 0 1 2-2h4a2 2 0 0 1 2 2v2" />
+            </svg>
+          }
+        >
+          Clear Memory
+        </Button>
       </div>
 
       <input

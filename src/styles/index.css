@@ -3,42 +3,56 @@
    ============================================ */
 
 /* 01 Base Settings & Tokens */
-@import './01-base/reset.css';
-@import './01-base/variables.css';
-@import './01-base/typography.css';
+@import './01-base/base.css';
 
-/* 02 Design System (Primitives) */
-@import './02-design-system/buttons.css';
-
-/* 03 Animations */
-@import './03-animations/keyframes.css';
+/* 02 Design System (Primitives + Animations) */
+@import './02-design-system/design-system.css';
 
 /* 04 Global Layout */
-@import './04-layout/container.css';
-@import './04-layout/navbar.css';
-@import './04-layout/main-layout.css';
-@import './04-layout/responsive.css';
+@import './04-layout/layout.css';
 
 /* 05 Pages */
-@import './05-pages/landing.css';
-@import './05-pages/pricing.css';
-@import './05-pages/services.css';
+@import './05-pages/pages.css';
+@import './05-pages/auth.css';
 
-/* 06 Components */
-@import './06-components/editor-preview.css';
-@import './06-components/segmentation.css';
-@import './06-components/workflow-builder.css';
-@import './06-components/control-panel.css';
-@import './06-components/control-panel-inputs.css';
-@import './06-components/workspace-widgets.css';
-@import './06-components/batch-strip.css';
-@import './06-components/ui-feedback.css';
-@import './06-components/sam-editor.css';
-@import './06-components/tabs.css';
-@import './06-components/comparison-caption.css';
-@import './06-components/service-control-grid.css';
+/* 06 Components - Reusable UI */
+@import './06-components/ui/button.css';
+@import './06-components/ui/arrow-button.css';
+@import './06-components/ui/select.css';
+@import './06-components/ui/slider.css';
+@import './06-components/ui/toggle.css';
+@import './06-components/ui/input.css';
+@import './06-components/ui/badge.css';
+@import './06-components/ui/logo.css';
+@import './06-components/ui/toast.css';
+@import './06-components/ui/progress.css';
+@import './06-components/ui/canvas-area.css';
 
+/* 06 Components - Controls */
+@import './06-components/controls/control-panel.css';
+@import './06-components/controls/service-control-grid.css';
+
+/* 06 Components - Home Page Modules */
+@import './06-components/home/sandbox.css';
+@import './06-components/home/carousel.css';
+@import './06-components/home/value-prop.css';
+
+/* 06 Components - Navigation */
+@import './06-components/navigation/sidebar.css';
+@import './06-components/navigation/navbar.css';
+@import './06-components/navigation/footer.css';
+
+/* 06 Components - Workflow */
+@import './06-components/workflow/workflow-builder.css';
+
+/* 06 Components - Workspace */
+@import './06-components/workspace/workspace.css';
+@import './06-components/workspace/batch-strip.css';
+@import './06-components/workspace/editor-preview.css';
+@import './06-components/workspace/segmentation.css';
+@import './06-components/workspace/overlays/sam-overlay.css';
+@import './06-components/workspace/overlays/magic-erase-overlay.css';
+@import './06-components/workspace/overlays/mask-editor-overlay.css';
 
 /* 07 Utilities */
-@import './07-utilities/flex.css';
-@import './07-utilities/spacing.css';
+@import './07-utilities/utilities.css';

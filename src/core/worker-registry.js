@@ -11,6 +11,7 @@ class WorkerRegistry {
   constructor() {
     this._workers = {};       // serviceId → Worker instance
     this._activeId = null;    // Currently active service id
+    this._onDispose = {};     // serviceId → callback[] — notified when a service is evicted
   }
 
   /**
@@ -27,6 +28,26 @@ class WorkerRegistry {
   }
 
   /**
+   * Register a callback that is invoked on the main thread whenever a service
+   * is evicted by activate(). Use this in processor modules to reset their
+   * ready-state flags so the next invocation re-initializes the model.
+   *
+   * @param {string} serviceId - The service to listen for eviction
+   * @param {Function} cb - Zero-argument callback
+   * @returns {Function} Unsubscribe function
+   */
+  onDispose(serviceId, cb) {
+    if (!this._onDispose[serviceId]) {
+      this._onDispose[serviceId] = [];
+    }
+    this._onDispose[serviceId].push(cb);
+    // Return unsubscribe function
+    return () => {
+      this._onDispose[serviceId] = (this._onDispose[serviceId] || []).filter(f => f !== cb);
+    };
+  }
+
+  /**
    * Mark a service as active. All other AI-backed service workers receive
    * a 'dispose' message so they can free their model from memory.
    *
@@ -36,7 +57,6 @@ class WorkerRegistry {
   activate(serviceId, noDisposeIds = []) {
     if (this._activeId === serviceId) return; // Already active, nothing to do
 
-    const prev = this._activeId;
     this._activeId = serviceId;
 
     // Evict every other loaded worker's model
@@ -44,24 +64,41 @@ class WorkerRegistry {
       if (id !== serviceId && !noDisposeIds.includes(id)) {
         try {
           worker.postMessage({ type: 'dispose' });
-          console.info(`[WorkerRegistry] Sent dispose to '${id}' (switching to '${serviceId}')`);
         } catch (_) {
           // Worker may have been terminated or not yet started — safe to ignore
+        }
+
+        // Notify main-thread processor callbacks so they can reset their ready state
+        const callbacks = this._onDispose[id];
+        if (callbacks) {
+          for (const cb of callbacks) {
+            try { cb(); } catch (_) {}
+          }
         }
       }
     }
   }
 
   /**
-   * Terminate a specific worker entirely (full cleanup).
-   * Use this only when you want to free the worker thread itself, not just the model.
+   * Terminate and remove a worker from the registry.
+   * Useful if the worker has crashed or is in a bad state.
    */
   terminate(serviceId) {
     const w = this._workers[serviceId];
     if (w) {
-      w.terminate();
+      try {
+        w.terminate();
+      } catch (_) {}
       delete this._workers[serviceId];
       if (this._activeId === serviceId) this._activeId = null;
+    }
+
+    // Also fire dispose callbacks so processor state is reset
+    const callbacks = this._onDispose[serviceId];
+    if (callbacks) {
+      for (const cb of callbacks) {
+        try { cb(); } catch (_) {}
+      }
     }
   }
 }

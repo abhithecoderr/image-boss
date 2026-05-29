@@ -1,0 +1,65 @@
+/* 
+  UI Component: Badge & Status Chip Styles
+  Calm & Carbon Dark Theme
+*/
+
+.badge {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-1);
+  padding: 2px 8px;
+  font-size: 11px;
+  font-weight: 500;
+  border-radius: var(--radius-xs);
+  border: 1px solid transparent;
+  width: fit-content;
+  color: var(--text-muted);
+  background-color: var(--bg-elevated);
+}
+
+.badge-pill {
+  border-radius: var(--radius-pill);
+}
+
+.badge-icon {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+/* Badge Semantic Variants */
+.badge-success {
+  background-color: rgba(16, 185, 129, 0.08);
+  border-color: rgba(16, 185, 129, 0.15);
+  color: #10b981;
+}
+
+.badge-warning {
+  background-color: rgba(245, 166, 35, 0.08);
+  border-color: rgba(245, 166, 35, 0.15);
+  color: #f5a623;
+}
+
+.badge-error {
+  background-color: rgba(239, 68, 68, 0.08);
+  border-color: rgba(239, 68, 68, 0.15);
+  color: #ef4444;
+}
+
+.badge-info {
+  background-color: rgba(59, 130, 246, 0.08);
+  border-color: rgba(59, 130, 246, 0.15);
+  color: #3b82f6;
+}
+
+.badge-primary {
+  background-color: rgba(245, 166, 35, 0.15);
+  border-color: rgba(245, 166, 35, 0.3);
+  color: var(--text-main);
+}
+
+.badge-secondary {
+  background-color: var(--bg-input);
+  border-color: var(--border);
+  color: var(--text-muted);
+}

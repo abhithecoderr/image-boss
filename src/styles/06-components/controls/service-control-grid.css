@@ -1,0 +1,27 @@
+/* 
+  Component: Service Control Grid Styles
+  Calm & Carbon Dark Theme
+*/
+
+.service-control-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+  width: 100%;
+}
+
+@media (min-width: 768px) {
+  .service-control-grid {
+    grid-template-columns: repeat(2, 1fr);
+  }
+}
+
+@media (min-width: 1200px) {
+  .service-control-grid {
+    grid-template-columns: repeat(3, 1fr);
+  }
+}
+
+.full-width-control {
+  grid-column: 1 / -1;
+}

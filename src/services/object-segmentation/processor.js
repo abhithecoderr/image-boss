@@ -9,6 +9,7 @@ import { workerRegistry } from '../../core/worker-registry.js';
 const SERVICE_ID = 'object-segmentation';
 let lastImageFingerprint = null;
 let lastModelId = null;
+let lastCanvas = null;
 
 function getWorker() {
   return workerRegistry.getWorker(SERVICE_ID, Worker);
@@ -57,28 +58,34 @@ class MaskCandidate {
  */
 export async function process(sourceCanvas, options = {}, onProgress) {
   const points = options.points || [];
-  console.log('[Processor] Starting object process', { pointCount: points.length, mode: options.mode });
-
   const w = getWorker();
 
   const modelId = options.modelId;
   const isSameModel = modelId === lastModelId;
   lastModelId = modelId;
 
-  // Stronger fingerprint: dimensions + a fast pixel sample to detect content changes.
-  // Samples 16 pixels evenly spread across the canvas for a lightweight content hash.
-  const ctx = sourceCanvas.getContext('2d');
-  let sampleHash = `${sourceCanvas.width}x${sourceCanvas.height}`;
-  if (ctx) {
-    const step = Math.max(1, Math.floor(sourceCanvas.width / 4));
-    for (let x = 0; x < sourceCanvas.width; x += step) {
-      const px = ctx.getImageData(x, 0, 1, 1).data;
-      sampleHash += `|${px[0]},${px[1]},${px[2]}`;
+  const isSameCanvas = sourceCanvas === lastCanvas;
+  lastCanvas = sourceCanvas;
+
+  let isSameImage = false;
+  if (isSameCanvas && isSameModel && lastImageFingerprint) {
+    isSameImage = true;
+  } else {
+    // Stronger fingerprint: dimensions + a fast pixel sample to detect content changes.
+    // Samples 16 pixels evenly spread across the canvas for a lightweight content hash.
+    const ctx = sourceCanvas.getContext('2d');
+    let sampleHash = `${sourceCanvas.width}x${sourceCanvas.height}`;
+    if (ctx) {
+      const step = Math.max(1, Math.floor(sourceCanvas.width / 4));
+      for (let x = 0; x < sourceCanvas.width; x += step) {
+        const px = ctx.getImageData(x, 0, 1, 1).data;
+        sampleHash += `|${px[0]},${px[1]},${px[2]}`;
+      }
     }
+    const currentFingerprint = `${sampleHash}:${isSameModel ? 'same' : modelId}`;
+    isSameImage = currentFingerprint === lastImageFingerprint;
+    lastImageFingerprint = currentFingerprint;
   }
-  const currentFingerprint = `${sampleHash}:${isSameModel ? 'same' : modelId}`;
-  const isSameImage = currentFingerprint === lastImageFingerprint;
-  lastImageFingerprint = currentFingerprint;
 
   let bitmap = null;
   if (!isSameImage) {
@@ -86,7 +93,6 @@ export async function process(sourceCanvas, options = {}, onProgress) {
       let bridgeCanvas = sourceCanvas;
 
       if (sourceCanvas.width > MAX_DIM || sourceCanvas.height > MAX_DIM) {
-          console.log(`[Processor] Downscaling high-res input for AI...`);
           const scale = MAX_DIM / Math.max(sourceCanvas.width, sourceCanvas.height);
           const w = Math.floor(sourceCanvas.width * scale);
           const h = Math.floor(sourceCanvas.height * scale);
@@ -106,7 +112,6 @@ export async function process(sourceCanvas, options = {}, onProgress) {
         onProgress?.(progress, message);
       } else if (type === 'complete') {
         const { options: results, mode } = result;
-        console.log('[Processor] Worker complete', { maskCount: results.length, mode });
 
         // Optimization: Return Lazy Candidates instead of full-res canvases
         const candidates = results.map(opt => new MaskCandidate(opt));
@@ -132,6 +137,7 @@ export async function process(sourceCanvas, options = {}, onProgress) {
 export function dispose() {
   const w = getWorker();
   lastImageFingerprint = null;
+  lastCanvas = null;
   w.postMessage({ type: 'clear' });
 }
 

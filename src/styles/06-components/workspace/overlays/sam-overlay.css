@@ -1,0 +1,125 @@
+/* 
+  Workspace Overlay: SAM Overlay Styles
+  Calm & Carbon Dark Theme
+*/
+
+.sam-selection-overlay {
+  position: absolute;
+  z-index: 150;
+  cursor: crosshair;
+  pointer-events: all;
+  background: rgba(255, 255, 255, 0); 
+}
+
+.sam-point {
+  pointer-events: none;
+  animation: pulsePoint 1.5s infinite;
+  position: absolute;
+  width: 12px;
+  height: 12px;
+  border: 2px solid white;
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  box-shadow: 0 0 4px rgba(0, 0, 0, 0.5);
+  z-index: 101;
+}
+
+.sam-point.positive {
+  background: #4ade80;
+}
+
+.sam-point.negative {
+  background: #ef4444;
+}
+
+@keyframes pulsePoint {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    box-shadow: 0 0 0 0 rgba(245, 166, 35, 0.7);
+  }
+  70% {
+    transform: translate(-50%, -50%) scale(1.1);
+    box-shadow: 0 0 0 10px rgba(245, 166, 35, 0);
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(1);
+    box-shadow: 0 0 0 0 rgba(245, 166, 35, 0);
+  }
+}
+
+.click-indicator {
+  position: absolute;
+  width: 20px;
+  height: 20px;
+  border: 2px solid var(--highlight);
+  border-radius: 50%;
+  transform: translate(-50%, -50%);
+  pointer-events: none;
+  animation: pulse 1s ease-out infinite;
+}
+
+@keyframes pulse {
+  0% {
+    transform: translate(-50%, -50%) scale(1);
+    opacity: 1;
+  }
+  100% {
+    transform: translate(-50%, -50%) scale(2);
+    opacity: 0;
+  }
+}
+
+.sam-selection-rect {
+  position: absolute;
+  border: 2px dashed #00f2ff;
+  background: rgba(0, 242, 255, 0.1);
+  box-shadow: 0 0 15px rgba(0, 242, 255, 0.3);
+  display: none;
+  pointer-events: none;
+}
+
+.refine-actions-overlay {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: flex;
+  gap: 8px;
+  z-index: 100;
+  pointer-events: auto;
+}
+
+.refine-btn {
+  padding: 6px 12px;
+  border-radius: 6px;
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  transition: all 0.2s;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.15);
+}
+
+.refine-btn.generate {
+  background: var(--highlight);
+  color: white;
+  border: none;
+}
+
+.refine-btn.generate:hover {
+  background: var(--highlight-hover);
+  transform: translateY(-1px);
+}
+
+.refine-btn.cancel {
+  background: rgba(31, 41, 55, 0.8);
+  color: #ef4444;
+  border: 1px solid rgba(239, 68, 68, 0.3);
+  backdrop-filter: blur(4px);
+}
+
+.refine-btn.cancel:hover {
+  background: rgba(31, 41, 55, 0.95);
+  border-color: #ef4444;
+}

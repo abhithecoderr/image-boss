@@ -1,19 +1,26 @@
 import { useCallback, useRef, useEffect } from 'react';
-import { useApp } from '../context/AppContext';
+import { useWorkspace, useSegmentation } from '../context/AppContext';
 
+/* 
+ useMaskEditor:
+ Direct canvas overlay brush tool.
+ Enables users to paint directly on the result mask canvas to erase or restore mask segments manually.
+*/
 export const useMaskEditor = (resRef) => {
   const {
-    editing,
-    setEditing,
     originalCanvas,
     resultCanvas,
-    setResultCanvas,
-    currentService
-  } = useApp();
+    setResultCanvas
+  } = useWorkspace();
+  const {
+    editing,
+    setEditing
+  } = useSegmentation();
 
+  // Hidden offscreen canvas buffer keeping track of the pure transparency mask image
   const maskCanvasRef = useRef(null);
 
-  // Initialize mask canvas when result changes
+  // Initialize offscreen mask buffer whenever result canvas modifications arrive
   useEffect(() => {
     if (resultCanvas) {
       const isValid = 
@@ -35,6 +42,7 @@ export const useMaskEditor = (resRef) => {
     }
   }, [resultCanvas]);
 
+  // Redraws the composite (Original Canvas + Mask Buffer Overlay) onto the viewport display canvas
   const updateDisplay = useCallback(() => {
     if (!resRef.current || !maskCanvasRef.current || !originalCanvas) return;
 
@@ -46,23 +54,14 @@ export const useMaskEditor = (resRef) => {
     displayCanvas.height = mask.height;
     ctx.clearRect(0, 0, displayCanvas.width, displayCanvas.height);
 
-    if (currentService.id === 'blur' ||
-        currentService.id === 'upscaling' ||
-        currentService.id === 'line-art' ||
-        currentService.id === 'object-segmentation') {
-      ctx.drawImage(mask, 0, 0);
-    } else {
-      // Background removal mode: composite
-      ctx.drawImage(originalCanvas, 0, 0, displayCanvas.width, displayCanvas.height);
-      ctx.globalCompositeOperation = 'destination-in';
-      ctx.drawImage(mask, 0, 0);
-      ctx.globalCompositeOperation = 'source-over';
-    }
+    // Composite: Destination-in transparency mask cutouts
+    ctx.drawImage(originalCanvas, 0, 0, displayCanvas.width, displayCanvas.height);
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.drawImage(mask, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
+  }, [originalCanvas, resRef]);
 
-    // Also update the global state periodically or on end
-    // For now, we'll sync it to a state-managed canvas if needed for download
-  }, [originalCanvas, currentService, resRef]);
-
+  // Saves/Flushes the painted mask canvas back into the global workspace result context
   const bakeMask = useCallback(() => {
     if (!maskCanvasRef.current || !originalCanvas) return;
 
@@ -72,22 +71,15 @@ export const useMaskEditor = (resRef) => {
     finalCanvas.height = mask.height;
     const ctx = finalCanvas.getContext('2d');
 
-    if (currentService.id === 'blur' ||
-        currentService.id === 'upscaling' ||
-        currentService.id === 'line-art' ||
-        currentService.id === 'object-segmentation') {
-      ctx.drawImage(mask, 0, 0);
-    } else {
-      // Background removal mode: composite
-      ctx.drawImage(originalCanvas, 0, 0, finalCanvas.width, finalCanvas.height);
-      ctx.globalCompositeOperation = 'destination-in';
-      ctx.drawImage(mask, 0, 0);
-      ctx.globalCompositeOperation = 'source-over';
-    }
+    ctx.drawImage(originalCanvas, 0, 0, finalCanvas.width, finalCanvas.height);
+    ctx.globalCompositeOperation = 'destination-in';
+    ctx.drawImage(mask, 0, 0);
+    ctx.globalCompositeOperation = 'source-over';
 
     setResultCanvas(finalCanvas);
-  }, [originalCanvas, currentService, setResultCanvas]);
+  }, [originalCanvas, setResultCanvas]);
 
+  // Draws brush strokes at coordinates (utilizing canvas coordinate scaling offsets)
   const drawAt = useCallback((clientX, clientY) => {
     if (!resRef.current || !maskCanvasRef.current || editing.activeTool === 'none') return;
 
@@ -104,6 +96,7 @@ export const useMaskEditor = (resRef) => {
     maskCtx.beginPath();
     maskCtx.arc(x, y, size / 2, 0, Math.PI * 2);
 
+    // Erase draws transparency cutouts, Restore draws original image pixels back
     if (editing.activeTool === 'erase') {
       maskCtx.globalCompositeOperation = 'destination-out';
       maskCtx.fill();
@@ -117,6 +110,7 @@ export const useMaskEditor = (resRef) => {
     updateDisplay();
   }, [editing.activeTool, editing.brushSize, originalCanvas, updateDisplay, resRef]);
 
+  // Drawing event wrappers supporting mouse drag painting loops
   const startDrawing = useCallback((e) => {
     setEditing(prev => ({ ...prev, isDrawing: true }));
     drawAt(e.clientX, e.clientY);
@@ -130,7 +124,6 @@ export const useMaskEditor = (resRef) => {
 
   const endDrawing = useCallback(() => {
     setEditing(prev => ({ ...prev, isDrawing: false }));
-    // Sync final mask back to AppContext for saving/downloading
     if (maskCanvasRef.current) {
       bakeMask();
     }

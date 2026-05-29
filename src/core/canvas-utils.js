@@ -34,6 +34,42 @@ export function fileToDataURL(file) {
 }
 
 /**
+ * Calculate filename and mime-type for a canvas result
+ */
+export const getDownloadMetadata = (canvas, originalFile, serviceId, settings = {}) => {
+  if (!originalFile) return { filename: `result_${Date.now()}.png`, mimeType: 'image/png' };
+
+  const baseName = originalFile.name.replace(/\.[^/.]+$/, '');
+  let mimeType = originalFile.type || 'image/png';
+
+  if (canvas?._resultMimeType) {
+    mimeType = canvas._resultMimeType;
+  } else if (canvas?._compressedMimeType) {
+    mimeType = canvas._compressedMimeType;
+  } else if (canvas?.dataset?.format) {
+    mimeType = canvas.dataset.format;
+  } else if (serviceId === 'background-removal') {
+    mimeType = 'image/png';
+  } else if (serviceId === 'file-conversion') {
+    mimeType = settings['file-conversion']?.format || 'image/png';
+  }
+
+  const mimeMap = {
+    'image/jpeg': 'jpg', 'image/png': 'png', 'image/webp': 'webp',
+    'image/avif': 'avif', 'image/bmp': 'bmp', 'image/gif': 'gif',
+    'image/tiff': 'tiff', 'image/x-icon': 'ico', 'image/x-portable-anymap': 'pbm',
+    'application/pdf': 'pdf', 'text/plain': 'txt'
+  };
+
+  const extension = mimeMap[mimeType] || mimeType.split('/')[1] || 'png';
+
+  return {
+    filename: `${baseName}_${serviceId}.${extension}`,
+    mimeType
+  };
+};
+
+/**
  * Create a canvas from an image
  */
 export function imageToCanvas(img) {
@@ -299,4 +335,60 @@ export function surgicalInpaint(canvas, maskCanvas, iterations = 30) {
   imgData.data.set(current);
   ctx.putImageData(imgData, 0, 0);
   return canvas;
+}
+
+/**
+ * Standardized transparency detector using single-pixel context sampling.
+ */
+export function hasAlphaTransparency(canvas) {
+  try {
+    const ctx = canvas.getContext('2d');
+    if (!ctx) return false;
+    // Samples 1x1 corner pixel - if alpha is less than 255, we have transparency
+    const pixel = ctx.getImageData(0, 0, 1, 1).data;
+    return pixel[3] < 255;
+  } catch (_) {
+    return false;
+  }
+}
+
+/**
+ * Renders a source canvas onto a canvas with a solid background fill.
+ * Used for conversion formats that do not support transparency (JPEG/BMP).
+ */
+export function drawSolidCanvas(sourceCanvas, format, quality = 0.92) {
+  const resultCanvas = document.createElement('canvas');
+  resultCanvas.width = sourceCanvas.width;
+  resultCanvas.height = sourceCanvas.height;
+  const ctx = resultCanvas.getContext('2d');
+
+  const noAlphaFormats = ['image/jpeg', 'image/bmp'];
+  if (noAlphaFormats.includes(format)) {
+    ctx.fillStyle = '#ffffff';
+    ctx.fillRect(0, 0, resultCanvas.width, resultCanvas.height);
+  }
+
+  ctx.drawImage(sourceCanvas, 0, 0);
+  return resultCanvas;
+}
+
+/**
+ * Generate a thumbnail data URL from a canvas for queue previews.
+ */
+export function canvasToThumbURL(canvas, size = 56) {
+  if (!canvas) return null;
+  const thumb = document.createElement('canvas');
+  thumb.width = size;
+  thumb.height = size;
+  const ctx = thumb.getContext('2d');
+
+  // Fit the image within the square
+  const scale = Math.min(size / canvas.width, size / canvas.height);
+  const w = canvas.width * scale;
+  const h = canvas.height * scale;
+  const x = (size - w) / 2;
+  const y = (size - h) / 2;
+
+  ctx.drawImage(canvas, x, y, w, h);
+  return thumb.toDataURL('image/jpeg', 0.6);
 }

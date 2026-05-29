@@ -1,0 +1,150 @@
+/* ============================================
+   IMAGE BOSS - Home Service Carousel Component
+   ============================================ */
+
+.home-carousel-section {
+  width: 100%;
+  max-width: 1000px;
+  margin: var(--space-12) auto;
+  padding: 0 var(--space-4);
+}
+
+.carousel-tabs-container {
+  display: flex;
+  justify-content: center;
+  flex-wrap: wrap;
+  gap: var(--space-2);
+  margin-bottom: var(--space-6);
+  border-bottom: 1px solid var(--border-subtle);
+  padding-bottom: var(--space-4);
+}
+
+.carousel-tab-btn {
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius-pill);
+  padding: var(--space-2) var(--space-4);
+  color: var(--text-muted);
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+}
+
+.carousel-tab-btn:hover {
+  color: var(--text-main);
+  background: var(--bg-surface);
+}
+
+.carousel-tab-btn.active {
+  color: var(--text-inverse);
+  background: var(--accent-primary);
+  border-color: var(--accent-primary);
+}
+
+.carousel-viewport-wrapper {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--space-4);
+  position: relative;
+}
+
+.carousel-arrow-btn {
+  width: 44px;
+  height: 44px;
+  border-radius: 50%;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-medium);
+  color: var(--text-main);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  transition: all var(--transition-fast);
+  flex-shrink: 0;
+  font-size: 16px;
+  box-shadow: var(--shadow-sm);
+  user-select: none;
+}
+
+.carousel-arrow-btn:hover {
+  background: var(--bg-elevated);
+  border-color: var(--border-strong);
+  transform: scale(1.05);
+}
+
+.carousel-arrow-btn:active {
+  transform: scale(0.95);
+}
+
+.carousel-card-display {
+  flex: 1;
+  background: var(--bg-surface);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-lg);
+  padding: var(--space-6);
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-6);
+  min-height: 280px;
+  box-shadow: var(--shadow-layered);
+  transition: all 0.3s ease;
+}
+
+@media (min-width: 768px) {
+  .carousel-card-display {
+    flex-direction: row;
+    align-items: center;
+  }
+}
+
+.carousel-info-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+  text-align: left;
+}
+
+.carousel-service-name {
+  font-size: 24px;
+  font-weight: 700;
+  color: var(--text-main);
+}
+
+.carousel-service-desc {
+  font-size: 15px;
+  color: var(--text-muted);
+  line-height: 1.6;
+}
+
+.carousel-demo-pane {
+  width: 100%;
+  max-width: 320px;
+  height: 200px;
+  background: var(--bg-surface);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: relative;
+  overflow: hidden;
+  box-shadow: var(--shadow-sm);
+  margin: 0 auto;
+}
+
+.carousel-demo-image {
+  font-size: 48px;
+  margin-bottom: var(--space-2);
+}
+
+.carousel-demo-label {
+  font-size: 12px;
+  font-weight: 600;
+  color: var(--text-dim);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
