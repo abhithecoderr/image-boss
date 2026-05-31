@@ -6,3 +6,4 @@
 export * from './app';
 export * from './services';
 export * from './controls';
+export * from './models';

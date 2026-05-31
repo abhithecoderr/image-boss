@@ -88,18 +88,6 @@ export default function HomeSandbox() {
             onChange={(val) => setBatchMode(val)}
           />
         </div>
-
-        <div className="sandbox-control-item">
-          <label className="sandbox-control-label">Speed Mode</label>
-          <Select
-            options={[
-              { value: "normal", label: "Normal (Accurate)" },
-              { value: "fast", label: "Fast (Turbo)" },
-            ]}
-            value="fast"
-            onChange={() => {}}
-          />
-        </div>
       </div>
 
       {/* 3. Collapsible Parameter Drawer */}

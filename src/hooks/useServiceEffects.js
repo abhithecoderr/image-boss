@@ -50,8 +50,17 @@ export const useBgRemovalPostProcessor = (options, sourceCanvas, resultCanvas) =
   const postProcessDebounceRef = useRef(null);
   const lastProcessedOptionsRef = useRef(null);
 
+  // Track the latest service ID in a ref to prevent stale closure execution in timeouts
+  const currentServiceIdRef = useRef(currentService?.id);
   useEffect(() => {
-    if (currentService?.id !== 'background-removal') return;
+    currentServiceIdRef.current = currentService?.id;
+  }, [currentService?.id]);
+
+  useEffect(() => {
+    if (currentService?.id !== 'background-removal') {
+      lastProcessedOptionsRef.current = null;
+      return;
+    }
     if (!sourceCanvas || !resultCanvas || !options) return;
 
     // Check if relevant edge sliders actually shifted
@@ -77,7 +86,10 @@ export const useBgRemovalPostProcessor = (options, sourceCanvas, resultCanvas) =
     // Debounce the edge refinement computations (80ms throttle) to keep slider dragging responsive
     clearTimeout(postProcessDebounceRef.current);
     postProcessDebounceRef.current = setTimeout(() => {
-      execute({ ...options, _postProcess: true });
+      // Guard: Ensure we are still on background removal when the debounce fires
+      if (currentServiceIdRef.current === 'background-removal') {
+        execute({ ...options, _postProcess: true });
+      }
       lastProcessedOptionsRef.current = currentRelevant;
     }, 80);
 
@@ -88,7 +100,9 @@ export const useBgRemovalPostProcessor = (options, sourceCanvas, resultCanvas) =
     options?.edgeContrast,
     sourceCanvas,
     resultCanvas,
-    execute
+    execute,
+    currentService?.id,
+    options
   ]);
 };
 

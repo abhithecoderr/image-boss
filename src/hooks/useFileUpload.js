@@ -2,6 +2,7 @@ import { useCallback } from 'react';
 import { loadImage, imageToCanvas, canvasToThumbURL } from '../core/canvas-utils';
 import { useWorkspace, useService, useUI } from '../context/AppContext';
 import { createBatchItem } from '../core/BatchItem';
+import { APP_CONFIG } from '../config/app';
 
 /* 
  useFileUpload:
@@ -21,8 +22,7 @@ export const useFileUpload = () => {
 
   // Receives a raw File, checks size parameters, draws it onto an image element and canvas, and sets up state queues.
   const handleFile = useCallback(async (file) => {
-    const MAX_SIZE = 5 * 1024 * 1024; // 5MB limit
-    if (file.size > MAX_SIZE) {
+    if (file.size > APP_CONFIG.maxFileSize) {
       showToast('File too large. Maximum size is 5MB.', 'error');
       return;
     }

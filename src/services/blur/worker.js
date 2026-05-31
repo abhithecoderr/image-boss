@@ -19,7 +19,7 @@ ort.env.wasm.wasmPaths = '/onnx/';
 // Optional: HuggingFace Token if repo is private (not needed for onnx-community)
 // const HF_TOKEN = '';
 
-import { BLUR_MODELS } from '../config/models.js';
+import { BLUR_MODELS } from '../../config/models.js';
 
 // 2026 Optimized Pose Model
 const MODEL_VARIANTS = BLUR_MODELS;

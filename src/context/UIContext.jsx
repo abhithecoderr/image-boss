@@ -25,8 +25,13 @@ export const UIProvider = ({ children }) => {
     setProgress({ percent, message });
   }, []);
 
+  // Resets the progress bar back to zero (called on service switches to prevent stale messages)
+  const clearProgress = useCallback(() => {
+    setProgress({ percent: 0, message: '' });
+  }, []);
+
   return (
-    <UIContext.Provider value={{ toast, progress, showToast, updateProgress }}>
+    <UIContext.Provider value={{ toast, progress, showToast, updateProgress, clearProgress }}>
       {children}
     </UIContext.Provider>
   );

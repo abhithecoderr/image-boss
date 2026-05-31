@@ -3,7 +3,7 @@
  * Defines UI controls (sliders, selects, etc.) for each service
  */
 
-import { SEGMENTATION_MODELS } from '../services/config/models';
+import { SEGMENTATION_MODELS } from './models';
 
 export const CONTROLS_CONFIG = {
 

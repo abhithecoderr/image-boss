@@ -10,7 +10,7 @@ import { getGPUConfig, createProgressReporter } from '../../core/worker-utils.js
 const ORT_VERSION = "1.20.1";
 ort.env.wasm.wasmPaths = '/onnx/';
 
-import { LINE_ART_MODELS } from '../config/models.js';
+import { LINE_ART_MODELS } from '../../config/models.js';
 
 const MODEL_URLS = LINE_ART_MODELS;
 

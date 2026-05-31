@@ -15,7 +15,7 @@ ort.env.wasm.numThreads = 1;
 const ORT_VERSION = '1.20.1';
 ort.env.wasm.wasmPaths = '/onnx/';
 
-import { UPSCALING_MODELS } from '../config/models.js';
+import { UPSCALING_MODELS } from '../../config/models.js';
 
 const MODEL_ONNX_URL = UPSCALING_MODELS.onnx.url;
 const MODEL_DATA_URL = UPSCALING_MODELS.data.url;

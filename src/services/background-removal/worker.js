@@ -1,7 +1,7 @@
 import { pipeline, AutoModel, AutoProcessor, env, RawImage } from '@huggingface/transformers';
 import { getGPUConfig, rawImageToBitmap, bitmapToRawImage, createProgressReporter } from '../../core/worker-utils.js';
 
-import { BACKGROUND_REMOVAL_MODELS } from '../config/models.js';
+import { BACKGROUND_REMOVAL_MODELS } from '../../config/models.js';
 
 const DEBUG = false;
 let cachedGPUConfig = null;

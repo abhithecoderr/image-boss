@@ -1,0 +1,13 @@
+{
+  "version": "7",
+  "dialect": "sqlite",
+  "entries": [
+    {
+      "idx": 0,
+      "version": "6",
+      "when": 1780161092485,
+      "tag": "0000_bright_true_believers",
+      "breakpoints": true
+    }
+  ]
+}

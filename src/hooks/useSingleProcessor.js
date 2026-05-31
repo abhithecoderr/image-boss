@@ -8,7 +8,7 @@ import { processorEngine } from '../core/processor-engine';
 */
 export const useSingleProcessor = (workspace, ui) => {
   // Destructure workspace and UI setters/getters
-  const { setResultCanvas, setIsProcessing } = workspace;
+  const { setResultCanvas, setIsProcessing, setItems, activeItemId } = workspace;
   const { updateProgress, showToast } = ui;
 
   /* 
@@ -35,19 +35,30 @@ export const useSingleProcessor = (workspace, ui) => {
         canvas instanceof ImageBitmap
       );
 
-      // If output is valid, sync it back to the editor result view
+      // If output is valid, sync it back to the editor result view and set status to done
       if (isValid) {
         setResultCanvas(canvas);
+        setItems((prev) =>
+          prev.map((item) =>
+            item.id === activeItemId ? { ...item, status: "done", error: null, resultCanvas: canvas } : item
+          )
+        );
         showToast('Processing complete', 'success');
       }
 
       return result;
     } catch (err) {
       showToast(`Error: ${err.message}`, 'error');
+      setResultCanvas(null);
+      setItems((prev) =>
+        prev.map((item) =>
+          item.id === activeItemId ? { ...item, status: "error", error: err.message } : item
+        )
+      );
     } finally {
       setIsProcessing(false); // Release UI lock
     }
-  }, [setIsProcessing, updateProgress, setResultCanvas, showToast]);
+  }, [setIsProcessing, updateProgress, setResultCanvas, setItems, activeItemId, showToast]);
 
   return { executeSingle };
 };

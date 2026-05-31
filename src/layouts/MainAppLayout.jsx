@@ -17,7 +17,8 @@ export default function MainAppLayout() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const { execute, engine, mode, unified } = useUnifiedProcessor();
+  const processor = useUnifiedProcessor();
+  const { execute, mode } = processor;
 
   // Triggers immediate automatic execution if redirected from the homepage sandbox with autoProcess instructions
   useEffect(() => {
@@ -46,16 +47,16 @@ export default function MainAppLayout() {
           <>
             <ErrorBoundary>
               {mode === OPERATION_MODE.WORKFLOW && (
-                <WorkflowBuilder workflow={unified} onProcess={handleProcess} />
+                <WorkflowBuilder workflow={processor} onProcess={handleProcess} />
               )}
 
               <Workspace
                 batch={useMemo(
                   () =>
                     mode === OPERATION_MODE.WORKFLOW
-                      ? { ...engine, mode: "batch" }
-                      : engine,
-                  [mode, engine],
+                      ? { ...processor, mode: "batch" }
+                      : processor,
+                  [mode, processor],
                 )}
               />
 

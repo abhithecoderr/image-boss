@@ -3,6 +3,7 @@ import { useUI, useWorkspace, useService } from '../context/AppContext';
 import { processorEngine } from '../core/processor-engine';
 import { createBatchItem, disposeBatchItem } from '../core/BatchItem';
 import { loadImage, imageToCanvas, downloadCanvas, canvasToThumbURL } from '../core/canvas-utils';
+import { APP_CONFIG } from '../config/app';
 
 // Import strategy-specific sub-hooks (Delegate Pattern)
 import { useSingleProcessor } from './useSingleProcessor';
@@ -102,7 +103,7 @@ export const useUnifiedProcessor = () => {
     const newItems = [];
     for (const file of files) {
       if (!file.type.startsWith('image/')) continue;
-      if (file.size > 5 * 1024 * 1024) {
+      if (file.size > APP_CONFIG.maxFileSize) {
         showToast(`File ${file.name} is too large (max 5MB)`, 'warning');
         continue;
       }
@@ -205,10 +206,8 @@ export const useUnifiedProcessor = () => {
 
   // Helper utility to completely reset the status indicators of all queue items
   const resetItemsStatus = useCallback(() => {
-    const newItems = _resetItems(items);
-    setItems(newItems);
-    return newItems;
-  }, [items, setItems, _resetItems]);
+    setItems((prevItems) => _resetItems(prevItems));
+  }, [setItems, _resetItems]);
 
   // --- Mapped Execution Router & Active State Detections ---
   
@@ -220,12 +219,14 @@ export const useUnifiedProcessor = () => {
     ? 'workflow'
     : (batchAvailable && batchMode === 'batch' ? 'batch' : 'single');
 
-  // Automatically resets item processing status when shifting between single-image and batch services
+  // Automatically resets item processing status and clears stale progress text when switching services or modes
   useEffect(() => {
+    setIsProcessing(false); // Force-release any stuck processing lock from the previous service
+    updateProgress(0, '');
     if (activeMode !== 'workflow') {
       resetItemsStatus();
     }
-  }, [currentService.id, activeMode]);
+  }, [currentService.id, activeMode, setIsProcessing, resetItemsStatus, updateProgress]);
 
   // Central Router: Delegates execution flow dynamically to correct strategy hooks
   const execute = useCallback(async (options = {}, runOptions = {}) => {
@@ -278,9 +279,5 @@ export const useUnifiedProcessor = () => {
     rerunAll: (options) => execute(options, { forceReset: true }),
   };
 
-  return {
-    ...result,
-    engine: result,
-    unified: result,
-  };
+  return result;
 };

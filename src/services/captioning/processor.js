@@ -1,6 +1,6 @@
 import Worker from './worker.js?worker';
 import { workerRegistry } from '../../core/worker-registry.js';
-import { CAPTIONING_MODELS } from '../config/models.js';
+import { CAPTIONING_MODELS } from '../../config/models.js';
 import { runWorkerJob } from '../../core/worker-utils.js';
 
 const SERVICE_ID = 'captioning';

@@ -1,6 +1,7 @@
 import { useCallback } from 'react';
 import { useSegmentation, useWorkspace, useUI, useService } from '../context/AppContext';
 import { useUnifiedProcessor } from './useUnifiedProcessor';
+import { APP_CONFIG } from '../config/app';
 
 /* 
  useSAM:
@@ -47,7 +48,7 @@ export const useSAM = () => {
     const options = {
       points: samPoints.map(p => ({ x: p.x, y: p.y, label: p.label })),
       mode: editing.activeMode || 'extract',
-      modelId: serviceSettings['object-segmentation']?.modelId || 'Xenova/slimsam-77-uniform'
+      modelId: serviceSettings['object-segmentation']?.modelId || APP_CONFIG.samDefaultModel
     };
 
     try {

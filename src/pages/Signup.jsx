@@ -4,7 +4,7 @@ import { useAuth } from "../context/AppContext";
 import FormInput from "../components/ui/FormInput";
 
 const SignUp = () => {
-  const { signup, isAuthenticated } = useAuth();
+  const { signup, isAuthenticated, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
 
   // Input states
@@ -347,7 +347,11 @@ const SignUp = () => {
                 <button
                   type="button"
                   className="auth-oauth-btn"
-                  onClick={() => alert("Social login is coming in a future update! Try the standard credentials.")}
+                  onClick={async () => {
+                    setIsSubmitting(true);
+                    await loginWithGoogle();
+                    setIsSubmitting(false);
+                  }}
                   disabled={isSubmitting}
                 >
                   <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">

@@ -1,5 +1,5 @@
 import { createProgressReporter } from '../../core/worker-utils.js';
-import { MAGIC_ERASE_MODELS } from '../config/models.js';
+import { MAGIC_ERASE_MODELS } from '../../config/models.js';
 import MagicEraseWorker from './worker.js?worker';
 import { workerRegistry } from '../../core/worker-registry.js';
 

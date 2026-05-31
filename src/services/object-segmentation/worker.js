@@ -5,7 +5,7 @@
 
 import { SamModel, Sam2Model, AutoProcessor, RawImage, env } from '@huggingface/transformers';
 import { getGPUConfig, createProgressReporter } from '../../core/worker-utils.js';
-import { SEGMENTATION_MODELS } from '../config/models.js';
+import { SEGMENTATION_MODELS } from '../../config/models.js';
 
 env.allowLocalModels = false;
 

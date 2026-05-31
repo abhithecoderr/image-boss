@@ -4,10 +4,10 @@
   "version": "1.0.0",
   "type": "module",
   "scripts": {
-    "dev": "vite",
+    "dev": "vite --force",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "npm run build && wrangler pages deploy dist"
+    "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
     "@better-auth/drizzle-adapter": "^1.6.11",
@@ -24,11 +24,16 @@
     "react-dom": "^19.0.0",
     "react-image-crop": "^11.0.10",
     "react-router-dom": "^6.28.0",
-    "upscaler": "^1.0.0-beta.19"
+    "upscaler": "^1.0.0-beta.19",
+    "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@cloudflare/vite-plugin": "^1.39.0",
+    "@libsql/client": "^0.17.3",
     "@vitejs/plugin-react": "^4.3.4",
+    "dotenv": "^17.4.2",
     "drizzle-kit": "^0.31.10",
+    "hono": "^4.12.23",
     "vite": "^6.0.0",
     "wrangler": "^4.95.0"
   }

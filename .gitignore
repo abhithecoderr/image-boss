@@ -28,3 +28,13 @@ dist-ssr
 scripts/
 guides/
 .gemini/antigravity/brain/
+
+# Local env files and secrets
+.dev.vars
+.env
+.env.local
+.env.*.local
+
+# Cloudflare wrangler development cache
+.wrangler/
+

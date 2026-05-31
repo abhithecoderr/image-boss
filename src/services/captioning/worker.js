@@ -10,7 +10,7 @@ import {
   env
 } from '@huggingface/transformers';
 import { getGPUConfig, createProgressReporter } from '../../core/worker-utils.js';
-import { CAPTIONING_MODELS } from '../config/models.js';
+import { CAPTIONING_MODELS } from '../../config/models.js';
 
 
 // v4: no wasm.proxy workaround needed — build system no longer double-proxies
