@@ -1,0 +1,174 @@
+/* 
+  Component: Control Panel Styles
+  Calm & Carbon Dark Theme
+*/
+
+.controls {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-4);
+  padding: var(--space-6);
+  background: rgba(26, 26, 26, 0.4);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  border-radius: var(--radius-lg);
+  margin-top: var(--space-6);
+  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+}
+
+.controls-grid {
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: var(--space-4);
+  width: 100%;
+}
+
+@media (min-width: 1024px) {
+  .controls-grid {
+    grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+  }
+}
+
+.control-group {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+}
+
+.control-label {
+  font-size: 11px;
+  font-weight: 500;
+  color: var(--text-muted);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.full-width-control {
+  grid-column: 1 / -1;
+}
+
+/* Category Tabs inside Editor Controls */
+.editor-categories-box {
+  margin-bottom: var(--space-2);
+}
+
+.control-tabs {
+  display: flex;
+  gap: var(--space-2);
+  width: 100%;
+}
+
+.tab-item {
+  flex: 1;
+  text-align: center;
+  font-size: 13px;
+  border-radius: var(--radius-sm);
+  height: 32px;
+}
+
+.tab-item.active {
+  border-color: var(--highlight);
+  color: var(--highlight);
+}
+
+/* Manual touch-up brush settings */
+.control-manual-touchup {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--space-4);
+  align-items: center;
+  width: 100%;
+  margin-top: var(--space-2);
+}
+
+.control-manual-touchup .control-tabs {
+  width: auto;
+  min-width: 240px;
+}
+
+.control-section-divider {
+  border-top: 1px solid var(--border);
+  padding-top: var(--space-4);
+  margin-top: var(--space-2);
+}
+
+/* Actions area */
+.actions-row {
+  display: flex;
+  justify-content: flex-end;
+  gap: var(--space-3);
+  margin-top: var(--space-4);
+  padding-top: var(--space-4);
+  border-top: 1px solid var(--border);
+  width: 100%;
+}
+
+.actions-row .btn {
+  min-width: 120px;
+}
+
+/* Stats/Estimates overlay (Compression etc) */
+.stats-overlay {
+  margin-top: var(--space-2);
+}
+
+.workflow-compression-stats {
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-2);
+  padding: var(--space-3);
+  background: var(--bg-input);
+  border: 1px dashed var(--border);
+  border-radius: var(--radius-sm);
+}
+
+.workflow-stat-row {
+  display: flex;
+  justify-content: space-between;
+  font-size: 13px;
+}
+
+.workflow-stat-label {
+  color: var(--text-muted);
+}
+
+.workflow-stat-value {
+  color: var(--text-main);
+  font-weight: 500;
+}
+
+.workflow-stat-success {
+  color: var(--highlight);
+  font-weight: 600;
+}
+
+
+
+.tab-group {
+  display: flex;
+  gap: var(--space-xs);
+}
+
+.tool-btn.active {
+  background: var(--bg-tertiary);
+  border-color: var(--highlight) !important;
+  color: var(--highlight) !important;
+  box-shadow: 0 0 10px var(--highlight-soft);
+}
+
+.edit-overlay {
+  position: absolute;
+  bottom: var(--space-md);
+  right: var(--space-md);
+  display: flex;
+  gap: var(--space-sm);
+  background: rgba(0, 0, 0, 0.7);
+  padding: var(--space-sm);
+  border-radius: var(--radius-md);
+  backdrop-filter: blur(8px);
+  border: 1px solid var(--border);
+  z-index: 10;
+  animation: fadeIn var(--transition-normal);
+}
+
