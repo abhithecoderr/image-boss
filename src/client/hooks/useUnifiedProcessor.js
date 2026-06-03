@@ -1,4 +1,4 @@
-import { useCallback, useEffect } from "react";
+import { useCallback, useEffect, useRef } from "react";
 import { useUI, useWorkspace, useService } from "../store";
 import { processorEngine } from "../core/processor-engine";
 import { useDownloadActions, useQueueActions } from "./useFileUpload";
@@ -21,6 +21,7 @@ export const useUnifiedProcessor = () => {
   const serviceContext = useService(); // Current AI services configurations and metadata
 
   const { updateProgress, showToast } = uiContext;
+  const lastRunStepsRef = useRef(null);
   const {
     items,
     setItems,
@@ -33,6 +34,8 @@ export const useUnifiedProcessor = () => {
     setIsProcessing,
     batchMode,
     setBatchMode,
+    batchSettingsTarget,
+    setBatchSettingsTarget,
   } = workspaceContext;
 
   const { currentService, getDownloadMetadata } = serviceContext;
@@ -94,6 +97,131 @@ export const useUnifiedProcessor = () => {
       stepResults: {},
     }));
   }, []);
+
+  const updateItemOverride = useCallback((itemId, serviceOrStepId, key, value) => {
+    setItems((prevItems) =>
+      prevItems.map((item) => {
+        if (item.id !== itemId) return item;
+        const currentOverrides = item.settingsOverrides || {};
+        const stepOverrides = currentOverrides[serviceOrStepId] || {};
+        return {
+          ...item,
+          settingsOverrides: {
+            ...currentOverrides,
+            [serviceOrStepId]: {
+              ...stepOverrides,
+              [key]: value,
+            },
+          },
+        };
+      })
+    );
+  }, [setItems]);
+
+  const executeSingleItemInBatch = useCallback(
+    async (serviceId, globalOptions) => {
+      const itemId = batchSettingsTarget;
+      const item = items.find((i) => i.id === itemId);
+      if (!item) return;
+
+      setIsProcessing(true);
+      const workingItems = [...items];
+      const itemIdx = workingItems.findIndex((ni) => ni.id === itemId);
+
+      workingItems[itemIdx].status = "processing";
+      setItems([...workingItems]);
+
+      try {
+        const itemOverrides = item.settingsOverrides?.[serviceId] || {};
+        const activeOptions = { ...globalOptions, ...itemOverrides };
+
+        const result = await processItem(item, serviceId, activeOptions, `[Selective] `);
+        workingItems[itemIdx].resultCanvas = result;
+        workingItems[itemIdx].status = "done";
+        
+        if (itemId === activeItemId) {
+          setResultCanvas(result);
+        }
+      } catch (err) {
+        workingItems[itemIdx].status = "error";
+        workingItems[itemIdx].error = err.message;
+      }
+
+      setItems([...workingItems]);
+      setIsProcessing(false);
+      showToast("Selected image processed successfully", "success");
+    },
+    [batchSettingsTarget, items, processItem, setItems, setIsProcessing, activeItemId, setResultCanvas, showToast]
+  );
+
+  const executeSingleItemInWorkflow = useCallback(
+    async () => {
+      const itemId = batchSettingsTarget;
+      const item = items.find((i) => i.id === itemId);
+      if (!item) return;
+
+      setIsProcessing(true);
+      const workingItems = [...items];
+      const itemIdx = workingItems.findIndex((ni) => ni.id === itemId);
+
+      workingItems[itemIdx] = {
+        ...item,
+        status: "processing",
+      };
+      setItems([...workingItems]);
+
+      let currentCanvas = item.sourceCanvas;
+
+      try {
+        for (let j = 0; j < workflowSteps.length; j++) {
+          const step = workflowSteps[j];
+          const prefix = `Step ${j + 1}/${workflowSteps.length} [Selective]: `;
+
+          const itemOverrides = item.settingsOverrides?.[step.id] || {};
+          const activeOptions = { ...step.options, ...itemOverrides };
+
+          const result = await processItem(
+            item,
+            step.serviceId,
+            activeOptions,
+            prefix,
+            currentCanvas,
+          );
+
+          if (result) {
+            currentCanvas = result;
+            workingItems[itemIdx].stepResults = {
+              ...workingItems[itemIdx].stepResults,
+              [step.id]: { resultCanvas: result, status: "done" },
+            };
+          } else {
+            throw new Error("Workflow step returned empty canvas");
+          }
+        }
+
+        workingItems[itemIdx] = {
+          ...workingItems[itemIdx],
+          resultCanvas: currentCanvas,
+          status: "done",
+        };
+
+        if (itemId === activeItemId) {
+          setResultCanvas(currentCanvas);
+        }
+      } catch (err) {
+        workingItems[itemIdx] = {
+          ...workingItems[itemIdx],
+          status: "error",
+          error: err.message,
+        };
+      }
+
+      setItems([...workingItems]);
+      setIsProcessing(false);
+      showToast("Selected image workflow complete", "success");
+    },
+    [batchSettingsTarget, items, workflowSteps, processItem, setItems, setIsProcessing, activeItemId, setResultCanvas, showToast]
+  );
 
   // --- Single Processor Strategy Implementation ---
   const executeSingle = useCallback(
@@ -184,11 +312,14 @@ export const useUnifiedProcessor = () => {
         setItems([...workingItems]);
 
         try {
+          const itemOverrides = item.settingsOverrides?.[serviceId] || {};
+          const activeOptions = { ...options, ...itemOverrides };
+
           // Execute the processing helper with progress prefix identifiers (e.g. "[1/5] Processing...")
           const result = await processItem(
             item,
             serviceId,
-            options,
+            activeOptions,
             `[${i + 1}/${pendingItems.length}] `,
           );
           workingItems[itemIdx].resultCanvas = result;
@@ -215,9 +346,23 @@ export const useUnifiedProcessor = () => {
       if (workflowSteps.length === 0)
         return showToast("Add steps to your pipeline first", "warning");
 
+      const stepsSerialized = JSON.stringify(
+        workflowSteps.map((s) => ({
+          id: s.id,
+          serviceId: s.serviceId,
+          options: s.options,
+        })),
+      );
+      const stepsChanged =
+        lastRunStepsRef.current !== null &&
+        lastRunStepsRef.current !== stepsSerialized;
+      lastRunStepsRef.current = stepsSerialized;
+
+      const shouldReset = forceReset || stepsChanged;
+
       // Step 1: Initialize current items queue (resetting status if rerun/reset is requested)
       let currentItems = [...items];
-      if (forceReset) {
+      if (shouldReset) {
         currentItems = _resetItems(currentItems);
         setItems(currentItems);
       }
@@ -232,66 +377,96 @@ export const useUnifiedProcessor = () => {
       setIsProcessing(true); // Lock workspace viewport
       const workingItems = [...currentItems];
 
-      // Step 3: Loop sequentially through each pending image item
-      for (let i = 0; i < pendingItems.length; i++) {
-        const item = pendingItems[i];
-        const itemIdx = workingItems.findIndex((ni) => ni.id === item.id);
+      try {
+        // Step 3: Loop sequentially through each workflow step (Step-First / Breadth-First)
+        for (let j = 0; j < workflowSteps.length; j++) {
+          const step = workflowSteps[j];
 
-        // Lock current item status to 'processing'
-        workingItems[itemIdx] = {
-          ...item,
-          status: "processing",
-        };
-        setItems([...workingItems]);
+          // Run this step on all pending images that haven't encountered errors yet
+          for (let i = 0; i < pendingItems.length; i++) {
+            const item = pendingItems[i];
+            const itemIdx = workingItems.findIndex((ni) => ni.id === item.id);
 
-        let currentCanvas = item.sourceCanvas;
+            // Skip if this item encountered an error in a previous step
+            if (workingItems[itemIdx].status === "error") continue;
 
-        try {
-          // Step 4: Run this image sequentially through all registered pipeline steps
-          for (let j = 0; j < workflowSteps.length; j++) {
-            const step = workflowSteps[j];
-            const prefix = `[${i + 1}/${pendingItems.length}] Step ${j + 1}: `;
+            // Lock current item status to 'processing'
+            workingItems[itemIdx] = {
+              ...workingItems[itemIdx],
+              status: "processing",
+            };
+            setItems([...workingItems]);
 
-            // Run processing with intermediate step results passed down as inputs
-            const result = await processItem(
-              item,
-              step.serviceId,
-              step.options,
-              prefix,
-              currentCanvas,
-            );
-            if (result) {
-              currentCanvas = result; // Feed current result as source input for the next step
-              workingItems[itemIdx].stepResults = {
-                ...workingItems[itemIdx].stepResults,
-                [step.id]: { resultCanvas: result, status: "done" },
+            // Input is either the result of the previous step or the original source Canvas
+            const previousStep = j > 0 ? workflowSteps[j - 1] : null;
+            const currentCanvas = previousStep
+              ? workingItems[itemIdx].stepResults[previousStep.id]?.resultCanvas
+              : item.sourceCanvas;
+
+            if (!currentCanvas) {
+              workingItems[itemIdx] = {
+                ...workingItems[itemIdx],
+                status: "error",
+                error: "Input source canvas not available for this step",
+              };
+              setItems([...workingItems]);
+              continue;
+            }
+
+            const prefix = `Step ${j + 1}/${workflowSteps.length} [Image ${i + 1}/${pendingItems.length}]: `;
+
+            try {
+              const itemOverrides = item.settingsOverrides?.[step.id] || {};
+              const activeOptions = { ...step.options, ...itemOverrides };
+
+              // Run processing with the resolved canvas input
+              const result = await processItem(
+                item,
+                step.serviceId,
+                activeOptions,
+                prefix,
+                currentCanvas,
+              );
+
+              if (result) {
+                workingItems[itemIdx].stepResults = {
+                  ...workingItems[itemIdx].stepResults,
+                  [step.id]: { resultCanvas: result, status: "done" },
+                };
+
+                // If this is the final step, store it as the final resultCanvas and set status to "done"
+                if (j === workflowSteps.length - 1) {
+                  workingItems[itemIdx] = {
+                    ...workingItems[itemIdx],
+                    resultCanvas: result,
+                    status: "done",
+                  };
+
+                  // Update the live canvas result if this item is currently selected in the viewport
+                  if (item.id === activeItemId) {
+                    setResultCanvas(result);
+                  }
+                }
+              } else {
+                throw new Error("Step returned an empty result canvas");
+              }
+            } catch (err) {
+              workingItems[itemIdx] = {
+                ...workingItems[itemIdx],
+                status: "error",
+                error: err.message,
               };
             }
-          }
 
-          // Store the final pipeline canvas output back into the item results
-          workingItems[itemIdx] = {
-            ...workingItems[itemIdx],
-            resultCanvas: currentCanvas,
-            status: "done",
-          };
-
-          // If the processed item is currently selected in the viewport, update the live canvas result
-          if (item.id === activeItemId) {
-            setResultCanvas(currentCanvas);
+            setItems([...workingItems]);
           }
-        } catch (err) {
-          workingItems[itemIdx] = {
-            ...workingItems[itemIdx],
-            status: "error",
-            error: err.message,
-          };
         }
-
-        setItems([...workingItems]);
+      } catch (globalErr) {
+        console.error("Workflow global execution failed:", globalErr);
+      } finally {
+        setIsProcessing(false); // Release workspace viewport lock
       }
 
-      setIsProcessing(false); // Release workspace viewport lock
       showToast("Workflow pipeline complete", "success");
     },
     [
@@ -375,7 +550,9 @@ export const useUnifiedProcessor = () => {
   // Service changes synchronization pass
   useEffect(() => {
     resetProcessingState(currentService.id !== "workflows");
-  }, [currentService.id, resetProcessingState]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [currentService.id]);
+
 
   // Central Router: Delegates execution flow dynamically to unified methods
   const execute = useCallback(
@@ -401,9 +578,7 @@ export const useUnifiedProcessor = () => {
 
   // Context-compatible properties derived dynamically for UI elements
   const activeItemIdDerived =
-    activeMode === "workflow"
-      ? items[0]?.id || null
-      : items.find((i) => i.id === activeItemId)?.id || null;
+    items.find((i) => i.id === activeItemId)?.id || items[0]?.id || null;
   const doneCount =
     activeMode === "single"
       ? 0
@@ -444,6 +619,13 @@ export const useUnifiedProcessor = () => {
     doneCount,
     processAll: (options) => execute(options),
     rerunAll: (options) => execute(options, { forceReset: true }),
+    
+    // Per-image custom settings states & selective actions
+    batchSettingsTarget,
+    setBatchSettingsTarget,
+    updateItemOverride,
+    executeSingleItemInBatch,
+    executeSingleItemInWorkflow,
   };
 
   return result;

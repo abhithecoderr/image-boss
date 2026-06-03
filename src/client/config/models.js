@@ -5,27 +5,6 @@
 
 // --- Background Removal (RMBG) ---
 export const BACKGROUND_REMOVAL_MODELS = {
-  modnet: {
-    model_id: "Xenova/modnet",
-    task: "background-removal",
-    default_dtype: "fp32",
-    size: 512,
-    method: "pipeline",
-  },
-  inspyrenet_lite: {
-    model_id: "TheGuy444/InSpyReNet-Res2Net50",
-    task: "background-removal",
-    default_dtype: "fp32",
-    size: 384,
-    method: "pipeline",
-  },
-  ben2: {
-    model_id: "onnx-community/BEN2-ONNX",
-    task: "background-removal",
-    default_dtype: "fp16",
-    size: 512,
-    method: "pipeline",
-  },
   birefnet: {
     model_id: "onnx-community/BiRefNet_512x512-ONNX",
     task: "image-segmentation",
@@ -33,7 +12,7 @@ export const BACKGROUND_REMOVAL_MODELS = {
     default_dtype: "fp16",
     method: "pipeline",
   },
-  'birefnet-lite': {
+  "birefnet-lite": {
     model_id: "studioludens/birefnet-lite-512",
     task: "image-segmentation",
     size: 512,
@@ -44,11 +23,31 @@ export const BACKGROUND_REMOVAL_MODELS = {
 
 // --- Face/Person Blur (YOLO26) ---
 export const BLUR_MODELS = {
-  nano: { model_id: "onnx-community/yolo26n-pose-ONNX", method: "custom", default_dtype: "fp32" },
-  small: { model_id: "onnx-community/yolo26s-pose-ONNX", method: "custom", default_dtype: "fp32" },
-  medium: { model_id: "onnx-community/yolo26m-pose-ONNX", method: "custom", default_dtype: "fp32" },
-  large: { model_id: "onnx-community/yolo26l-pose-ONNX", method: "custom", default_dtype: "fp32" },
-  xlarge: { model_id: "onnx-community/yolo26x-pose-ONNX", method: "custom", default_dtype: "fp32" },
+  nano: {
+    model_id: "onnx-community/yolo26n-pose-ONNX",
+    method: "custom",
+    default_dtype: "fp32",
+  },
+  small: {
+    model_id: "onnx-community/yolo26s-pose-ONNX",
+    method: "custom",
+    default_dtype: "fp32",
+  },
+  medium: {
+    model_id: "onnx-community/yolo26m-pose-ONNX",
+    method: "custom",
+    default_dtype: "fp32",
+  },
+  large: {
+    model_id: "onnx-community/yolo26l-pose-ONNX",
+    method: "custom",
+    default_dtype: "fp32",
+  },
+  xlarge: {
+    model_id: "onnx-community/yolo26x-pose-ONNX",
+    method: "custom",
+    default_dtype: "fp32",
+  },
 };
 
 // --- Captioning (Vision-Language Models) ---
@@ -57,10 +56,10 @@ export const CAPTIONING_MODELS = {
     model_id: "LiquidAI/LFM2.5-VL-450M-ONNX",
     method: "custom",
     default_dtype: {
-      vision_encoder: 'fp16',
-      embed_tokens: 'fp16',
-      decoder_model_merged: 'q4',
-    }
+      vision_encoder: "fp16",
+      embed_tokens: "fp16",
+      decoder_model_merged: "q4",
+    },
   },
 };
 
@@ -69,12 +68,12 @@ export const LINE_ART_MODELS = {
   anime: {
     url: "https://huggingface.co/x-Liola-x/informative-drawings-onnx/resolve/main/informative-drawings_anime_768x768.onnx",
     method: "custom",
-    default_dtype: "fp32"
+    default_dtype: "fp32",
   },
   contour: {
     url: "https://huggingface.co/x-Liola-x/informative-drawings-onnx/resolve/main/informative-drawings_contour_768x768.onnx",
     method: "custom",
-    default_dtype: "fp32"
+    default_dtype: "fp32",
   },
 };
 
@@ -83,26 +82,90 @@ export const MAGIC_ERASE_MODELS = {
   lama: {
     url: "https://huggingface.co/TheGuy444/LaMa-Web/resolve/main/onnx/lama.onnx",
     method: "custom",
-    default_dtype: "fp32"
+    default_dtype: "fp32",
   },
 };
 
 // --- Object Segmentation (SAM) ---
 export const SEGMENTATION_MODELS = {
-  slimsam: { model_id: "Xenova/slimsam-77-uniform", method: "custom", default_dtype: "fp32" },
-  sam_base: { model_id: "Xenova/sam-vit-base", method: "custom", default_dtype: "fp16" },
+  sam2_1_tiny: {
+    model_id: "onnx-community/sam2.1-hiera-tiny-ONNX",
+    method: "custom",
+    default_dtype: "fp16",
+  },
+  sam2_1_small: {
+    model_id: "onnx-community/sam2.1-hiera-small-ONNX",
+    method: "custom",
+    default_dtype: "fp16",
+  },
+  sam2_1_large: {
+    model_id: "onnx-community/sam2.1-hiera-large-ONNX",
+    method: "custom",
+    default_dtype: "fp16",
+  },
 };
 
-// --- Upscaling (Real-ESRGAN) ---
+// --- Upscaling ---
 export const UPSCALING_MODELS = {
-  onnx: {
-    url: "https://huggingface.co/TheGuy444/Real-ESRGAN-ONNX/resolve/main/onnx/model.onnx",
-    method: "custom",
-    default_dtype: "fp32"
+  esrgan: {
+    id: "esrgan",
+    name: "Real-ESRGAN (General 4x)",
+    onnxUrl: "https://huggingface.co/TheGuy444/Real-ESRGAN-ONNX/resolve/main/onnx/model.onnx",
+    dataUrl: "https://huggingface.co/TheGuy444/Real-ESRGAN-ONNX/resolve/main/onnx/model.data",
+    tileSize: 128,
+    overlap: 16,
+    scale: 4,
+    inputLayout: "NCHW",
+    outputLayout: "NCHW",
   },
-  data: {
-    url: "https://huggingface.co/TheGuy444/Real-ESRGAN-ONNX/resolve/main/onnx/model.data",
-    method: "custom",
-    default_dtype: "fp32"
+  esrgan_pro: {
+    id: "esrgan_pro",
+    name: "Real-ESRGAN Pro (General 4x)",
+    onnxUrl: "https://huggingface.co/FuryTMP/RealESR_Gx4_fp16/resolve/main/RealESR_Gx4_fp16.onnx",
+    tileSize: 128,
+    overlap: 16,
+    scale: 4,
+    inputLayout: "NCHW",
+    outputLayout: "NCHW",
+  },
+  esrgan_ultra: {
+    id: "esrgan_ultra",
+    name: "Real-ESRGAN Ultra (General 4x)",
+    onnxUrl: "https://huggingface.co/FuryTMP/RealESRGANx4_fp16/resolve/main/RealESRGANx4_fp16.onnx",
+    tileSize: 128,
+    overlap: 16,
+    scale: 4,
+    inputLayout: "NCHW",
+    outputLayout: "NCHW",
+  },
+  bsrgan_x4: {
+    id: "bsrgan_x4",
+    name: "BSRGAN (Detail 4x)",
+    onnxUrl: "https://huggingface.co/FuryTMP/BSRGANx4_fp16/resolve/main/BSRGANx4_fp16.onnx",
+    tileSize: 128,
+    overlap: 16,
+    scale: 4,
+    inputLayout: "NCHW",
+    outputLayout: "NCHW",
+  },
+  bsrgan_x2: {
+    id: "bsrgan_x2",
+    name: "BSRGAN (Detail 2x)",
+    onnxUrl: "https://huggingface.co/FuryTMP/BSRGANx2_fp16/resolve/main/BSRGANx2_fp16.onnx",
+    tileSize: 256,
+    overlap: 16,
+    scale: 2,
+    inputLayout: "NCHW",
+    outputLayout: "NCHW",
+  },
+  real_esr_anime_x4: {
+    id: "real_esr_anime_x4",
+    name: "Real-ESRGAN (Anime 4x)",
+    onnxUrl: "https://huggingface.co/FuryTMP/RealESR_Animex4_fp16/resolve/main/RealESR_Animex4_fp16.onnx",
+    tileSize: 128,
+    overlap: 16,
+    scale: 4,
+    inputLayout: "NCHW",
+    outputLayout: "NCHW",
   },
 };

@@ -12,14 +12,10 @@ export const CONTROLS_CONFIG = {
       id: 'model',
       label: 'RMBG Model',
       type: 'select',
-      defaultValue: 'inspyrenet_lite',
+      defaultValue: 'birefnet-lite',
       options: [
-        { value: 'ben2', label: 'RMBG Ultra (BEN2)' },
         { value: 'birefnet', label: 'RMBG Pro (BiRefNet)' },
-        { value: 'birefnet-lite', label: 'RMBG Lite (BiRefNet Lite)' },
-        { value: 'modnet', label: 'RMBG Fast (MODNet)' },
-        { value: 'inspyrenet_lite', label: 'RMBG Lite (InSPyReNet Lite)' }
-
+        { value: 'birefnet-lite', label: 'RMBG Lite (BiRefNet Lite)' }
       ]
 
     },
@@ -36,10 +32,11 @@ export const CONTROLS_CONFIG = {
       id: 'modelId',
       label: 'SAM Model',
       type: 'select',
-      defaultValue: SEGMENTATION_MODELS.slimsam.model_id,
+      defaultValue: SEGMENTATION_MODELS.sam2_1_tiny.model_id,
       options: [
-        { value: SEGMENTATION_MODELS.slimsam.model_id, label: 'SlimSAM (Fastest)' },
-        { value: SEGMENTATION_MODELS.sam_base.model_id, label: 'SAM ViT-Base (Balanced)' }
+        { value: SEGMENTATION_MODELS.sam2_1_tiny.model_id, label: 'SAM 2.1 Hiera Tiny (Fastest)' },
+        { value: SEGMENTATION_MODELS.sam2_1_small.model_id, label: 'SAM 2.1 Hiera Small (Balanced)' },
+        { value: SEGMENTATION_MODELS.sam2_1_large.model_id, label: 'SAM 2.1 Hiera Large (Best Quality)' }
       ]
     },
     {
@@ -56,30 +53,18 @@ export const CONTROLS_CONFIG = {
 
   'upscaling': [
     {
-      id: 'scale',
-      label: 'Scale Factor',
+      id: 'modelId',
+      label: 'Upscale Model',
       type: 'select',
-      defaultValue: 1.5,
+      defaultValue: 'esrgan',
       options: [
-        { value: 1.5, label: '1.5x (Super Turbo)' },
-        { value: 3, label: '3x (High Detail)' },
-        { value: 4, label: '4x (Ultra - Slow)' }
-      ],
-      parse: parseFloat
-    },
-    {
-      id: 'detailsIntensity',
-      label: 'Details',
-      type: 'range',
-      min: 0, max: 2, step: 0.1,
-      defaultValue: 0.5
-    },
-    {
-      id: 'brightness',
-      label: 'Brightness',
-      type: 'range',
-      min: -0.3, max: 0.3, step: 0.05,
-      defaultValue: 0
+        { value: 'esrgan', label: 'Real-ESRGAN (General 4x)' },
+        { value: 'esrgan_pro', label: 'ESRGAN Pro (General 4x)' },
+        { value: 'esrgan_ultra', label: 'ESRGAN Ultra (General 4x)' },
+        { value: 'bsrgan_x4', label: 'BSRGAN (Detail 4x)' },
+        { value: 'bsrgan_x2', label: 'BSRGAN (Detail 2x)' },
+        { value: 'real_esr_anime_x4', label: 'Real-ESRGAN (Anime 4x)' }
+      ]
     }
   ],
   'blur': [

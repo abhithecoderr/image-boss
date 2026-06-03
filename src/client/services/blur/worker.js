@@ -259,9 +259,11 @@ self.onmessage = async (event) => {
         const variant = payload?.variant || "nano";
         await initDetector(variant, sendProgress);
         self.postMessage({
-          type: "ready",
-          device: currentDevice,
-          variant: currentVariant,
+          type: "complete",
+          result: {
+            device: currentDevice,
+            variant: currentVariant,
+          }
         });
         break;
       }
@@ -280,10 +282,12 @@ self.onmessage = async (event) => {
         bitmap.close();
 
         self.postMessage({
-          type: "detections",
-          detections,
-          count: detections.length,
-          device: currentDevice,
+          type: "complete",
+          result: {
+            detections,
+            count: detections.length,
+            device: currentDevice,
+          }
         });
         break;
       }
@@ -318,12 +322,14 @@ self.onmessage = async (event) => {
           self.postMessage(
             {
               type: "complete",
-              resultBitmap,
-              width,
-              height,
-              detections: [],
-              count: 0,
-              device: currentDevice,
+              result: {
+                resultBitmap,
+                width,
+                height,
+                detections: [],
+                count: 0,
+                device: currentDevice,
+              }
             },
             [resultBitmap],
           );
@@ -350,10 +356,12 @@ self.onmessage = async (event) => {
         self.postMessage(
           {
             type: "complete",
-            resultBitmap,
-            detections,
-            count: detections.length,
-            device: currentDevice,
+            result: {
+              resultBitmap,
+              detections,
+              count: detections.length,
+              device: currentDevice,
+            }
           },
           [resultBitmap],
         );
@@ -389,10 +397,12 @@ self.onmessage = async (event) => {
         self.postMessage(
           {
             type: "complete",
-            resultBitmap,
-            detections,
-            count: detections.length,
-            device: currentDevice,
+            result: {
+              resultBitmap,
+              detections,
+              count: detections.length,
+              device: currentDevice,
+            }
           },
           [resultBitmap],
         );
@@ -401,7 +411,7 @@ self.onmessage = async (event) => {
 
       case "dispose": {
         dispose();
-        self.postMessage({ type: "disposed" });
+        self.postMessage({ type: "complete", result: "disposed" });
         break;
       }
     }

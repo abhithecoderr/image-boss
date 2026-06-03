@@ -1,4 +1,3 @@
-import { useCallback } from 'react';
 import { useWorkspace, useUI } from '../store';
 import { createBatchItem, disposeBatchItem } from '../core/BatchItem';
 import {
@@ -13,7 +12,7 @@ import { APP_CONFIG } from '../config/app';
  useFileUpload:
  Coordinates uploading a new file in single-image editing viewport modes.
  Validates file constraints, generates canvases and thumbnails, and replaces the active workspace item.
-*/
+ */
 export const useFileUpload = () => {
   const {
     setOriginalCanvas,
@@ -25,7 +24,7 @@ export const useFileUpload = () => {
   const { showToast } = useUI();
 
   // Receives a raw File, checks size parameters, draws it onto an image element and canvas, and sets up state queues.
-  const handleFile = useCallback(async (file) => {
+  const handleFile = async (file) => {
     if (file.size > APP_CONFIG.maxFileSize) {
       showToast('File too large. Maximum size is 5MB.', 'error');
       return;
@@ -57,7 +56,7 @@ export const useFileUpload = () => {
       console.error('Failed to load image:', err);
       showToast('Failed to load image', 'error');
     }
-  }, [setOriginalCanvas, setOriginalFile, setResultCanvas, setItems, setActiveItemId, showToast]);
+  };
 
   return { handleFile };
 };
@@ -65,7 +64,7 @@ export const useFileUpload = () => {
 /* 
  useQueueActions:
  Manages the global batch/workflow items queue (add, remove, select, reorder).
-*/
+ */
 export const useQueueActions = (workspace, showToast) => {
   const {
     items,
@@ -78,7 +77,7 @@ export const useQueueActions = (workspace, showToast) => {
     setSelectedIds,
   } = workspace;
 
-  const addFiles = useCallback(async (files) => {
+  const addFiles = async (files) => {
     const newItems = [];
     for (const file of files) {
       if (!file.type.startsWith("image/")) continue;
@@ -105,9 +104,9 @@ export const useQueueActions = (workspace, showToast) => {
       setOriginalCanvas(newItems[0].sourceCanvas);
     }
     showToast(`Added ${newItems.length} image(s)`, "success");
-  }, [activeItemId, setItems, setActiveItemId, setOriginalCanvas, showToast]);
+  };
 
-  const removeItem = useCallback((id) => {
+  const removeItem = (id) => {
     setItems((prev) => {
       const itemToDispose = prev.find((item) => item.id === id);
       if (itemToDispose) disposeBatchItem(itemToDispose);
@@ -118,40 +117,40 @@ export const useQueueActions = (workspace, showToast) => {
       setOriginalCanvas(null);
       setResultCanvas(null);
     }
-  }, [activeItemId, setActiveItemId, setOriginalCanvas, setResultCanvas, setItems]);
+  };
 
-  const selectItem = useCallback((id) => {
+  const selectItem = (id) => {
     const item = items.find((entry) => entry.id === id);
     if (item) {
       setActiveItemId(id);
       setOriginalCanvas(item.sourceCanvas);
       setResultCanvas(item.resultCanvas);
     }
-  }, [items, setActiveItemId, setOriginalCanvas, setResultCanvas]);
+  };
 
-  const toggleItemSelection = useCallback((id) => {
+  const toggleItemSelection = (id) => {
     setSelectedIds((prev) => {
       const next = new Set(prev);
       if (next.has(id)) next.delete(id);
       else next.add(id);
       return next;
     });
-  }, [setSelectedIds]);
+  };
 
-  const selectAllItems = useCallback(() => {
+  const selectAllItems = () => {
     setSelectedIds(new Set(items.map((item) => item.id)));
-  }, [items, setSelectedIds]);
+  };
 
-  const deselectAllItems = useCallback(() => {
+  const deselectAllItems = () => {
     setSelectedIds(new Set());
-  }, [setSelectedIds]);
+  };
 
-  const reorderItems = useCallback((startIndex, endIndex) => {
+  const reorderItems = (startIndex, endIndex) => {
     const result = Array.from(items);
     const [removed] = result.splice(startIndex, 1);
     result.splice(endIndex, 0, removed);
     setItems(result);
-  }, [items, setItems]);
+  };
 
   return {
     addFiles,
@@ -168,29 +167,29 @@ export const useQueueActions = (workspace, showToast) => {
 /* 
  useDownloadActions:
  Triggers local downloads for selected or all processed images.
-*/
+ */
 export const useDownloadActions = (
   items,
   selectedIds,
   getDownloadMetadata,
 ) => {
-  const downloadSelected = useCallback(() => {
+  const downloadSelected = () => {
     items.forEach((item) => {
       if (selectedIds.has(item.id) && item.resultCanvas) {
         const { filename, mimeType } = getDownloadMetadata(item);
         downloadCanvas(item.resultCanvas, filename, mimeType);
       }
     });
-  }, [items, selectedIds, getDownloadMetadata]);
+  };
 
-  const downloadAll = useCallback(() => {
+  const downloadAll = () => {
     items.forEach((item) => {
       if (item.resultCanvas) {
         const { filename, mimeType } = getDownloadMetadata(item);
         downloadCanvas(item.resultCanvas, filename, mimeType);
       }
     });
-  }, [items, getDownloadMetadata]);
+  };
 
   return {
     downloadSelected,

@@ -1,4 +1,4 @@
-import React, { useMemo, useCallback } from "react";
+import React from "react";
 import { useWorkspace, useUI, useService } from "../../store";
 import { SERVICE_ORDER } from "../../config/app";
 import { SERVICES } from "../../config/services";
@@ -7,6 +7,7 @@ import { downloadCanvas } from "../../core/canvas-utils";
 import ControlRenderer from "../controls/ControlRenderer";
 import Select from "../ui/Select";
 import Button from "../ui/Button";
+import BatchSettingsSelector from "../controls/BatchSettingsSelector";
 
 const WorkflowBuilder = ({ workflow, onProcess }) => {
   const { originalCanvas, items, activeItemId, setResultCanvas, workflowSteps } = useWorkspace();
@@ -19,7 +20,7 @@ const WorkflowBuilder = ({ workflow, onProcess }) => {
     reorderSteps,
   } = workflow;
 
-  const previewStep = useCallback((stepId) => {
+  const previewStep = (stepId) => {
     const activeItem = items.find(i => i.id === activeItemId);
     if (!activeItem) return showToast('No active item selected', 'info');
 
@@ -30,9 +31,9 @@ const WorkflowBuilder = ({ workflow, onProcess }) => {
     } else {
       showToast('Step result not available yet. Please run the workflow.', 'warning');
     }
-  }, [items, activeItemId, setResultCanvas, showToast]);
+  };
 
-  const downloadStepFn = useCallback((stepId) => {
+  const downloadStepFn = (stepId) => {
     const activeItem = items.find(i => i.id === activeItemId);
     if (!activeItem) return showToast('No active item selected', 'info');
 
@@ -44,19 +45,17 @@ const WorkflowBuilder = ({ workflow, onProcess }) => {
     } else {
       showToast('Step result not available yet. Please run the workflow.', 'warning');
     }
-  }, [items, activeItemId, workflowSteps, getDownloadMetadata, showToast]);
+  };
 
   // Filter out meta-services and interactive tools
-  const availableServices = useMemo(() => {
-    return SERVICE_ORDER.filter(
-      (id) =>
-        id !== "workflows" &&
-        id !== "magic-erase" &&
-        id !== "object-segmentation" &&
-        SERVICES[id] &&
-        !SERVICES[id].disabled,
-    );
-  }, []);
+  const availableServices = SERVICE_ORDER.filter(
+    (id) =>
+      id !== "workflows" &&
+      id !== "magic-erase" &&
+      id !== "object-segmentation" &&
+      SERVICES[id] &&
+      !SERVICES[id].disabled,
+  );
 
   const handleAddStep = (serviceId) => {
     if (!serviceId) return;
@@ -73,6 +72,7 @@ const WorkflowBuilder = ({ workflow, onProcess }) => {
 
   return (
     <div className="controls workflow-builder-container">
+      <BatchSettingsSelector />
       <div className="workflow-header-panel">
         <h3 className="workflow-header-title">Workflow Pipeline</h3>
         <div className="workflow-add-step">
@@ -179,22 +179,34 @@ const WorkflowBuilder = ({ workflow, onProcess }) => {
                 </div>
 
                 <div className="service-control-grid">
-                  {(CONTROLS_CONFIG[step.serviceId] || []).map((config) => (
-                    (!config.visibleIf || config.visibleIf(step.options)) && (
-                      <ControlRenderer
-                        key={config.id}
-                        control={config}
-                        value={step.options[config.id] ?? config.defaultValue}
-                        onChange={(id, val, parse) => {
-                          const parsedVal = parse ? parse(val) : val;
-                          updateStepOptions(step.id, {
-                            ...step.options,
-                            [id]: parsedVal,
-                          });
-                        }}
-                      />
-                    )
-                  ))}
+                  {(CONTROLS_CONFIG[step.serviceId] || []).map((config) => {
+                    const globalVal = step.options[config.id] ?? config.defaultValue;
+                    const activeVal =
+                      workflow.batchSettingsTarget !== "all"
+                        ? (workflow.items.find((i) => i.id === workflow.batchSettingsTarget)?.settingsOverrides?.[step.id]?.[config.id] ?? globalVal)
+                        : globalVal;
+
+                    return (
+                      (!config.visibleIf || config.visibleIf(step.options)) && (
+                        <ControlRenderer
+                          key={config.id}
+                          control={config}
+                          value={activeVal}
+                          onChange={(id, val, parse) => {
+                            const parsedVal = parse ? parse(val) : val;
+                            if (workflow.batchSettingsTarget !== "all") {
+                              workflow.updateItemOverride(workflow.batchSettingsTarget, step.id, id, parsedVal);
+                            } else {
+                              updateStepOptions(step.id, {
+                                ...step.options,
+                                [id]: parsedVal,
+                              });
+                            }
+                          }}
+                        />
+                      )
+                    );
+                  })}
                 </div>
               </div>
             );
@@ -209,19 +221,24 @@ const WorkflowBuilder = ({ workflow, onProcess }) => {
             variant="primary"
             size="large"
             onClick={() => {
-              const allDone =
-                workflow.items.length > 0 &&
-                workflow.items.every((i) => i.status === "done");
-              onProcess({}, { forceReset: allDone });
+              if (workflow.batchSettingsTarget !== "all") {
+                workflow.executeSingleItemInWorkflow();
+              } else {
+                const allDone =
+                  workflow.items.length > 0 &&
+                  workflow.items.every((i) => i.status === "done");
+                onProcess({}, { forceReset: allDone });
+              }
             }}
             disabled={workflowSteps.length === 0 || workflow.items.length === 0}
           >
-            {workflow.items.length > 0 &&
-            workflow.items.every((i) => i.status === "done")
-              ? "Rerun Workflow Pipeline"
-              : workflow.items.some((i) => i.status === "done")
-                ? "Run Pending"
-                : "Run Workflow Pipeline"}
+            {workflow.batchSettingsTarget !== "all"
+              ? `Process Image ${workflow.items.findIndex(i => i.id === workflow.batchSettingsTarget) + 1}`
+              : (workflow.items.length > 0 && workflow.items.every((i) => i.status === "done"))
+                ? "Rerun Workflow Pipeline"
+                : workflow.items.some((i) => i.status === "done")
+                  ? "Run Pending"
+                  : "Run Workflow Pipeline"}
           </Button>
 
           {/* Secondary Rerun All Button (only visible if some but not all items are done) */}
@@ -242,4 +259,4 @@ const WorkflowBuilder = ({ workflow, onProcess }) => {
   );
 };
 
-export default React.memo(WorkflowBuilder);
+export default WorkflowBuilder;

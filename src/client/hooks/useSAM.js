@@ -8,14 +8,12 @@ import { APP_CONFIG } from '../config/app';
  Manages points selection coords, clear routines, and compiles prompt arrays to send to the AI worker.
 */
 export const useSAM = () => {
-  const {
-    samPoints,
-    setSamPoints,
-    editing,
-    setSegmentationResult
-  } = useSegmentation();
+  const samPoints = useSegmentation((state) => state.samPoints);
+  const setSamPoints = useSegmentation((state) => state.setSamPoints);
+  const editing = useSegmentation((state) => state.editing);
+  const setSegmentationResult = useSegmentation((state) => state.setSegmentationResult);
   const { originalCanvas } = useWorkspace();
-  const { showToast } = useUI();
+  const showToast = useUI((state) => state.showToast);
   const { serviceSettings } = useService();
 
   const { execute } = useController();

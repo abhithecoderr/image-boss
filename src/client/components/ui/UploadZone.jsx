@@ -124,4 +124,4 @@ const UploadZone = ({
   );
 };
 
-export default React.memo(UploadZone);
+export default UploadZone;

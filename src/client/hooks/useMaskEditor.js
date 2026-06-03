@@ -12,10 +12,8 @@ export const useMaskEditor = (resRef) => {
     resultCanvas,
     setResultCanvas
   } = useWorkspace();
-  const {
-    editing,
-    setEditing
-  } = useSegmentation();
+  const editing = useSegmentation((state) => state.editing);
+  const setEditing = useSegmentation((state) => state.setEditing);
 
   // Hidden offscreen canvas buffer keeping track of the pure transparency mask image
   const maskCanvasRef = useRef(null);

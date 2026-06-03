@@ -49,4 +49,4 @@ const ArrowButton = ({
   );
 };
 
-export default React.memo(ArrowButton);
+export default ArrowButton;

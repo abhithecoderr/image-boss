@@ -44,4 +44,4 @@ const Select = ({ label, options = [], value, onChange, disabled = false }) => {
   );
 };
 
-export default React.memo(Select);
+export default Select;

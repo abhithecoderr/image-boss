@@ -49,8 +49,8 @@ const FormInput = ({
           className={`auth-input ${error ? "has-error" : ""}`}
           style={icon ? { paddingLeft: "38px" } : {}}
           placeholder={placeholder}
-          value={value ?? ""}
           disabled={disabled}
+          {...(value !== undefined ? { value } : {})}
           onChange={onChange}
           {...props}
         />
@@ -63,4 +63,4 @@ const FormInput = ({
   );
 };
 
-export default React.memo(FormInput);
+export default FormInput;

@@ -41,4 +41,4 @@ const Logo = ({
   return content;
 };
 
-export default React.memo(Logo);
+export default Logo;

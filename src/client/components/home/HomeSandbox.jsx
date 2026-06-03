@@ -16,7 +16,7 @@ import Button from '../ui/Button';
 */
 export default function HomeSandbox() {
   const navigate = useNavigate();
-  const { showToast } = useUI();
+  const showToast = useUI((state) => state.showToast);
   const { 
     items, 
     activeItemId,

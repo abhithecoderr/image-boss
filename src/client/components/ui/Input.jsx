@@ -22,7 +22,7 @@ const Input = ({
         type={type}
         className="control-input"
         placeholder={placeholder}
-        value={value ?? ""}
+        {...(value !== undefined ? { value } : {})}
         disabled={disabled}
         onChange={onChange}
         {...props}
@@ -31,4 +31,4 @@ const Input = ({
   );
 };
 
-export default React.memo(Input);
+export default Input;

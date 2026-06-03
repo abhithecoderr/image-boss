@@ -13,7 +13,7 @@ import Progress from "../ui/Progress";
 import UploadZone from "../ui/UploadZone";
 import Button from "../ui/Button";
 
-const StatusBar = React.memo(() => {
+const StatusBar = () => {
   const { progress } = useUI();
   const isProcessing = useWorkspace((state) => state.isProcessing);
   if (!isProcessing) return null;
@@ -23,7 +23,7 @@ const StatusBar = React.memo(() => {
       message={progress.message || "Processing..."}
     />
   );
-});
+};
 
 const Workspace = ({ batch }) => {
   const { currentService, getDownloadMetadata } = useService();
@@ -114,30 +114,32 @@ const Workspace = ({ batch }) => {
     <div className="workspace">
       <StatusBar />
 
+      {isBatchView && batch.items.length > 0 && (
+        <BatchStrip
+          items={batch.items}
+          activeItemId={batch.activeItemId}
+          selectedIds={batch.selectedIds}
+          onSelectItem={batch.selectItem}
+          onToggleSelect={batch.toggleItemSelection}
+          onReorder={batch.reorderItems}
+          onRemove={batch.removeItem}
+          onAddFiles={batch.addFiles}
+          onClearMemory={() => {
+            // Send global dispose to all AI workers to free GPU memory
+            import("../../core/worker-registry").then(
+              ({ workerRegistry }) => {
+                workerRegistry.activate(""); // switches to 'null' service, evicting all others
+              },
+            );
+          }}
+        />
+      )}
+
       <div className="preview-container">
         <div className="preview-panel">
-          <div className="preview-label">Original</div>
-
-          {isBatchView && batch.items.length > 0 && (
-            <BatchStrip
-              items={batch.items}
-              activeItemId={batch.activeItemId}
-              selectedIds={batch.selectedIds}
-              onSelectItem={batch.selectItem}
-              onToggleSelect={batch.toggleItemSelection}
-              onReorder={batch.reorderItems}
-              onRemove={batch.removeItem}
-              onAddFiles={batch.addFiles}
-              onClearMemory={() => {
-                // Send global dispose to all AI workers to free GPU memory
-                import("../../core/worker-registry").then(
-                  ({ workerRegistry }) => {
-                    workerRegistry.activate(""); // switches to 'null' service, evicting all others
-                  },
-                );
-              }}
-            />
-          )}
+          <div className="preview-label preview-header">
+            <span>Original</span>
+          </div>
 
           <div
             className="preview-image-wrapper"
@@ -305,4 +307,4 @@ const Workspace = ({ batch }) => {
   );
 };
 
-export default React.memo(Workspace);
+export default Workspace;

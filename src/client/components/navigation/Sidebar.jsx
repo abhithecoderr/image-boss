@@ -45,4 +45,4 @@ const Sidebar = () => {
   );
 };
 
-export default React.memo(Sidebar);
+export default Sidebar;

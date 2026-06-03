@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useActionState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import { useAuth } from "../store";
 import FormInput from "../components/ui/FormInput";
@@ -8,22 +8,10 @@ const SignUp = () => {
   const { signup, isAuthenticated, loginWithGoogle } = useAuth();
   const navigate = useNavigate();
 
-  // Input states
-  const [name, setName] = useState("");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
-  const [confirmPassword, setConfirmPassword] = useState("");
+  // Keep password state purely for the live strength meter feedback
+  const [passwordVal, setPasswordVal] = useState("");
   const [showPassword, setShowPassword] = useState(false);
-  const [termsAccepted, setTermsAccepted] = useState(false);
-
-  // Strength and Validation states
   const [strength, setStrength] = useState({ score: 0, label: "", class: "" });
-  const [nameError, setNameError] = useState("");
-  const [emailError, setEmailError] = useState("");
-  const [passwordError, setPasswordError] = useState("");
-  const [confirmPasswordError, setConfirmPasswordError] = useState("");
-  const [termsError, setTermsError] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -34,17 +22,17 @@ const SignUp = () => {
 
   // Live password strength calculation
   useEffect(() => {
-    if (!password) {
+    if (!passwordVal) {
       setStrength({ score: 0, label: "", class: "" });
       return;
     }
 
     let score = 0;
-    if (password.length >= 6) score += 1;
-    if (password.length >= 10) score += 1;
-    if (/[A-Z]/.test(password)) score += 1;
-    if (/[0-9]/.test(password)) score += 1;
-    if (/[^A-Za-z0-9]/.test(password)) score += 1;
+    if (passwordVal.length >= 6) score += 1;
+    if (passwordVal.length >= 10) score += 1;
+    if (/[A-Z]/.test(passwordVal)) score += 1;
+    if (/[0-9]/.test(passwordVal)) score += 1;
+    if (/[^A-Za-z0-9]/.test(passwordVal)) score += 1;
 
     let label = "Very Weak";
     let className = "weak";
@@ -58,68 +46,61 @@ const SignUp = () => {
     }
 
     setStrength({ score, label, class: className });
-  }, [password]);
+  }, [passwordVal]);
 
-  // Form Validation
-  const validateForm = () => {
-    let isValid = true;
-    setNameError("");
-    setEmailError("");
-    setPasswordError("");
-    setConfirmPasswordError("");
-    setTermsError("");
+  // React 19 Action handler using useActionState
+  const [formState, formAction, isPending] = useActionState(
+    async (prevState, formData) => {
+      const name = formData.get("name")?.trim();
+      const email = formData.get("email")?.trim();
+      const password = formData.get("password");
+      const confirmPassword = formData.get("confirmPassword");
+      const termsAccepted = formData.get("termsAccepted") === "on";
 
-    if (!name.trim()) {
-      setNameError("Full name is required.");
-      isValid = false;
-    }
+      // Form Validation
+      let errors = {};
 
-    if (!email) {
-      setEmailError("Email address is required.");
-      isValid = false;
-    } else if (!/\S+@\S+\.\S+/.test(email)) {
-      setEmailError("Please enter a valid email address.");
-      isValid = false;
-    }
+      if (!name) {
+        errors.name = "Full name is required.";
+      }
 
-    if (!password) {
-      setPasswordError("Password is required.");
-      isValid = false;
-    } else if (password.length < 6) {
-      setPasswordError("Password must be at least 6 characters.");
-      isValid = false;
-    }
+      if (!email) {
+        errors.email = "Email address is required.";
+      } else if (!/\S+@\S+\.\S+/.test(email)) {
+        errors.email = "Please enter a valid email address.";
+      }
 
-    if (password !== confirmPassword) {
-      setConfirmPasswordError("Passwords do not match.");
-      isValid = false;
-    }
+      if (!password) {
+        errors.password = "Password is required.";
+      } else if (password.length < 6) {
+        errors.password = "Password must be at least 6 characters.";
+      }
 
-    if (!termsAccepted) {
-      setTermsError("You must agree to the Terms of Service.");
-      isValid = false;
-    }
+      if (password !== confirmPassword) {
+        errors.confirmPassword = "Passwords do not match.";
+      }
 
-    return isValid;
-  };
+      if (!termsAccepted) {
+        errors.terms = "You must agree to the Terms of Service.";
+      }
 
-  // Submit Handler
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validateForm()) return;
+      if (Object.keys(errors).length > 0) {
+        return { errors };
+      }
 
-    setIsSubmitting(true);
+      // Simulate standard network latency for premium feel (active spinner)
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    // Simulate standard network latency for premium feel (active spinner)
-    setTimeout(async () => {
       const result = await signup(name, email, password);
-      setIsSubmitting(false);
-
       if (result.success) {
         navigate("/services", { replace: true });
+        return { success: true };
       }
-    }, 1000);
-  };
+
+      return { errors: { form: result.error } };
+    },
+    null
+  );
 
   return (
     <div className="auth-container">
@@ -185,17 +166,16 @@ const SignUp = () => {
             </header>
 
             <div className="auth-card">
-              <form className="auth-form" onSubmit={handleSubmit} noValidate>
+              <form className="auth-form" action={formAction} noValidate>
                 {/* Full Name */}
                 <FormInput
                   id="signup-name"
+                  name="name"
                   label="Full Name"
                   type="text"
                   placeholder="John Doe"
-                  value={name}
-                  onChange={(e) => setName(e.target.value)}
-                  error={nameError}
-                  disabled={isSubmitting}
+                  error={formState?.errors?.name}
+                  disabled={isPending}
                   required
                   icon={
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -208,13 +188,12 @@ const SignUp = () => {
                 {/* Email Input */}
                 <FormInput
                   id="signup-email"
+                  name="email"
                   label="Email Address"
                   type="email"
                   placeholder="name@company.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  error={emailError}
-                  disabled={isSubmitting}
+                  error={formState?.errors?.email}
+                  disabled={isPending}
                   required
                   icon={
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -227,13 +206,14 @@ const SignUp = () => {
                 {/* Password Input */}
                 <FormInput
                   id="signup-password"
+                  name="password"
                   label="Password"
                   type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  error={passwordError}
-                  disabled={isSubmitting}
+                  error={formState?.errors?.password}
+                  disabled={isPending}
+                  value={passwordVal}
+                  onChange={(e) => setPasswordVal(e.target.value)}
                   required
                   icon={
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -263,7 +243,7 @@ const SignUp = () => {
                 </FormInput>
 
                 {/* Password Strength Meter */}
-                {password && (
+                {passwordVal && (
                   <div className="auth-strength-meter">
                     <div className="auth-strength-bars">
                       <div className={`auth-strength-bar ${strength.score >= 1 ? strength.class : ""}`}></div>
@@ -281,13 +261,12 @@ const SignUp = () => {
                 {/* Confirm Password */}
                 <FormInput
                   id="signup-confirm-password"
+                  name="confirmPassword"
                   label="Confirm Password"
                   type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
-                  value={confirmPassword}
-                  onChange={(e) => setConfirmPassword(e.target.value)}
-                  error={confirmPasswordError}
-                  disabled={isSubmitting}
+                  error={formState?.errors?.confirmPassword}
+                  disabled={isPending}
                   required
                   icon={
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -302,25 +281,24 @@ const SignUp = () => {
                   <label className="auth-remember">
                     <input
                       type="checkbox"
+                      name="termsAccepted"
                       className="auth-checkbox"
-                      checked={termsAccepted}
-                      onChange={(e) => setTermsAccepted(e.target.checked)}
-                      disabled={isSubmitting}
+                      disabled={isPending}
                     />
                     <span>
                       I agree to the <a href="#terms" onClick={(e) => {e.preventDefault(); alert("We respect your data. Your files are processed entirely locally.");}} style={{ color: "var(--accent-primary)" }}>Terms of Service</a> and <a href="#privacy" onClick={(e) => {e.preventDefault(); alert("Local privacy guaranteed.");}} style={{ color: "var(--accent-primary)" }}>Privacy Policy</a>
                     </span>
                   </label>
-                  {termsError && <span className="auth-input-error" style={{ display: "block", marginTop: "4px" }}>{termsError}</span>}
+                  {formState?.errors?.terms && <span className="auth-input-error" style={{ display: "block", marginTop: "4px" }}>{formState?.errors?.terms}</span>}
                 </div>
 
                 {/* Submit Action Button */}
                 <button
                   type="submit"
                   className="auth-submit-btn"
-                  disabled={isSubmitting}
+                  disabled={isPending}
                 >
-                  {isSubmitting ? (
+                  {isPending ? (
                     <>
                       <span className="auth-spinner"></span>
                       Registering...

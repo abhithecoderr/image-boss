@@ -35,4 +35,4 @@ const Toggle = ({
   );
 };
 
-export default React.memo(Toggle);
+export default Toggle;

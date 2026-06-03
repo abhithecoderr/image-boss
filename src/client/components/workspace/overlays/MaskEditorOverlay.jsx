@@ -4,7 +4,7 @@ import { useMaskEditor } from "../../../hooks/useMaskEditor";
 
 const MaskEditorOverlay = ({ resRef }) => {
   const { resultCanvas } = useWorkspace();
-  const { editing } = useSegmentation();
+  const editing = useSegmentation((state) => state.editing);
   const { startDrawing, moveDrawing, endDrawing } = useMaskEditor(resRef);
   const brushPreviewRef = useRef(null);
 

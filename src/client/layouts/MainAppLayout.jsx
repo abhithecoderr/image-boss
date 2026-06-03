@@ -11,7 +11,7 @@ import ErrorBoundary from "../components/ui/ErrorBoundary";
 
 export default function MainAppLayout() {
   const { currentService, serviceSettings } = useService();
-  const { toast } = useUI();
+  const toast = useUI((state) => state.toast);
   const { originalCanvas } = useWorkspace();
   const location = useLocation();
   const navigate = useNavigate();
@@ -45,10 +45,6 @@ export default function MainAppLayout() {
 
           <>
             <ErrorBoundary>
-              {mode === OPERATION_MODE.WORKFLOW && (
-                <WorkflowBuilder workflow={processor} onProcess={handleProcess} />
-              )}
-
               <Workspace
                 batch={useMemo(
                   () =>
@@ -58,6 +54,10 @@ export default function MainAppLayout() {
                   [mode, processor],
                 )}
               />
+
+              {mode === OPERATION_MODE.WORKFLOW && (
+                <WorkflowBuilder workflow={processor} onProcess={handleProcess} />
+              )}
 
               {mode !== OPERATION_MODE.WORKFLOW && <ControlPanel />}
             </ErrorBoundary>

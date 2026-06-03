@@ -3,7 +3,7 @@ import { useSegmentation, useService } from "../../../store";
 
 const MagicEraseOverlay = ({ srcRef }) => {
   const { currentService, serviceSettings } = useService();
-  const { setMagicEraseMaskCanvas } = useSegmentation();
+  const setMagicEraseMaskCanvas = useSegmentation((state) => state.setMagicEraseMaskCanvas);
   const overlayRef = useRef(null);
   const canvasRef = useRef(null);
   const isDrawingRef = useRef(false);

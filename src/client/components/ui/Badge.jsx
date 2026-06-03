@@ -25,4 +25,4 @@ const Badge = ({
   );
 };
 
-export default React.memo(Badge);
+export default Badge;

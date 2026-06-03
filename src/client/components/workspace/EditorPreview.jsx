@@ -1,7 +1,5 @@
 import React, {
   useState,
-  useCallback,
-  useMemo,
   useRef,
   useEffect,
 } from "react";
@@ -25,17 +23,22 @@ const UnifiedCrop = ({
   const [crop, setCrop] = useState(null);
   const [naturalAspect, setNaturalAspect] = useState(undefined);
 
-  const aspect = useMemo(() => {
-    if (!aspectRatio || aspectRatio === "free") return undefined;
-    if (aspectRatio === "original") return naturalAspect;
-    const parts = aspectRatio.split(":");
-    if (parts.length === 2) return parseFloat(parts[0]) / parseFloat(parts[1]);
-    return undefined;
-  }, [aspectRatio, naturalAspect]);
+  // Computed ratio value - React Compiler automatically memoizes this calculation
+  let aspect = undefined;
+  if (aspectRatio && aspectRatio !== "free") {
+    if (aspectRatio === "original") {
+      aspect = naturalAspect;
+    } else {
+      const parts = aspectRatio.split(":");
+      if (parts.length === 2) {
+        aspect = parseFloat(parts[0]) / parseFloat(parts[1]);
+      }
+    }
+  }
 
   const [isReady, setIsReady] = useState(false);
 
-  const resetToDefaultCrop = useCallback(() => {
+  const resetToDefaultCrop = () => {
     if (!imgRef.current) return;
     const { naturalWidth: nw, naturalHeight: nh } = imgRef.current;
 
@@ -54,25 +57,22 @@ const UnifiedCrop = ({
 
     setCrop(initialCrop);
     setIsReady(true);
-  }, [aspect, aspectRatio]);
+  };
 
-  const onImageLoad = useCallback(
-    (e) => {
-      const { naturalWidth: nw, naturalHeight: nh } = e.currentTarget;
-      imgRef.current = e.currentTarget;
-      const aspectVal = nw / nh;
-      setNaturalAspect(aspectVal);
-      resetToDefaultCrop();
-    },
-    [resetToDefaultCrop],
-  );
+  const onImageLoad = (e) => {
+    const { naturalWidth: nw, naturalHeight: nh } = e.currentTarget;
+    imgRef.current = e.currentTarget;
+    const aspectVal = nw / nh;
+    setNaturalAspect(aspectVal);
+    resetToDefaultCrop();
+  };
 
   // Handle programmatic ratio changes (from dropdown)
   useEffect(() => {
     if (!isInteracting.current) {
       resetToDefaultCrop();
     }
-  }, [aspectRatio, resetToDefaultCrop]);
+  }, [aspectRatio]);
 
   useEffect(() => {
     if (isReady && crop && imgRef.current) {
@@ -87,26 +87,23 @@ const UnifiedCrop = ({
     }
   }, [isReady, crop, onCropReady]);
 
-  const onComplete = useCallback(
-    (pixelCrop) => {
-      if (!imgRef.current || !pixelCrop.width || !pixelCrop.height) return;
-      const {
-        naturalWidth: nw,
-        naturalHeight: nh,
-        width: dw,
-        height: dh,
-      } = imgRef.current;
-      const scaleX = nw / dw;
-      const scaleY = nh / dh;
-      onCropReady({
-        x: pixelCrop.x * scaleX,
-        y: pixelCrop.y * scaleY,
-        width: pixelCrop.width * scaleX,
-        height: pixelCrop.height * scaleY,
-      });
-    },
-    [onCropReady],
-  );
+  const onComplete = (pixelCrop) => {
+    if (!imgRef.current || !pixelCrop.width || !pixelCrop.height) return;
+    const {
+      naturalWidth: nw,
+      naturalHeight: nh,
+      width: dw,
+      height: dh,
+    } = imgRef.current;
+    const scaleX = nw / dw;
+    const scaleY = nh / dh;
+    onCropReady({
+      x: pixelCrop.x * scaleX,
+      y: pixelCrop.y * scaleY,
+      width: pixelCrop.width * scaleX,
+      height: pixelCrop.height * scaleY,
+    });
+  };
 
   return (
     <div className="editor-preview-crop-wrapper">
@@ -145,11 +142,8 @@ const UnifiedCrop = ({
 // ---------------------------------------------------------------------------
 const EditorPreview = ({ sourceCanvas }) => {
   const { serviceSettings, updateServiceSetting } = useService();
-  const { activeEditorTab } = useSegmentation();
-  const settings = useMemo(
-    () => serviceSettings["image-editor"] || {},
-    [serviceSettings],
-  );
+  const activeEditorTab = useSegmentation((state) => state.activeEditorTab);
+  const settings = serviceSettings["image-editor"] || {};
   const {
     aspectRatio = "free",
     rotation = 0,
@@ -183,18 +177,13 @@ const EditorPreview = ({ sourceCanvas }) => {
     };
   }, [sourceCanvas]);
 
-  const { css: filterStyle, svg: svgFilterContent } = useMemo(() => {
-    return getEditorStyles(settings);
-  }, [settings]);
+  const { css: filterStyle, svg: svgFilterContent } = getEditorStyles(settings);
 
-  const onCropReady = useCallback(
-    (pixels) => {
-      updateServiceSetting("image-editor", "cropPixels", pixels);
-    },
-    [updateServiceSetting],
-  );
+  const onCropReady = React.useCallback((pixels) => {
+    updateServiceSetting("image-editor", "cropPixels", pixels);
+  }, [updateServiceSetting]);
 
-  const handleInteraction = useCallback(() => {
+  const handleInteraction = React.useCallback(() => {
     updateServiceSetting("image-editor", "aspectRatio", "free");
   }, [updateServiceSetting]);
 
@@ -245,4 +234,4 @@ const EditorPreview = ({ sourceCanvas }) => {
   );
 };
 
-export default React.memo(EditorPreview);
+export default EditorPreview;

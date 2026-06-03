@@ -56,7 +56,7 @@ class WorkerRegistry {
 
     for (const id of Object.keys(this._workers)) {
       if (id !== serviceId && !noDisposeIds.includes(id)) {
-        this.dispose(id);
+        this.terminate(id);
       }
     }
   }

@@ -2,7 +2,7 @@ import { useController, useService, useWorkspace, useSegmentation } from "../../
 import { useSAM } from "../../hooks/useSAM";
 import { OPERATION_MODE } from "../../config/app";
 import { CONTROLS_CONFIG } from "../../config/controls";
-import React, { useCallback, useEffect, useMemo, useRef } from "react";
+import React, { useEffect, useRef } from "react";
 import ControlRenderer from "./ControlRenderer";
 import Select from "../ui/Select";
 import Slider from "../ui/Slider";
@@ -12,10 +12,11 @@ import {
   useFileConversionSync,
 } from "./useServiceEffects";
 import { formatFileSize } from "../../core/canvas-utils";
+import BatchSettingsSelector from "./BatchSettingsSelector";
 
 // --- Sub-components for better structural design and layout separation ---
 
-const CompressionStats = React.memo(({ originalFile, estimatedSize }) => {
+const CompressionStats = ({ originalFile, estimatedSize }) => {
   if (!originalFile) return null;
   return (
     <div className="full-width-control stats-overlay">
@@ -37,9 +38,9 @@ const CompressionStats = React.memo(({ originalFile, estimatedSize }) => {
       </div>
     </div>
   );
-});
+};
 
-const ObjectSegmentationPointsClear = React.memo(({ clearPoints }) => {
+const ObjectSegmentationPointsClear = ({ clearPoints }) => {
   return (
     <div
       className="full-width-control"
@@ -64,9 +65,9 @@ const ObjectSegmentationPointsClear = React.memo(({ clearPoints }) => {
       </Button>
     </div>
   );
-});
+};
 
-const BatchActionsPanel = React.memo(({ batch, serviceSettings, currentServiceId }) => {
+const BatchActionsPanel = ({ batch, serviceSettings, currentServiceId }) => {
   return (
     <div
       className="control-group"
@@ -111,9 +112,9 @@ const BatchActionsPanel = React.memo(({ batch, serviceSettings, currentServiceId
       </div>
     </div>
   );
-});
+};
 
-const ManualTouchupControls = React.memo(({ editing, setEditing }) => {
+const ManualTouchupControls = ({ editing, setEditing }) => {
   return (
     <div className="control-group control-section-divider">
       <label className="control-label" style={{ marginBottom: "12px" }}>
@@ -169,24 +170,23 @@ const ManualTouchupControls = React.memo(({ editing, setEditing }) => {
       </div>
     </div>
   );
-});
+};
 
 // --- Main ControlPanel component ---
 
 const ControlPanel = () => {
   const { currentService, serviceSettings, updateServiceSetting } = useService();
   const { originalCanvas, resultCanvas, originalFile, isProcessing } = useWorkspace();
+
   const { executeSmartSelect, clearPoints } = useSAM();
   const batch = useController();
   const { execute, mode } = batch;
 
-  const {
-    activeEditorTab: currentTab,
-    setActiveEditorTab: setCurrentTab,
-    editing,
-    setEditing,
-    magicEraseMaskCanvas,
-  } = useSegmentation();
+  const currentTab = useSegmentation((state) => state.activeEditorTab);
+  const setCurrentTab = useSegmentation((state) => state.setActiveEditorTab);
+  const editing = useSegmentation((state) => state.editing);
+  const setEditing = useSegmentation((state) => state.setEditing);
+  const magicEraseMaskCanvas = useSegmentation((state) => state.magicEraseMaskCanvas);
 
   const activeMode = mode;
   const bgPostProcessDebounceRef = useRef(null);
@@ -197,8 +197,14 @@ const ControlPanel = () => {
     originalCanvas,
   );
 
-  const handleControlChange = useCallback((id, val, parse) => {
+  const handleControlChange = React.useCallback((id, val, parse) => {
     const parsedVal = parse ? parse(val) : val;
+
+    if (batch.batchSettingsTarget && batch.batchSettingsTarget !== "all") {
+      batch.updateItemOverride(batch.batchSettingsTarget, currentService.id, id, parsedVal);
+      return;
+    }
+
     const nextSettings = {
       ...(serviceSettings[currentService.id] || {}),
       [id]: parsedVal,
@@ -216,14 +222,7 @@ const ControlPanel = () => {
         execute({ ...nextSettings, _postProcess: true });
       }, 80);
     }
-  }, [
-    currentService.id,
-    updateServiceSetting,
-    serviceSettings,
-    originalCanvas,
-    resultCanvas,
-    execute,
-  ]);
+  }, [currentService.id, serviceSettings, updateServiceSetting, originalCanvas, resultCanvas, execute]);
 
   useEffect(() => {
     return () => clearTimeout(bgPostProcessDebounceRef.current);
@@ -235,25 +234,19 @@ const ControlPanel = () => {
   );
 
   // Derive configurations dynamically
-  const configs = useMemo(() => CONTROLS_CONFIG[currentService.id] || [], [currentService.id]);
+  const configs = CONTROLS_CONFIG[currentService.id] || [];
   
-  const categories = useMemo(() => {
-    return [...new Set(configs.filter((c) => c.category).map((c) => c.category))];
-  }, [configs]);
+  const categories = [...new Set(configs.filter((c) => c.category).map((c) => c.category))];
 
   const hasCategories = categories.length > 0;
 
-  const filteredConfigs = useMemo(() => {
-    return hasCategories
-      ? configs.filter((c) => c.category === (currentTab || categories[0]))
-      : configs;
-  }, [hasCategories, configs, currentTab, categories]);
+  const filteredConfigs = hasCategories
+    ? configs.filter((c) => c.category === (currentTab || categories[0]))
+    : configs;
 
-  const showManualTouchup = useMemo(() => {
-    return ["background-removal", "object-segmentation"].includes(currentService.id);
-  }, [currentService.id]);
+  const showManualTouchup = ["background-removal", "object-segmentation"].includes(currentService.id);
 
-  const getProcessAction = useCallback(() => {
+  const getProcessAction = () => {
     if (currentService.id === "object-segmentation") return executeSmartSelect;
     if (currentService.id === "magic-erase") {
       return () =>
@@ -261,6 +254,10 @@ const ControlPanel = () => {
           ...serviceSettings[currentService.id],
           maskCanvas: magicEraseMaskCanvas,
         });
+    }
+
+    if (batch.batchSettingsTarget && batch.batchSettingsTarget !== "all") {
+      return () => batch.executeSingleItemInBatch(currentService.id, serviceSettings[currentService.id] || {});
     }
 
     if (activeMode === OPERATION_MODE.BATCH) {
@@ -275,19 +272,15 @@ const ControlPanel = () => {
     }
 
     return () => execute(serviceSettings[currentService.id]);
-  }, [
-    currentService.id,
-    activeMode,
-    executeSmartSelect,
-    batch.items,
-    batch.rerunAll,
-    execute,
-    serviceSettings,
-    magicEraseMaskCanvas,
-  ]);
+  };
 
-  const getProcessLabel = useCallback(() => {
+  const getProcessLabel = () => {
     if (currentService.id === "object-segmentation") return "Segment Selected Points";
+
+    if (batch.batchSettingsTarget && batch.batchSettingsTarget !== "all") {
+      const idx = batch.items.findIndex(i => i.id === batch.batchSettingsTarget);
+      return `Process Image ${idx + 1}`;
+    }
 
     if (activeMode === OPERATION_MODE.BATCH) {
       const pending = batch.items.filter(
@@ -300,10 +293,11 @@ const ControlPanel = () => {
       }
     }
     return "Process Image";
-  }, [currentService.id, activeMode, batch.items]);
+  };
 
   return (
     <div className="controls">
+      {activeMode === OPERATION_MODE.BATCH && <BatchSettingsSelector />}
       <div className="controls-grid">
         {batch.batchAvailable && (
           <Select
@@ -339,15 +333,24 @@ const ControlPanel = () => {
           {/* Control List */}
           <div className="service-control-grid">
             {filteredConfigs.map(
-              (config) =>
-                (!config.visibleIf || config.visibleIf(serviceSettings[currentService.id] || {})) && (
-                  <ControlRenderer
-                    key={config.id}
-                    control={config}
-                    value={serviceSettings[currentService.id]?.[config.id] ?? config.defaultValue}
-                    onChange={handleControlChange}
-                  />
-                ),
+              (config) => {
+                const globalVal = serviceSettings[currentService.id]?.[config.id] ?? config.defaultValue;
+                const activeVal =
+                  batch.batchSettingsTarget !== "all"
+                    ? (batch.items.find((i) => i.id === batch.batchSettingsTarget)?.settingsOverrides?.[currentService.id]?.[config.id] ?? globalVal)
+                    : globalVal;
+
+                return (
+                  (!config.visibleIf || config.visibleIf(serviceSettings[currentService.id] || {})) && (
+                    <ControlRenderer
+                      key={config.id}
+                      control={config}
+                      value={activeVal}
+                      onChange={handleControlChange}
+                    />
+                  )
+                );
+              }
             )}
 
             {/* Specialized Overlays */}
@@ -391,4 +394,4 @@ const ControlPanel = () => {
   );
 };
 
-export default React.memo(ControlPanel);
+export default ControlPanel;

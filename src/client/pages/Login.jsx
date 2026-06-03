@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useActionState } from "react";
 import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../store";
 import FormInput from "../components/ui/FormInput";
@@ -9,16 +9,9 @@ const Login = () => {
   const navigate = useNavigate();
   const location = useLocation();
 
-  // Input states
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  // Simple visual UI states (password visibility & remember me)
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
-
-  // Form error/validation states
-  const [emailError, setEmailError] = useState("");
-  const [passwordError, setPasswordError] = useState("");
-  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Redirect if already authenticated
   useEffect(() => {
@@ -28,49 +21,44 @@ const Login = () => {
     }
   }, [isAuthenticated, navigate, location]);
 
-  // Form Validation
-  const validateForm = () => {
-    let isValid = true;
-    setEmailError("");
-    setPasswordError("");
+  // React 19 Action handler using useActionState
+  const [formState, formAction, isPending] = useActionState(
+    async (prevState, formData) => {
+      const email = formData.get("email")?.trim();
+      const password = formData.get("password");
 
-    if (!email) {
-      setEmailError("Email address is required.");
-      isValid = false;
-    } else if (!/\S+@\S+\.\S+/.test(email)) {
-      setEmailError("Please enter a valid email address.");
-      isValid = false;
-    }
+      // Validate inputs inside the action
+      let errors = {};
+      if (!email) {
+        errors.email = "Email address is required.";
+      } else if (!/\S+@\S+\.\S+/.test(email)) {
+        errors.email = "Please enter a valid email address.";
+      }
 
-    if (!password) {
-      setPasswordError("Password is required.");
-      isValid = false;
-    } else if (password.length < 6) {
-      setPasswordError("Password must be at least 6 characters.");
-      isValid = false;
-    }
+      if (!password) {
+        errors.password = "Password is required.";
+      } else if (password.length < 6) {
+        errors.password = "Password must be at least 6 characters.";
+      }
 
-    return isValid;
-  };
+      if (Object.keys(errors).length > 0) {
+        return { errors };
+      }
 
-  // Submit Handler
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-    if (!validateForm()) return;
+      // Simulate standard network latency for premium feel (active spinner)
+      await new Promise((resolve) => setTimeout(resolve, 1000));
 
-    setIsSubmitting(true);
-
-    // Simulate standard network latency for premium feel (active spinner)
-    setTimeout(async () => {
       const result = await login(email, password);
-      setIsSubmitting(false);
-
       if (result.success) {
         const origin = location.state?.from?.pathname || "/services";
         navigate(origin, { replace: true });
+        return { success: true };
       }
-    }, 1000);
-  };
+
+      return { errors: { form: result.error } };
+    },
+    null
+  );
 
   return (
     <div className="auth-container">
@@ -139,17 +127,16 @@ const Login = () => {
             </header>
 
             <div className="auth-card">
-              <form className="auth-form" onSubmit={handleSubmit} noValidate>
+              <form className="auth-form" action={formAction} noValidate>
                 {/* Email Input */}
                 <FormInput
                   id="login-email"
+                  name="email"
                   label="Email Address"
                   type="email"
                   placeholder="name@company.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  error={emailError}
-                  disabled={isSubmitting}
+                  error={formState?.errors?.email}
+                  disabled={isPending}
                   required
                   icon={
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -162,13 +149,12 @@ const Login = () => {
                 {/* Password Input */}
                 <FormInput
                   id="login-password"
+                  name="password"
                   label="Password"
                   type={showPassword ? "text" : "password"}
                   placeholder="••••••••"
-                  value={password}
-                  onChange={(e) => setPassword(e.target.value)}
-                  error={passwordError}
-                  disabled={isSubmitting}
+                  error={formState?.errors?.password}
+                  disabled={isPending}
                   required
                   icon={
                     <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
@@ -205,7 +191,7 @@ const Login = () => {
                       className="auth-checkbox"
                       checked={rememberMe}
                       onChange={(e) => setRememberMe(e.target.checked)}
-                      disabled={isSubmitting}
+                      disabled={isPending}
                     />
                     Remember me
                   </label>
@@ -225,9 +211,9 @@ const Login = () => {
                 <button
                   type="submit"
                   className="auth-submit-btn"
-                  disabled={isSubmitting}
+                  disabled={isPending}
                 >
-                  {isSubmitting ? (
+                  {isPending ? (
                     <>
                       <span className="auth-spinner"></span>
                       Signing in...

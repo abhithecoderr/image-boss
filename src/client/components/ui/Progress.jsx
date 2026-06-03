@@ -20,4 +20,4 @@ const Progress = ({ percent = 0, message = "Processing..." }) => {
   );
 };
 
-export default React.memo(Progress);
+export default Progress;

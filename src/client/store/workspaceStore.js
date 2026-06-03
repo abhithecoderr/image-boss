@@ -8,6 +8,7 @@ export const useWorkspaceStore = create((set, get) => ({
   selectedIds: new Set(),
   batchMode: "single",
   isProcessing: false,
+  batchSettingsTarget: "all",
 
   setItems: (updater) =>
     set((state) => ({
@@ -25,6 +26,7 @@ export const useWorkspaceStore = create((set, get) => ({
     })),
   setBatchMode: (mode) => set({ batchMode: mode }),
   setIsProcessing: (processing) => set({ isProcessing: processing }),
+  setBatchSettingsTarget: (target) => set({ batchSettingsTarget: target }),
 
   setOriginalCanvas: (canvas) => {
     const { activeItemId } = get();
@@ -63,6 +65,7 @@ export const useWorkspaceStore = create((set, get) => ({
       selectedIds: new Set(),
       batchMode: "single",
       isProcessing: false,
+      batchSettingsTarget: "all",
     });
   },
 }));

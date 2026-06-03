@@ -1,10 +1,8 @@
 import Worker from './worker.js?worker';
 import { workerRegistry } from '../../core/worker-registry.js';
+import { runWorkerJob } from '../../core/worker-utils.js';
 
 const SERVICE_ID = 'object-segmentation';
-let lastImageFingerprint = null;
-let lastModelId = null;
-let lastCanvas = null;
 
 function getWorker() {
   return workerRegistry.getWorker(SERVICE_ID, Worker);
@@ -54,86 +52,40 @@ class MaskCandidate {
 export async function process(sourceCanvas, options = {}, onProgress) {
   const points = options.points || [];
   const w = getWorker();
-
   const modelId = options.modelId;
-  const isSameModel = modelId === lastModelId;
-  lastModelId = modelId;
 
-  const isSameCanvas = sourceCanvas === lastCanvas;
-  lastCanvas = sourceCanvas;
+  // Always resize canvas to standard MAX_DIM if it exceeds limits
+  const MAX_DIM = 1024;
+  let bridgeCanvas = sourceCanvas;
 
-  let isSameImage = false;
-  if (isSameCanvas && isSameModel && lastImageFingerprint) {
-    isSameImage = true;
-  } else {
-    // Stronger fingerprint: dimensions + a fast pixel sample to detect content changes.
-    // Samples 16 pixels evenly spread across the canvas for a lightweight content hash.
-    const ctx = sourceCanvas.getContext('2d');
-    let sampleHash = `${sourceCanvas.width}x${sourceCanvas.height}`;
-    if (ctx) {
-      const step = Math.max(1, Math.floor(sourceCanvas.width / 4));
-      for (let x = 0; x < sourceCanvas.width; x += step) {
-        const px = ctx.getImageData(x, 0, 1, 1).data;
-        sampleHash += `|${px[0]},${px[1]},${px[2]}`;
-      }
-    }
-    const currentFingerprint = `${sampleHash}:${isSameModel ? 'same' : modelId}`;
-    isSameImage = currentFingerprint === lastImageFingerprint;
-    lastImageFingerprint = currentFingerprint;
+  if (sourceCanvas.width > MAX_DIM || sourceCanvas.height > MAX_DIM) {
+    const scale = MAX_DIM / Math.max(sourceCanvas.width, sourceCanvas.height);
+    const w = Math.floor(sourceCanvas.width * scale);
+    const h = Math.floor(sourceCanvas.height * scale);
+
+    const offscreen = new OffscreenCanvas(w, h);
+    offscreen.getContext('2d').drawImage(sourceCanvas, 0, 0, w, h);
+    bridgeCanvas = offscreen;
   }
 
-  let bitmap = null;
-  if (!isSameImage) {
-      const MAX_DIM = 1024;
-      let bridgeCanvas = sourceCanvas;
+  const bitmap = await createImageBitmap(bridgeCanvas);
 
-      if (sourceCanvas.width > MAX_DIM || sourceCanvas.height > MAX_DIM) {
-          const scale = MAX_DIM / Math.max(sourceCanvas.width, sourceCanvas.height);
-          const w = Math.floor(sourceCanvas.width * scale);
-          const h = Math.floor(sourceCanvas.height * scale);
+  const payload = { bitmap, points, mode: options.mode, modelId };
+  const transferables = [bitmap];
 
-          const offscreen = new OffscreenCanvas(w, h);
-          offscreen.getContext('2d').drawImage(sourceCanvas, 0, 0, w, h);
-          bridgeCanvas = offscreen;
-      }
-      bitmap = await createImageBitmap(bridgeCanvas);
-  }
-
-  return new Promise((resolve, reject) => {
-    w.onmessage = ({ data }) => {
-      const { type, progress, message, result, error } = data;
-
-      if (type === 'progress') {
-        onProgress?.(progress, message);
-      } else if (type === 'complete') {
-        const { options: results, mode } = result;
-
-        // Optimization: Return Lazy Candidates instead of full-res canvases
-        const candidates = results.map(opt => new MaskCandidate(opt));
-        resolve({ options: candidates, mode });
-      } else if (type === 'error') {
-        if (error.includes('No image loaded') || error.includes('cached embeddings')) {
-           lastImageFingerprint = null;
-        }
-        reject(new Error(error));
-      }
-    };
-
-    w.onerror = (err) => reject(new Error(err.message));
-
-    const transferables = bitmap ? [bitmap] : [];
-    w.postMessage({ type: 'process', payload: { bitmap, points, box: options.box || null, mode: options.mode, modelId } }, transferables);
-  });
+  const result = await runWorkerJob(w, 'process', payload, transferables, onProgress);
+  const { options: results, mode } = result;
+  
+  const candidates = results.map(opt => new MaskCandidate(opt));
+  return { options: candidates, mode };
 }
 
 /**
- * Dispose worker cache
+ * Dispose worker
  */
 export function dispose() {
   const w = getWorker();
-  lastImageFingerprint = null;
-  lastCanvas = null;
-  w.postMessage({ type: 'clear' });
+  w.postMessage({ type: 'dispose' });
 }
 
 /**
@@ -160,7 +112,5 @@ function applyExtraction(sourceCanvas, candidate) {
 
   return resultCanvas;
 }
-
-
 
 export default { process, dispose };

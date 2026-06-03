@@ -1,24 +1,22 @@
-import Worker from './worker.js?worker';
+import ESRGANWorker from './esrgan.worker.js?worker';
 import { workerRegistry } from '../../core/worker-registry.js';
 import { runWorkerJob } from '../../core/worker-utils.js';
 
-const SERVICE_ID = 'upscaling';
+const SERVICE_ID_ESRGAN = 'upscaling-esrgan';
 
-function getWorker() {
-  return workerRegistry.getWorker(SERVICE_ID, Worker);
+function getWorker(modelId) {
+  return workerRegistry.getWorker(SERVICE_ID_ESRGAN, ESRGANWorker);
 }
 
-/**
- * Upscale image by 2x using UpscalerJS in a Worker
- */
 export async function process(sourceCanvas, options = {}, onProgress) {
-  const w = getWorker();
+  const modelId = options.modelId || 'esrgan';
+  const w = getWorker(modelId);
 
   // Zero-copy transfer
   const bitmap = await createImageBitmap(sourceCanvas);
 
   try {
-    const result = await runWorkerJob(w, 'upscale', { bitmap, ...options }, [bitmap], onProgress);
+    const result = await runWorkerJob(w, 'upscale', { bitmap, modelId, ...options }, [bitmap], onProgress);
 
     // Convert result ImageBitmap back to Canvas
     const resultCanvas = document.createElement('canvas');
@@ -36,28 +34,19 @@ export async function process(sourceCanvas, options = {}, onProgress) {
 }
 
 /**
- * Update upscaling filters without re-running AI tiling
+ * Simplified refine routine (filters removed)
  */
 export async function refine(options = {}) {
-  const w = getWorker();
-  const result = await runWorkerJob(w, 'refine', options);
-
-  // Convert result ImageBitmap back to Canvas
-  const resultCanvas = document.createElement('canvas');
-  resultCanvas.width = result.width;
-  resultCanvas.height = result.height;
-  const ctx = resultCanvas.getContext('2d');
-  ctx.drawImage(result, 0, 0);
-  result.close();
-
-  return resultCanvas;
+  // Safe no-op/pass-through since we removed filter configuration
+  console.warn("Refinement is not supported after filter removal.");
+  return null;
 }
 
 /**
  * Dispose worker and free resources
  */
 export async function dispose() {
-  workerRegistry.dispose(SERVICE_ID);
+  workerRegistry.dispose(SERVICE_ID_ESRGAN);
 }
 
 export default { process, refine, dispose };

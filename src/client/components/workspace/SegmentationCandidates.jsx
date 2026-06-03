@@ -1,7 +1,7 @@
 import React, { useState, useEffect, useRef } from "react";
 import { useWorkspace, useSegmentation, useUI } from "../../store";
 
-const CandidateCard = React.memo(({ candidate, idx, isSelected, onSelect }) => {
+const CandidateCard = ({ candidate, idx, isSelected, onSelect }) => {
   const canvasRef = useRef(null);
 
   useEffect(() => {
@@ -29,17 +29,18 @@ const CandidateCard = React.memo(({ candidate, idx, isSelected, onSelect }) => {
       <div className="candidate-label">Option {idx + 1}</div>
     </div>
   );
-});
+};
 
 const SegmentationCandidates = () => {
-  const { segmentationResult } = useSegmentation();
+  const segmentationResult = useSegmentation((state) => state.segmentationResult);
   const originalCanvas = useWorkspace((state) => {
     const activeItem = state.items.find((i) => i.id === state.activeItemId) || null;
     return activeItem?.sourceCanvas || null;
   });
   const setResultCanvas = useWorkspace((state) => state.setResultCanvas);
   const setIsProcessing = useWorkspace((state) => state.setIsProcessing);
-  const { updateProgress, showToast } = useUI();
+  const updateProgress = useUI((state) => state.updateProgress);
+  const showToast = useUI((state) => state.showToast);
 
   const [selectedIndex, setSelectedIndex] = useState(0);
 
@@ -96,4 +97,4 @@ const SegmentationCandidates = () => {
   );
 };
 
-export default React.memo(SegmentationCandidates);
+export default SegmentationCandidates;

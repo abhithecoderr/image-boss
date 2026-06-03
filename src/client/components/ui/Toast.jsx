@@ -45,4 +45,4 @@ const Toast = ({ message, type = "info", show = true }) => {
   );
 };
 
-export default React.memo(Toast);
+export default Toast;
