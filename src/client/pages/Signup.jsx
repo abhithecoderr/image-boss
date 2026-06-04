@@ -12,6 +12,7 @@ const SignUp = () => {
   const [passwordVal, setPasswordVal] = useState("");
   const [showPassword, setShowPassword] = useState(false);
   const [strength, setStrength] = useState({ score: 0, label: "", class: "" });
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Redirect if already authenticated
   useEffect(() => {

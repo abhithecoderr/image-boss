@@ -12,6 +12,7 @@ const Login = () => {
   // Simple visual UI states (password visibility & remember me)
   const [showPassword, setShowPassword] = useState(false);
   const [rememberMe, setRememberMe] = useState(false);
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Redirect if already authenticated
   useEffect(() => {
