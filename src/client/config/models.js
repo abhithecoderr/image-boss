@@ -19,6 +19,13 @@ export const BACKGROUND_REMOVAL_MODELS = {
     default_dtype: "fp16",
     method: "pipeline",
   },
+  isnet: {
+    model_id: "onnx-community/ISNet-ONNX",
+    task: "background-removal",
+    size: 1024,
+    default_dtype: "fp32",
+    method: "pipeline",
+  },
 };
 
 // --- Face/Person Blur (YOLO26) ---

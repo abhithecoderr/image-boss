@@ -85,17 +85,39 @@ export async function bitmapToRawImage(bitmap) {
  */
 export function createProgressReporter(onProgress) {
   return (start, end, messagePrefix = "Downloading...") => {
+    let lastPct = 0;
+    let currentFile = "";
+
     return (p) => {
-      let pct = 0;
-      if (p && typeof p === "object" && p.status === "progress") {
-        pct = p.total ? ((p.loaded ?? 0) / p.total) * 100 : (p.progress ?? 0);
+      let pct = lastPct;
+
+      if (p && typeof p === "object") {
+        if (p.file) {
+          currentFile = p.file;
+        }
+
+        if (p.status === "progress") {
+          pct = p.total ? ((p.loaded ?? 0) / p.total) * 100 : (p.progress ?? 0);
+          lastPct = pct;
+        } else if (p.status === "done") {
+          pct = 100;
+          lastPct = 0; // Reset for next file
+        } else if (p.status === "initiate") {
+          pct = 0;
+          lastPct = 0;
+        }
       } else if (typeof p === "number") {
         pct = p;
+        lastPct = p;
       }
 
       const progress = start + (pct / 100) * (end - start);
+      const fileSuffix = currentFile ? ` [${currentFile}]` : "";
       const message =
-        pct > 0 ? `${messagePrefix} ${Math.round(pct)}%` : messagePrefix;
+        pct > 0
+          ? `${messagePrefix}${fileSuffix} ${Math.round(pct)}%`
+          : `${messagePrefix}${fileSuffix}`;
+
       onProgress?.(progress, message);
     };
   };
@@ -114,6 +136,7 @@ export function runWorkerJob(
 ) {
   const PROGRESS_THROTTLE = 100;
   let lastProgressTime = 0;
+  let lastMessage = "";
 
   return new Promise((resolve, reject) => {
     const cleanup = () => {
@@ -126,9 +149,14 @@ export function runWorkerJob(
 
       if (type === "progress") {
         const now = Date.now();
-        if (now - lastProgressTime > PROGRESS_THROTTLE || progress === 1) {
+        if (
+          now - lastProgressTime > PROGRESS_THROTTLE ||
+          progress === 1 ||
+          message !== lastMessage
+        ) {
           onProgress?.(progress, message);
           lastProgressTime = now;
+          lastMessage = message;
         }
       } else if (type === "complete") {
         cleanup();

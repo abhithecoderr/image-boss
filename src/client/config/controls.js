@@ -15,9 +15,20 @@ export const CONTROLS_CONFIG = {
       defaultValue: 'birefnet-lite',
       options: [
         { value: 'birefnet', label: 'RMBG Pro (BiRefNet)' },
-        { value: 'birefnet-lite', label: 'RMBG Lite (BiRefNet Lite)' }
+        { value: 'birefnet-lite', label: 'RMBG Lite (BiRefNet Lite)' },
+        { value: 'isnet', label: 'ISNet (Background Removal)' }
       ]
 
+    },
+    {
+      id: 'method',
+      label: 'Approach',
+      type: 'select',
+      defaultValue: 'custom',
+      options: [
+        { value: 'custom', label: 'Custom (ORT)' },
+        { value: 'pipeline', label: 'Pipeline (Transformers.js)' }
+      ]
     },
     { id: 'edgeShift', label: 'Edge Shift', type: 'range', min: -20, max: 20, step: 1, defaultValue: 0 },
     { id: 'edgeSmoothness', label: 'Edge Smoothness', type: 'range', min: 0, max: 20, step: 1, defaultValue: 0 },
