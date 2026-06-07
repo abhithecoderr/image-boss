@@ -1,44 +1,21 @@
 .sidebar {
-  width: 180px;
-  background: var(--bg-surface);
-  border-right: 1px solid var(--border);
+  width: 220px;
+  background: transparent;
+  border-right: none;
   padding: var(--space-4) var(--space-2);
   display: flex;
   flex-direction: column;
   align-items: center;
   gap: var(--space-4);
-  height: 100vh;
+  height: calc(100vh - 72px);
   position: sticky;
-  top: 0;
+  top: 72px;
   overflow-y: auto;
   scrollbar-width: none; /* Hide scrollbar for clean strip look */
 }
 
 .sidebar::-webkit-scrollbar {
   display: none;
-}
-
-/* Sidebar Header Area */
-.sidebar-header {
-  display: flex;
-  flex-direction: row;
-  align-items: center;
-  justify-content: space-between;
-  gap: var(--space-2);
-  width: 100%;
-  padding: 0 var(--space-2) var(--space-3) var(--space-2);
-  border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-}
-
-.sidebar .brand-logo {
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 32px;
-  height: 32px;
-  background: radial-gradient(circle, rgba(255, 170, 0, 0.15) 0%, transparent 70%);
-  border-radius: var(--radius-md);
-  font-size: 1.25rem;
 }
 
 /* Navigation Services Column */
@@ -57,16 +34,16 @@
   flex-direction: row;
   align-items: center;
   justify-content: flex-start;
-  width: 160px;
-  height: 38px;
-  padding: 0 var(--space-3);
+  width: 200px;
+  height: 48px;
+  padding: 0 var(--space-4);
   border-radius: var(--radius-md);
   background: rgba(255, 255, 255, 0.02);
   color: var(--text-muted);
   border: 1px solid rgba(255, 255, 255, 0.04);
   transition: all var(--transition-fast) cubic-bezier(0.16, 1, 0.3, 1);
   cursor: pointer;
-  gap: var(--space-2);
+  gap: var(--space-3);
   text-align: left;
 }
 
@@ -89,9 +66,8 @@
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  font-size: 1.1rem;
-  width: 18px;
-  height: 18px;
+  width: 22px;
+  height: 22px;
   transition: transform var(--transition-fast) ease;
 }
 
@@ -100,7 +76,7 @@
 }
 
 .sidebar .nav-item .label {
-  font-size: 11px;
+  font-size: 13.5px;
   font-weight: 500;
   white-space: nowrap;
   overflow: hidden;

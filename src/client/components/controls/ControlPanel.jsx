@@ -2,6 +2,7 @@ import { useController, useService, useWorkspace, useSegmentation } from "../../
 import { useSAM } from "../../hooks/useSAM";
 import { OPERATION_MODE } from "../../config/app";
 import { CONTROLS_CONFIG } from "../../config/controls";
+import { BACKGROUND_REMOVAL_MODELS } from "../../config/models";
 import React, { useEffect, useRef } from "react";
 import ControlRenderer from "./ControlRenderer";
 import Select from "../ui/Select";
@@ -202,6 +203,12 @@ const ControlPanel = () => {
 
     if (batch.batchSettingsTarget && batch.batchSettingsTarget !== "all") {
       batch.updateItemOverride(batch.batchSettingsTarget, currentService.id, id, parsedVal);
+      if (currentService.id === "background-removal" && id === "model") {
+        const modelCfg = BACKGROUND_REMOVAL_MODELS[parsedVal];
+        if (modelCfg && modelCfg.method !== "hybrid") {
+          batch.updateItemOverride(batch.batchSettingsTarget, currentService.id, "method", modelCfg.method);
+        }
+      }
       return;
     }
 
@@ -211,6 +218,14 @@ const ControlPanel = () => {
     };
 
     updateServiceSetting(currentService.id, id, parsedVal);
+
+    if (currentService.id === "background-removal" && id === "model") {
+      const modelCfg = BACKGROUND_REMOVAL_MODELS[parsedVal];
+      if (modelCfg && modelCfg.method !== "hybrid") {
+        updateServiceSetting(currentService.id, "method", modelCfg.method);
+        nextSettings.method = modelCfg.method;
+      }
+    }
 
     const isBgRemovalPostProcessControl =
       currentService.id === "background-removal" &&
@@ -222,7 +237,7 @@ const ControlPanel = () => {
         execute({ ...nextSettings, _postProcess: true });
       }, 80);
     }
-  }, [currentService.id, serviceSettings, updateServiceSetting, originalCanvas, resultCanvas, execute]);
+  }, [currentService.id, serviceSettings, updateServiceSetting, originalCanvas, resultCanvas, execute, batch]);
 
   useEffect(() => {
     return () => clearTimeout(bgPostProcessDebounceRef.current);
@@ -296,92 +311,12 @@ const ControlPanel = () => {
   };
 
   return (
-    <div className="controls">
-      {activeMode === OPERATION_MODE.BATCH && <BatchSettingsSelector />}
-      <div className="controls-grid">
-        {batch.batchAvailable && (
-          <Select
-            label="Mode"
-            options={[
-              { value: "single", label: "Single" },
-              { value: "batch", label: "Batch" },
-            ]}
-            value={batch.mode}
-            onChange={(val) => batch.setMode(val)}
-          />
-        )}
-
-        <div className="full-width-control">
-          {/* Category Tabs (if applicable) */}
-          {hasCategories && (
-            <div className="full-width-control editor-categories-box">
-              <div className="tab-group control-tabs">
-                {categories.map((cat) => (
-                  <Button
-                    key={cat}
-                    variant={currentTab === cat ? "primary" : "secondary"}
-                    className={`tab-item ${currentTab === cat ? "active" : ""}`}
-                    onClick={() => setCurrentTab(cat)}
-                  >
-                    {cat}
-                  </Button>
-                ))}
-              </div>
-            </div>
-          )}
-
-          {/* Control List */}
-          <div className="service-control-grid">
-            {filteredConfigs.map(
-              (config) => {
-                const globalVal = serviceSettings[currentService.id]?.[config.id] ?? config.defaultValue;
-                const activeVal =
-                  batch.batchSettingsTarget !== "all"
-                    ? (batch.items.find((i) => i.id === batch.batchSettingsTarget)?.settingsOverrides?.[currentService.id]?.[config.id] ?? globalVal)
-                    : globalVal;
-
-                return (
-                  (!config.visibleIf || config.visibleIf(serviceSettings[currentService.id] || {})) && (
-                    <ControlRenderer
-                      key={config.id}
-                      control={config}
-                      value={activeVal}
-                      onChange={handleControlChange}
-                    />
-                  )
-                );
-              }
-            )}
-
-            {/* Specialized Overlays */}
-            {currentService.id === "compression" && (
-              <CompressionStats originalFile={originalFile} estimatedSize={estimatedSize} />
-            )}
-
-            {currentService.id === "object-segmentation" && (
-              <ObjectSegmentationPointsClear clearPoints={clearPoints} />
-            )}
-          </div>
-        </div>
-
-        {activeMode === OPERATION_MODE.BATCH && batch.items.length > 0 && (
-          <BatchActionsPanel
-            batch={batch}
-            serviceSettings={serviceSettings}
-            currentServiceId={currentService.id}
-          />
-        )}
-      </div>
-
-      {showManualTouchup && (
-        <ManualTouchupControls editing={editing} setEditing={setEditing} />
-      )}
-
-      <div className="actions-row">
+    <>
+      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "8px", width: "100%" }}>
         <Button
           variant="primary"
-          size="large"
           onClick={getProcessAction()}
+          style={{ padding: "6px 16px", fontSize: "13px" }}
           disabled={
             (activeMode === OPERATION_MODE.BATCH && batch.items.length === 0) || isProcessing
           }
@@ -390,7 +325,105 @@ const ControlPanel = () => {
           {getProcessLabel()}
         </Button>
       </div>
-    </div>
+
+      <div className="controls">
+        {activeMode === OPERATION_MODE.BATCH && <BatchSettingsSelector />}
+        <div className="controls-grid">
+          {batch.batchAvailable && (
+            <Select
+              label="Mode"
+              options={[
+                { value: "single", label: "Single" },
+                { value: "batch", label: "Batch" },
+              ]}
+              value={batch.mode}
+              onChange={(val) => batch.setMode(val)}
+            />
+          )}
+
+          <div className="full-width-control">
+            {/* Category Tabs (if applicable) */}
+            {hasCategories && (
+              <div className="full-width-control editor-categories-box">
+                <div className="tab-group control-tabs">
+                  {categories.map((cat) => (
+                    <Button
+                      key={cat}
+                      variant={currentTab === cat ? "primary" : "secondary"}
+                      className={`tab-item ${currentTab === cat ? "active" : ""}`}
+                      onClick={() => setCurrentTab(cat)}
+                    >
+                      {cat}
+                    </Button>
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Control List */}
+            <div className="service-control-grid">
+              {filteredConfigs.map(
+                (config) => {
+                  const globalVal = serviceSettings[currentService.id]?.[config.id] ?? config.defaultValue;
+                  const activeVal =
+                    batch.batchSettingsTarget !== "all"
+                      ? (batch.items.find((i) => i.id === batch.batchSettingsTarget)?.settingsOverrides?.[currentService.id]?.[config.id] ?? globalVal)
+                      : globalVal;
+
+                  // Resolve options if it is a function
+                  let resolvedControl = config;
+                  if (typeof config.options === "function") {
+                    const currentSettings = (batch.batchSettingsTarget !== "all"
+                      ? {
+                          ...serviceSettings[currentService.id],
+                          ...(batch.items.find((i) => i.id === batch.batchSettingsTarget)?.settingsOverrides?.[currentService.id] || {})
+                        }
+                      : serviceSettings[currentService.id]) || {};
+
+                    resolvedControl = {
+                      ...config,
+                      options: config.options(currentSettings),
+                    };
+                  }
+
+                  return (
+                    (!config.visibleIf || config.visibleIf(serviceSettings[currentService.id] || {})) && (
+                      <ControlRenderer
+                        key={config.id}
+                        control={resolvedControl}
+                        value={activeVal}
+                        onChange={handleControlChange}
+                      />
+                    )
+                  );
+                }
+              )}
+
+              {/* Specialized Overlays */}
+              {currentService.id === "compression" && (
+                <CompressionStats originalFile={originalFile} estimatedSize={estimatedSize} />
+              )}
+
+              {currentService.id === "object-segmentation" && (
+                <ObjectSegmentationPointsClear clearPoints={clearPoints} />
+              )}
+            </div>
+          </div>
+
+          {activeMode === OPERATION_MODE.BATCH && batch.items.length > 0 && (
+            <BatchActionsPanel
+              batch={batch}
+              serviceSettings={serviceSettings}
+              currentServiceId={currentService.id}
+            />
+          )}
+        </div>
+
+        {showManualTouchup && (
+          <ManualTouchupControls editing={editing} setEditing={setEditing} />
+        )}
+      </div>
+    </>
   );
 };
 

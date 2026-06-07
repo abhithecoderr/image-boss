@@ -88,14 +88,40 @@ export const useUnifiedProcessor = () => {
    Resets status, step details, and results of all queue items back to 'pending'.
   */
   const _resetItems = useCallback((itemsList) => {
-    return itemsList.map((item) => ({
-      ...item,
-      status: "pending",
-      error: null,
-      progress: 0,
-      resultCanvas: null,
-      stepResults: {},
-    }));
+    return itemsList.map((item) => {
+      // Clear background removal and blur caches to prevent blank images or stale cache bugs on rerun
+      if (item.sourceCanvas) {
+        const bgCache = item.sourceCanvas._bgRemovalCache;
+        if (bgCache && bgCache.maskBitmap) {
+          try { bgCache.maskBitmap.close(); } catch (_) {}
+        }
+        delete item.sourceCanvas._bgRemovalCache;
+
+        const blurCache = item.sourceCanvas._blurCache;
+        if (blurCache && blurCache.lastSourceBitmap) {
+          try { blurCache.lastSourceBitmap.close(); } catch (_) {}
+        }
+        delete item.sourceCanvas._blurCache;
+      }
+
+      // Dispose any intermediate canvas results in the step results list
+      if (item.stepResults) {
+        Object.values(item.stepResults).forEach((res) => {
+          if (res.resultCanvas?.close) {
+            try { res.resultCanvas.close(); } catch (_) {}
+          }
+        });
+      }
+
+      return {
+        ...item,
+        status: "pending",
+        error: null,
+        progress: 0,
+        resultCanvas: null,
+        stepResults: {},
+      };
+    });
   }, []);
 
   const updateItemOverride = useCallback((itemId, serviceOrStepId, key, value) => {

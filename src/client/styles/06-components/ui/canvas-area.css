@@ -8,9 +8,9 @@
   flex-direction: column;
   align-items: center;
   justify-content: center;
-  max-width: 680px;
+  max-width: 600px;
   width: 100%;
-  aspect-ratio: 1.6 / 1;
+  aspect-ratio: 1.8 / 1;
   margin: 0 auto;
   background: var(--bg-surface);
   border: 1px dashed var(--border-light);

@@ -26,9 +26,17 @@ export async function loadImage(source) {
  * Calculate filename and mime-type for a canvas result
  */
 export const getDownloadMetadata = (canvas, originalFile, serviceId, settings = {}) => {
-  if (!originalFile) return { filename: `result_${Date.now()}.png`, mimeType: 'image/png' };
+  const baseName = originalFile ? originalFile.name.replace(/\.[^/.]+$/, '') : `result_${Date.now()}`;
 
-  const baseName = originalFile.name.replace(/\.[^/.]+$/, '');
+  if (serviceId === 'captioning') {
+    return {
+      filename: `${baseName}_caption.txt`,
+      mimeType: 'text/plain'
+    };
+  }
+
+  if (!originalFile) return { filename: `${baseName}.png`, mimeType: 'image/png' };
+
   let mimeType = originalFile.type || 'image/png';
 
   if (canvas?._resultMimeType) {
@@ -106,8 +114,14 @@ export async function canvasToBlob(canvas, type = 'image/png', quality = 0.92) {
  * that blob is used directly to avoid re-encoding which would undo all compression work.
  */
 export async function downloadCanvas(canvas, filename = 'image.png', type = 'image/png') {
-  // Use the pre-encoded blob if available (avoids unnecessary re-encoding)
-  const blob = canvas._resultBlob || canvas._compressedBlob || await canvasToBlob(canvas, type);
+  let blob;
+  if (type === 'text/plain' || filename.endsWith('.txt')) {
+    const captionText = canvas?.dataset?.caption || '';
+    blob = new Blob([captionText], { type: 'text/plain;charset=utf-8' });
+  } else {
+    // Use the pre-encoded blob if available (avoids unnecessary re-encoding)
+    blob = canvas._resultBlob || canvas._compressedBlob || await canvasToBlob(canvas, type);
+  }
 
   const url = URL.createObjectURL(blob);
   const a = document.createElement('a');

@@ -8,6 +8,7 @@ import ControlPanel from "../components/controls/ControlPanel";
 import WorkflowBuilder from "../components/workspace/WorkflowBuilder";
 import { OPERATION_MODE } from "../config/app";
 import ErrorBoundary from "../components/ui/ErrorBoundary";
+import Navbar from "../components/navigation/Navbar";
 
 export default function MainAppLayout() {
   const { currentService, serviceSettings } = useService();
@@ -34,6 +35,7 @@ export default function MainAppLayout() {
 
   return (
     <div id="main-app-container">
+      <Navbar minimal />
       <div className="main-layout">
         <Sidebar />
 

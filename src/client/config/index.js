@@ -5,5 +5,6 @@
 
 export * from './app';
 export * from './services';
+export * from './solutions';
 export * from './controls';
 export * from './models';

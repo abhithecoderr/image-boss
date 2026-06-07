@@ -14,6 +14,8 @@
 /* 05 Pages */
 @import './05-pages/pages.css';
 @import './05-pages/auth.css';
+@import './05-pages/product.css';
+@import './05-pages/solutions.css';
 
 /* 06 Components - Reusable UI */
 @import './06-components/ui/button.css';
@@ -40,6 +42,7 @@
 /* 06 Components - Navigation */
 @import './06-components/navigation/sidebar.css';
 @import './06-components/navigation/navbar.css';
+@import './06-components/navigation/nav-dropdown.css';
 @import './06-components/navigation/footer.css';
 
 /* 06 Components - Workflow */

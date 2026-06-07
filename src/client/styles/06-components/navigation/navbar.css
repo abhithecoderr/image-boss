@@ -36,13 +36,15 @@
 
 /* Public Site Navbar style */
 .navbar {
-  position: sticky;
+  position: fixed;
   top: 0;
+  left: 0;
+  right: 0;
   z-index: 100;
   background: rgba(9, 9, 11, 0.9);
   backdrop-filter: blur(12px);
   border-bottom: 1px solid var(--border-subtle);
-  height: 64px;
+  height: 72px;
   display: flex;
   align-items: center;
   width: 100%;
@@ -93,3 +95,5 @@
 .navbar-cta:hover {
   opacity: 0.9;
 }
+
+

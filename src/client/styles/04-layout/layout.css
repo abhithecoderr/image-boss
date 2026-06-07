@@ -11,6 +11,10 @@
   width: 100%;
 }
 
+.public-layout {
+  padding-top: 72px;
+}
+
 .section-padding {
   padding: var(--space-12) 0;
 }
@@ -109,7 +113,18 @@
   font-weight: 600;
 }
 
+html {
+  scrollbar-gutter: stable;
+}
+
 /* --- Main Layout --- */
+
+#main-app-container {
+  display: flex;
+  flex-direction: column;
+  min-height: 100vh;
+  padding-top: 72px;
+}
 
 .main-layout {
   display: flex;
@@ -118,16 +133,16 @@
 }
 
 .sidebar {
-  width: 180px;
-  background: var(--bg-secondary);
-  border-right: 1px solid var(--border);
+  width: 220px;
+  background: transparent;
+  border-right: none;
   padding: var(--space-md);
   display: flex;
   flex-direction: column;
   gap: var(--space-md);
-  height: 100vh;
+  height: calc(100vh - 72px);
   position: sticky;
-  top: 0;
+  top: 72px;
   overflow-y: auto;
 }
 
@@ -135,18 +150,19 @@
   flex: 1;
   display: flex;
   flex-direction: column;
-  padding: var(--space-xl) var(--space-2xl);
+  padding: var(--space-md) var(--space-2xl) var(--space-lg) var(--space-2xl);
   max-width: 1200px;
   margin: 0 auto;
   width: 100%;
 }
 
 .service-info {
-  margin-bottom: var(--space-lg);
+  margin-top: var(--space-sm);
+  margin-bottom: var(--space-md);
 }
 
 .service-info h1 {
-  font-size: 1.75rem;
+  font-size: 1.35rem;
   font-weight: 700;
   margin-bottom: var(--space-xs);
   letter-spacing: -0.02em;
@@ -154,7 +170,7 @@
 
 .service-info p {
   color: var(--text-secondary);
-  font-size: 0.95rem;
+  font-size: 0.85rem;
 }
 
 .hidden {
@@ -183,7 +199,7 @@
   grid-template-columns: 1fr 1fr;
   gap: var(--space-lg);
   flex: 1;
-  min-height: 500px;
+  min-height: 360px;
 }
 
 .preview-panel {
@@ -220,7 +236,7 @@
   justify-content: center;
   padding: var(--space-lg);
   position: relative;
-  min-height: 450px;
+  min-height: 320px;
   background-image:
     linear-gradient(45deg, var(--bg-tertiary) 25%, transparent 25%),
     linear-gradient(-45deg, var(--bg-tertiary) 25%, transparent 25%),

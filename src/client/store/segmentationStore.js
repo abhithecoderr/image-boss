@@ -5,6 +5,7 @@ const initialEditingState = {
   activeMode: "extract",
   brushSize: 30,
   isDrawing: false,
+  activeStepId: null,
 };
 
 export const useSegmentationStore = create((set) => ({

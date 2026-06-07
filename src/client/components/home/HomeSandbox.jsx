@@ -6,13 +6,12 @@ import { SERVICE_ORDER } from '../../config/app';
 import { SERVICES } from '../../config/services';
 import UploadZone from '../ui/UploadZone';
 import Select from '../ui/Select';
-import Slider from '../ui/Slider';
 import Button from '../ui/Button';
 
 /* 
  HomeSandbox:
  The playground dashboard sandbox (Mockup 1).
- Coordinates file drop queues, AI service selectors, and custom parameters drawers.
+ Coordinates file drop queues, AI service selectors, and auto-navigates to the workspace.
 */
 export default function HomeSandbox() {
   const navigate = useNavigate();
@@ -26,20 +25,26 @@ export default function HomeSandbox() {
   const { 
     currentService, 
     selectService, 
-    serviceSettings, 
-    updateServiceSetting 
+    serviceSettings,
+    updateServiceSetting
   } = useService();
 
   const { addFiles, setMode } = useController();
 
-  // Toggle collapsible settings drawer (starts open)
-  const [drawerOpen, setDrawerOpen] = useState(true);
+  // Keep selected service local to prevent premature redirection
+  const [selectedServiceId, setSelectedServiceId] = useState(currentService.id || SERVICE_ORDER[0]);
 
   // Active queued item details for thumbnail/preview
   const activeItem = items.find(i => i.id === activeItemId) || null;
 
-  // Fetch AI options config dynamically for currently active service
-  const configs = CONTROLS_CONFIG[currentService.id] || [];
+  const handleServiceChange = (val) => {
+    if (val === 'magic-erase' || val === 'object-segmentation' || val === 'image-editor') {
+      selectService(val);
+      navigate(`/services/${val}`);
+    } else {
+      setSelectedServiceId(val);
+    }
+  };
 
   // Navigates directly to workspace with autoprocess flags set
   const handleProcessClick = () => {
@@ -47,9 +52,20 @@ export default function HomeSandbox() {
       showToast('Please upload an image first', 'warning');
       return;
     }
+    // Sync local selection to global store before redirecting
+    selectService(selectedServiceId);
     showToast('Redirecting to Workspace...', 'success');
-    navigate(`/services/${currentService.id}`, { state: { autoProcess: true } });
+    navigate(`/services/${selectedServiceId}`, { state: { autoProcess: true } });
   };
+
+
+  // Extract model/variant selection controls for the current service
+  const configs = CONTROLS_CONFIG[selectedServiceId] || [];
+  const modelControls = configs.filter(c => 
+    c.type === 'select' && 
+    (c.id === 'model' || c.id === 'modelId' || c.id === 'variant' || c.id === 'aiVariant' || c.id === 'method') &&
+    (!c.visibleIf || c.visibleIf(serviceSettings[selectedServiceId] || {}))
+  );
 
   return (
     <div className="home-sandbox-container">
@@ -70,10 +86,24 @@ export default function HomeSandbox() {
               value: id,
               label: SERVICES[id].name,
             }))}
-            value={currentService.id}
-            onChange={(val) => selectService(val)}
+            value={selectedServiceId}
+            onChange={handleServiceChange}
           />
         </div>
+
+        {modelControls.map(control => {
+          const value = serviceSettings[selectedServiceId]?.[control.id] ?? control.defaultValue;
+          return (
+            <div key={control.id} className="sandbox-control-item">
+              <label className="sandbox-control-label">{control.label}</label>
+              <Select
+                options={control.options}
+                value={value}
+                onChange={(val) => updateServiceSetting(selectedServiceId, control.id, control.parse ? control.parse(val) : val)}
+              />
+            </div>
+          );
+        })}
 
         <div className="sandbox-control-item">
           <label className="sandbox-control-label">Mode</label>
@@ -88,63 +118,7 @@ export default function HomeSandbox() {
         </div>
       </div>
 
-      {/* 3. Collapsible Parameter Drawer */}
-      <div className="sandbox-settings-drawer">
-        <div 
-          className="sandbox-drawer-header"
-          onClick={() => setDrawerOpen(!drawerOpen)}
-        >
-          <span className="sandbox-drawer-title">
-            Customize parameters ({currentService.name})
-          </span>
-          <span className={`sandbox-drawer-toggle-icon ${drawerOpen ? 'open' : ''}`}>
-            <svg width="10" height="6" viewBox="0 0 10 6" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-              <path d="m1 1 4 4 4-4" />
-            </svg>
-          </span>
-        </div>
-
-        {drawerOpen && (
-          <div className="sandbox-drawer-content">
-            {configs.length === 0 ? (
-              <div className="sandbox-drawer-empty">
-                This service executes automatically with standard model defaults.
-              </div>
-            ) : (
-              configs.map(control => {
-                const value = serviceSettings[currentService.id]?.[control.id] ?? control.defaultValue;
-                return (
-                  <div key={control.id} className="sandbox-control-item" style={{ gap: '6px' }}>
-                    {control.type === 'range' ? (
-                      <Slider
-                        label={control.label}
-                        min={control.min}
-                        max={control.max}
-                        step={control.step || 1}
-                        value={value}
-                        onChange={(val) => updateServiceSetting(currentService.id, control.id, val)}
-                      />
-                    ) : (
-                      <>
-                        <label style={{ fontSize: '13px', fontWeight: '500', color: 'var(--text-main)', marginBottom: '4px', display: 'block' }}>
-                          {control.label}
-                        </label>
-                        <Select
-                          options={control.options}
-                          value={value}
-                          onChange={(val) => updateServiceSetting(currentService.id, control.id, control.parse ? control.parse(val) : val)}
-                        />
-                      </>
-                    )}
-                  </div>
-                );
-              })
-            )}
-          </div>
-        )}
-      </div>
-
-      {/* 4. Process Action Button */}
+      {/* 3. Process Action Button */}
       <div className="sandbox-action-row">
         <Button 
           variant="primary"
@@ -159,3 +133,6 @@ export default function HomeSandbox() {
     </div>
   );
 }
+
+
+

@@ -1,6 +1,8 @@
 import { create } from "zustand";
 import { disposeBatchItem } from "../core/BatchItem";
 
+import { useSegmentationStore } from "./segmentationStore";
+
 export const useWorkspaceStore = create((set, get) => ({
   items: [],
   activeItemId: null,
@@ -48,10 +50,31 @@ export const useWorkspaceStore = create((set, get) => ({
 
   setResultCanvas: (canvas) => {
     const { activeItemId } = get();
+    const activeStepId = useSegmentationStore.getState().editing.activeStepId;
+
     set((state) => ({
-      items: state.items.map((item) =>
-        item.id === activeItemId ? { ...item, resultCanvas: canvas } : item,
-      ),
+      items: state.items.map((item) => {
+        if (item.id !== activeItemId) return item;
+
+        if (activeStepId) {
+          const stepResults = item.stepResults || {};
+          const currentStepRes = stepResults[activeStepId] || {};
+          return {
+            ...item,
+            stepResults: {
+              ...stepResults,
+              [activeStepId]: {
+                ...currentStepRes,
+                resultCanvas: canvas,
+                status: "done",
+              },
+            },
+            resultCanvas: canvas,
+          };
+        }
+
+        return { ...item, resultCanvas: canvas };
+      }),
     }));
   },
 

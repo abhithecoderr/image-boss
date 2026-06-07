@@ -1,12 +1,13 @@
 import React, { useState } from 'react';
 import { SERVICE_ORDER } from '../../config/app';
 import { SERVICES } from '../../config/services';
+import ServiceIcon from '../ui/ServiceIcon';
 
 /* 
  ServiceCarousel:
  The interactive features slideshow carousel showcase (Mockup 2).
  Toggles between services using chevrons and top horizontal tabs.
-*/
+ */
 export default function ServiceCarousel() {
   const activeServices = SERVICE_ORDER.filter(id => !SERVICES[id].disabled);
   const [activeIndex, setActiveIndex] = useState(0);
@@ -41,8 +42,9 @@ export default function ServiceCarousel() {
             key={id}
             className={`carousel-tab-btn ${index === activeIndex ? 'active' : ''}`}
             onClick={() => setActiveIndex(index)}
+            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
           >
-            {SERVICES[id].icon} {SERVICES[id].name}
+            <ServiceIcon id={id} style={{ width: '16px', height: '16px' }} /> {SERVICES[id].name}
           </button>
         ))}
       </div>
@@ -56,8 +58,8 @@ export default function ServiceCarousel() {
         <div className="carousel-card-display">
           {/* Info Details Panel */}
           <div className="carousel-info-pane">
-            <span className="carousel-service-name">
-              {service.icon} {service.name}
+            <span className="carousel-service-name" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+              <ServiceIcon id={service.id} style={{ width: '20px', height: '20px' }} /> {service.name}
             </span>
             <p className="carousel-service-desc">
               {service.description}

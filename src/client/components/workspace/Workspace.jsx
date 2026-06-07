@@ -1,5 +1,5 @@
 import React, { useRef, useEffect } from "react";
-import { useUI, useWorkspace, useService } from "../../store";
+import { useUI, useWorkspace, useService, useSegmentation } from "../../store";
 import { useFileUpload } from "../../hooks/useFileUpload";
 import SAMOverlay from "./overlays/SAMOverlay";
 import SegmentationCandidates from "./SegmentationCandidates";
@@ -30,8 +30,19 @@ const Workspace = ({ batch }) => {
   
   const isProcessing = useWorkspace((state) => state.isProcessing);
   const resetImages = useWorkspace((state) => state.resetImages);
+  const resetSegmentationState = useSegmentation((state) => state.resetSegmentationState);
   const items = useWorkspace((state) => state.items);
   const activeItemId = useWorkspace((state) => state.activeItemId);
+
+  // Clean up segmentation points and candidates when switching services
+  useEffect(() => {
+    resetSegmentationState();
+  }, [currentService.id, resetSegmentationState]);
+
+  const handleReset = () => {
+    resetImages();
+    resetSegmentationState();
+  };
 
   const activeItem = items.find((i) => i.id === activeItemId) || null;
   const srcCanvasState = activeItem?.sourceCanvas || null;
@@ -225,25 +236,54 @@ const Workspace = ({ batch }) => {
               )}
             </div>
             <div className="preview-image-wrapper">
-              <MaskEditorOverlay resRef={resRef} />
+              {currentService.id !== "captioning" && <MaskEditorOverlay resRef={resRef} />}
               {!resCanvas && !isProcessing && (
                 <div className="result-placeholder">
                   Waiting for processing...
                 </div>
               )}
+              {currentService.id === "captioning" && resCanvas && (
+                <div className="caption-result-container">
+                  <textarea
+                    className="caption-textarea"
+                    value={resCanvas.dataset?.caption || ""}
+                    readOnly
+                  />
+                  <button
+                    className="btn-copy-caption"
+                    onClick={(e) => {
+                      navigator.clipboard.writeText(resCanvas.dataset?.caption || "");
+                      const btn = e.currentTarget;
+                      btn.classList.add("copied");
+                      const originalHTML = btn.innerHTML;
+                      btn.textContent = "Copied!";
+                      setTimeout(() => {
+                        btn.classList.remove("copied");
+                        btn.innerHTML = originalHTML;
+                      }, 2000);
+                    }}
+                  >
+                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                    </svg>
+                    Copy Caption
+                  </button>
+                </div>
+              )}
               <canvas
                 ref={resRef}
-                className={!resCanvas ? "hidden" : ""}
+                className={(!resCanvas || currentService.id === "captioning") ? "hidden" : ""}
               ></canvas>
             </div>
           </div>
         )}
       </div>
 
-      <SegmentationCandidates />
+      {currentService.id === "object-segmentation" && <SegmentationCandidates />}
 
       <div className="actions actions-row">
-        <Button variant="secondary" onClick={resetImages}>
+        <Button variant="secondary" onClick={handleReset}>
           New Image
         </Button>
 

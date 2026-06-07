@@ -1,5 +1,4 @@
-import BiRefNetORTWorker from "./birefnet-ort.worker.js?worker";
-import BiRefNetPipelineWorker from "./birefnet-pipeline.worker.js?worker";
+import BackgroundRemovalWorker from "./background-removal.worker.js?worker";
 import { resizeCanvas } from "../../core/canvas-utils.js";
 import { workerRegistry } from "../../core/worker-registry.js";
 import { runWorkerJob } from "../../core/worker-utils.js";
@@ -7,32 +6,15 @@ import { BACKGROUND_REMOVAL_MODELS } from "../../config/models.js";
 import { applyMaskToCanvas } from "./helpers.js";
 
 const SERVICE_ID = "background-removal";
-let currentWorkerType = null;
 
-function getWorker(method) {
-  const targetWorkerType = method === "pipeline" ? "pipeline" : "custom";
-  if (currentWorkerType && currentWorkerType !== targetWorkerType) {
-    workerRegistry.terminate(SERVICE_ID);
-  }
-  currentWorkerType = targetWorkerType;
-
-  if (targetWorkerType === "pipeline") {
-    return workerRegistry.getWorker(SERVICE_ID, BiRefNetPipelineWorker);
-  } else {
-    return workerRegistry.getWorker(SERVICE_ID, BiRefNetORTWorker);
-  }
+function getWorker() {
+  return workerRegistry.getWorker(SERVICE_ID, BackgroundRemovalWorker);
 }
 
-// Register a callback to reset state when terminated or disposed externally
-workerRegistry.onDispose(SERVICE_ID, () => {
-  currentWorkerType = null;
-});
-
-// Standard Process (BiRefNet)
- 
+// Standard Process (BiRefNet & ISNet)
 export async function process(sourceCanvas, options = {}, onProgress) {
   const modelId = options.model || "birefnet-lite";
-  const method = options.method || "custom";
+  const method = options.method || "pipeline";
 
   // Check cache for post-processing adjustments (canvas-scoped to prevent memory leaks)
   const cache = sourceCanvas._bgRemovalCache || {};
@@ -49,7 +31,7 @@ export async function process(sourceCanvas, options = {}, onProgress) {
     );
   }
 
-  const w = getWorker(method);
+  const w = getWorker();
 
   // Retrieve size directly from central models config.
   const modelCfg = BACKGROUND_REMOVAL_MODELS[modelId] || BACKGROUND_REMOVAL_MODELS['birefnet-lite'];
@@ -70,6 +52,7 @@ export async function process(sourceCanvas, options = {}, onProgress) {
         originalWidth,
         originalHeight,
         model: modelId,
+        method,
       },
       [bitmap],
       onProgress,
@@ -105,7 +88,7 @@ export async function process(sourceCanvas, options = {}, onProgress) {
  */
 export async function dispose(clearModels = false) {
   try {
-    const w = getWorker(currentWorkerType);
+    const w = getWorker();
     await runWorkerJob(w, "clear", { clearModels });
   } catch (_) {}
 }

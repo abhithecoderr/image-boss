@@ -6,7 +6,7 @@
 .premium-slider-container {
   display: flex;
   flex-direction: column;
-  gap: var(--space-xs);
+  gap: 0;
   width: 100%;
   user-select: none;
 }
@@ -25,15 +25,15 @@
 }
 
 .slider-value-display {
-  font-size: 12px;
+  font-size: 10.5px;
   font-family: var(--font-mono);
   font-weight: 500;
   color: var(--highlight);
   background: var(--bg-input);
-  padding: 2px 6px;
+  padding: 1px 4px;
   border-radius: var(--radius-xs);
   border: 1px solid var(--border);
-  min-width: 36px;
+  min-width: 28px;
   text-align: center;
 }
 
@@ -41,12 +41,12 @@
   display: flex;
   align-items: center;
   gap: var(--space-2);
-  height: 32px;
+  height: 24px;
 }
 
 .slider-step-btn {
-  width: 26px;
-  height: 26px;
+  width: 20px;
+  height: 20px;
   display: flex;
   align-items: center;
   justify-content: center;
@@ -54,7 +54,7 @@
   border: 1px solid var(--border);
   border-radius: var(--radius-xs);
   color: var(--text-muted);
-  font-size: 14px;
+  font-size: 11px;
   cursor: pointer;
   transition: all var(--transition-fast);
   flex-shrink: 0;
@@ -80,7 +80,7 @@
   flex: 1;
   display: flex;
   align-items: center;
-  padding: 10px 0;
+  padding: 6px 0;
 }
 
 .premium-slider-input {
@@ -96,8 +96,8 @@
 
 .premium-slider-input::-webkit-slider-thumb {
   -webkit-appearance: none;
-  width: 12px;
-  height: 12px;
+  width: 10px;
+  height: 10px;
   background: var(--text-main);
   border: 1.5px solid var(--highlight);
   border-radius: 50%;

@@ -11,7 +11,7 @@
 }
 
 .brush-preview {
-  position: fixed;
+  position: absolute;
   border: 2px solid var(--highlight);
   border-radius: 50%;
   pointer-events: none;

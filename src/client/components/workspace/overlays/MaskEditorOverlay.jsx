@@ -1,4 +1,4 @@
-import React, { useRef, useEffect } from "react";
+import React, { useRef } from "react";
 import { useWorkspace, useSegmentation } from "../../../store";
 import { useMaskEditor } from "../../../hooks/useMaskEditor";
 
@@ -8,39 +8,34 @@ const MaskEditorOverlay = ({ resRef }) => {
   const { startDrawing, moveDrawing, endDrawing } = useMaskEditor(resRef);
   const brushPreviewRef = useRef(null);
 
-  // Sync brush preview with mouse
-  useEffect(() => {
-    const onMove = (e) => {
-      if (!brushPreviewRef.current || !resRef.current) return;
+  const handleMouseMove = (e) => {
+    // Call the mask editor's drawing handler
+    moveDrawing(e);
 
-      const x = e.clientX;
-      const y = e.clientY;
+    // Update brush preview position and size (centered on cursor, relative to container)
+    if (brushPreviewRef.current) {
+      const rect = e.currentTarget.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+      const y = e.clientY - rect.top;
       const size = editing.brushSize;
 
       brushPreviewRef.current.style.display = "block";
-      brushPreviewRef.current.style.left = `${x}px`;
-      brushPreviewRef.current.style.top = `${y}px`;
+      brushPreviewRef.current.style.left = `${x - size / 2}px`;
+      brushPreviewRef.current.style.top = `${y - size / 2}px`;
       brushPreviewRef.current.style.width = `${size}px`;
       brushPreviewRef.current.style.height = `${size}px`;
-    };
-
-    const onLeave = () => {
-      if (brushPreviewRef.current)
-        brushPreviewRef.current.style.display = "none";
-    };
-
-    if (editing.activeTool !== "none" && resRef.current) {
-      resRef.current.addEventListener("mousemove", onMove);
-      resRef.current.addEventListener("mouseleave", onLeave);
     }
+  };
 
-    return () => {
-      if (resRef.current) {
-        resRef.current.removeEventListener("mousemove", onMove);
-        resRef.current.removeEventListener("mouseleave", onLeave);
-      }
-    };
-  }, [editing.activeTool, editing.brushSize, resRef]);
+  const handleMouseLeave = (e) => {
+    // End drawing
+    endDrawing(e);
+
+    // Hide brush preview
+    if (brushPreviewRef.current) {
+      brushPreviewRef.current.style.display = "none";
+    }
+  };
 
   if (editing.activeTool === "none" || !resultCanvas) return null;
 
@@ -49,9 +44,9 @@ const MaskEditorOverlay = ({ resRef }) => {
       <div
         className="mask-draw-overlay"
         onMouseDown={startDrawing}
-        onMouseMove={moveDrawing}
+        onMouseMove={handleMouseMove}
         onMouseUp={endDrawing}
-        onMouseLeave={endDrawing}
+        onMouseLeave={handleMouseLeave}
       />
       <div ref={brushPreviewRef} className="brush-preview" />
     </>

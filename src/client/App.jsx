@@ -11,6 +11,8 @@ import Landing from "./pages/Landing";
 import Pricing from "./pages/Pricing";
 import Login from "./pages/Login";
 import SignUp from "./pages/Signup";
+import ProductDetail from "./pages/ProductDetail";
+import SolutionsDetail from "./pages/SolutionsDetail";
 import { AppProvider, useAuth } from "./store/index.jsx";
 
 // 1. Create a Root wrapper that includes your Providers
@@ -47,6 +49,14 @@ export const router = createBrowserRouter([
           {
             path: "pricing",
             element: <Pricing />,
+          },
+          {
+            path: "product/:productId?",
+            element: <ProductDetail />,
+          },
+          {
+            path: "solutions/:solutionId?",
+            element: <SolutionsDetail />,
           },
         ],
       },

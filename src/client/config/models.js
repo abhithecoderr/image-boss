@@ -26,6 +26,16 @@ export const BACKGROUND_REMOVAL_MODELS = {
     default_dtype: "fp32",
     method: "pipeline",
   },
+  u2net: {
+    model_id: "Heliosoph/u2net-onnx",
+    task: "background-removal",
+    size: 320,
+    default_dtype: "fp32",
+    method: "custom",
+    model_url: "https://huggingface.co/Heliosoph/u2net-onnx/resolve/main/u2net.onnx",
+    output_type: "minmax",
+    device: "wasm",
+  },
 };
 
 // --- Face/Person Blur (YOLO26) ---
@@ -117,8 +127,10 @@ export const UPSCALING_MODELS = {
   esrgan: {
     id: "esrgan",
     name: "Real-ESRGAN (General 4x)",
-    onnxUrl: "https://huggingface.co/TheGuy444/Real-ESRGAN-ONNX/resolve/main/onnx/model.onnx",
-    dataUrl: "https://huggingface.co/TheGuy444/Real-ESRGAN-ONNX/resolve/main/onnx/model.data",
+    onnxUrl:
+      "https://huggingface.co/TheGuy444/Real-ESRGAN-ONNX/resolve/main/onnx/model.onnx",
+    dataUrl:
+      "https://huggingface.co/TheGuy444/Real-ESRGAN-ONNX/resolve/main/onnx/model.data",
     tileSize: 128,
     overlap: 16,
     scale: 4,
@@ -128,7 +140,8 @@ export const UPSCALING_MODELS = {
   esrgan_pro: {
     id: "esrgan_pro",
     name: "Real-ESRGAN Pro (General 4x)",
-    onnxUrl: "https://huggingface.co/FuryTMP/RealESR_Gx4_fp16/resolve/main/RealESR_Gx4_fp16.onnx",
+    onnxUrl:
+      "https://huggingface.co/FuryTMP/RealESR_Gx4_fp16/resolve/main/RealESR_Gx4_fp16.onnx",
     tileSize: 128,
     overlap: 16,
     scale: 4,
@@ -138,7 +151,8 @@ export const UPSCALING_MODELS = {
   esrgan_ultra: {
     id: "esrgan_ultra",
     name: "Real-ESRGAN Ultra (General 4x)",
-    onnxUrl: "https://huggingface.co/FuryTMP/RealESRGANx4_fp16/resolve/main/RealESRGANx4_fp16.onnx",
+    onnxUrl:
+      "https://huggingface.co/FuryTMP/RealESRGANx4_fp16/resolve/main/RealESRGANx4_fp16.onnx",
     tileSize: 128,
     overlap: 16,
     scale: 4,
@@ -148,7 +162,8 @@ export const UPSCALING_MODELS = {
   bsrgan_x4: {
     id: "bsrgan_x4",
     name: "BSRGAN (Detail 4x)",
-    onnxUrl: "https://huggingface.co/FuryTMP/BSRGANx4_fp16/resolve/main/BSRGANx4_fp16.onnx",
+    onnxUrl:
+      "https://huggingface.co/FuryTMP/BSRGANx4_fp16/resolve/main/BSRGANx4_fp16.onnx",
     tileSize: 128,
     overlap: 16,
     scale: 4,
@@ -158,7 +173,8 @@ export const UPSCALING_MODELS = {
   bsrgan_x2: {
     id: "bsrgan_x2",
     name: "BSRGAN (Detail 2x)",
-    onnxUrl: "https://huggingface.co/FuryTMP/BSRGANx2_fp16/resolve/main/BSRGANx2_fp16.onnx",
+    onnxUrl:
+      "https://huggingface.co/FuryTMP/BSRGANx2_fp16/resolve/main/BSRGANx2_fp16.onnx",
     tileSize: 256,
     overlap: 16,
     scale: 2,
@@ -168,7 +184,8 @@ export const UPSCALING_MODELS = {
   real_esr_anime_x4: {
     id: "real_esr_anime_x4",
     name: "Real-ESRGAN (Anime 4x)",
-    onnxUrl: "https://huggingface.co/FuryTMP/RealESR_Animex4_fp16/resolve/main/RealESR_Animex4_fp16.onnx",
+    onnxUrl:
+      "https://huggingface.co/FuryTMP/RealESR_Animex4_fp16/resolve/main/RealESR_Animex4_fp16.onnx",
     tileSize: 128,
     overlap: 16,
     scale: 4,

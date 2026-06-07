@@ -72,17 +72,26 @@ const ServiceControlGrid = ({
       )}
 
       {/* Control List */}
-      {filteredConfigs.map(
-        (config) =>
+      {filteredConfigs.map((config) => {
+        let resolvedControl = config;
+        if (typeof config.options === "function") {
+          resolvedControl = {
+            ...config,
+            options: config.options(options || {}),
+          };
+        }
+
+        return (
           (!config.visibleIf || config.visibleIf(options)) && (
             <ControlRenderer
               key={config.id}
-              control={config}
+              control={resolvedControl}
               value={options[config.id] ?? config.defaultValue}
               onChange={onChange}
             />
-          ),
-      )}
+          )
+        );
+      })}
 
       {/* Specialized Overlays (e.g., Compression Stats) */}
       {serviceId === "compression" && (

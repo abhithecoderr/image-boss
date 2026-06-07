@@ -6,18 +6,17 @@
   max-width: 800px;
   width: 100%;
   margin: var(--space-8) auto;
-  background: linear-gradient(145deg, rgba(24, 24, 27, 0.8) 0%, rgba(12, 12, 14, 0.95) 100%);
-  backdrop-filter: blur(20px);
-  border: 1px solid rgba(255, 255, 255, 0.06);
-  border-radius: var(--radius-lg);
-  padding: var(--space-6);
-  box-shadow: 0 30px 60px -15px rgba(0, 0, 0, 0.8), inset 0 1px 0 rgba(255, 255, 255, 0.05);
+  background: transparent;
+  backdrop-filter: none;
+  border: none;
+  padding: 0;
+  box-shadow: none;
   transition: all var(--transition-normal);
 }
 
 .home-sandbox-container:hover {
-  border-color: rgba(245, 166, 35, 0.25);
-  box-shadow: 0 35px 70px -10px rgba(0, 0, 0, 0.9), 0 0 40px rgba(245, 166, 35, 0.03), inset 0 1px 0 rgba(255, 255, 255, 0.08);
+  border-color: transparent;
+  box-shadow: none;
 }
 
 .sandbox-upload-box {
