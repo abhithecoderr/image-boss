@@ -80,176 +80,6 @@
   max-width: 600px;
 }
 
-.landing-hero-title {
-  font-size: 3rem;
-  font-weight: 700;
-  line-height: 1.1;
-  letter-spacing: -0.04em;
-  margin-bottom: var(--space-4);
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  justify-content: center;
-}
-
-@media (min-width: 768px) {
-  .landing-hero-title {
-    font-size: 4rem;
-    justify-content: flex-start;
-  }
-}
-
-.landing-hero-subtitle {
-  font-size: 1.25rem;
-  color: var(--text-muted);
-  line-height: 1.5;
-  margin-bottom: var(--space-6);
-}
-
-.landing-hero-actions {
-  display: flex;
-  gap: var(--space-3);
-  justify-content: center;
-}
-
-@media (min-width: 768px) {
-  .landing-hero-actions {
-    justify-content: flex-start;
-  }
-}
-
-.landing-hero-visual {
-  flex: 1;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-}
-
-.landing-hero-cards {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-3);
-  perspective: 1000px;
-}
-
-.landing-hero-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-medium);
-  padding: var(--space-4) var(--space-5);
-  border-radius: var(--radius-md);
-  display: flex;
-  align-items: center;
-  gap: var(--space-3);
-  transform: rotateY(-15deg) rotateX(5deg);
-  box-shadow: var(--shadow-layered);
-  transition: transform var(--transition-normal);
-  opacity: 0;
-  animation: slideUp var(--transition-normal) forwards;
-}
-
-.landing-hero-card:hover {
-  transform: rotateY(0deg) rotateX(0deg) scale(1.05);
-  border-color: var(--border-strong);
-}
-
-.landing-hero-card-icon {
-  font-size: 1.5rem;
-}
-
-.landing-hero-card-name {
-  font-weight: 600;
-  color: var(--text-main);
-}
-
-.landing-services-section {
-  padding: var(--space-12) 0;
-  border-top: 1px solid var(--border-subtle);
-}
-
-.landing-section-title {
-  font-size: clamp(1.75rem, 5vw, 2.5rem);
-  font-weight: 700;
-  text-align: center;
-  margin-bottom: var(--space-2);
-  letter-spacing: -0.03em;
-}
-
-.landing-section-subtitle {
-  text-align: center;
-  color: var(--text-muted);
-  font-size: 1.1rem;
-  margin-bottom: var(--space-8);
-}
-
-.landing-services-grid {
-  display: grid;
-  /* Cap the track at 100% so a single card never overflows on narrow phones. */
-  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
-  gap: var(--space-5);
-}
-
-.landing-service-card {
-  background: var(--bg-surface);
-  border: 1px solid var(--border-medium);
-  border-radius: var(--radius-lg);
-  padding: var(--space-5);
-  display: flex;
-  flex-direction: column;
-  transition: transform var(--transition-normal), border-color var(--transition-normal);
-  cursor: pointer;
-  text-decoration: none;
-}
-
-.landing-service-card:hover {
-  transform: translateY(-4px);
-  border-color: var(--border-strong);
-}
-
-.landing-service-icon {
-  font-size: 2.5rem;
-  margin-bottom: var(--space-4);
-  background: var(--bg-elevated);
-  width: 64px;
-  height: 64px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: var(--radius-md);
-  border: 1px solid var(--border-subtle);
-}
-
-.landing-service-name {
-  font-size: 1.25rem;
-  font-weight: 600;
-  color: var(--text-main);
-  margin-bottom: var(--space-2);
-}
-
-.landing-service-desc {
-  color: var(--text-muted);
-  line-height: 1.5;
-}
-
-.landing-cta-section {
-  padding: var(--space-12) 0;
-  text-align: center;
-  border-top: 1px solid var(--border-subtle);
-  background: radial-gradient(circle at center, var(--bg-surface) 0%, var(--bg-deep) 100%);
-}
-
-.landing-cta-title {
-  font-size: clamp(1.75rem, 5vw, 2.5rem);
-  font-weight: 700;
-  margin-bottom: var(--space-2);
-  letter-spacing: -0.03em;
-}
-
-.landing-cta-subtitle {
-  color: var(--text-muted);
-  font-size: 1.1rem;
-  margin-bottom: var(--space-6);
-}
-
 /* --- Pricing Page --- */
 
 .pricing-header {
@@ -362,6 +192,32 @@
   content: '✓';
   color: var(--accent-primary);
   font-weight: bold;
+}
+
+/* FAQ & CTA blocks that previously carried inline styles. */
+
+.faq-section {
+  background: transparent;
+}
+
+.pricing-section-title {
+  font-size: clamp(1.4rem, 2.5vw, 2rem);
+  text-align: center;
+  margin-bottom: var(--space-6);
+}
+
+.pricing-cta {
+  text-align: center;
+}
+
+.pricing-cta p {
+  margin-bottom: var(--space-6);
+}
+
+/* Disabled "Current Plan" indicator — replaces an inline style. */
+.pricing-current-plan {
+  opacity: 0.6;
+  cursor: not-allowed;
 }
 
 /* --- Services Page --- */

@@ -113,9 +113,8 @@ const Pricing = () => {
               {isAuthenticated && plan.name === 'Free' ? (
                 <button
                   type="button"
-                  className="btn btn-secondary btn-large"
+                  className="btn btn-secondary btn-large pricing-current-plan"
                   disabled
-                  style={{ opacity: 0.6, cursor: 'not-allowed' }}
                 >
                   Current Plan
                 </button>
@@ -129,8 +128,8 @@ const Pricing = () => {
         </div>
       </section>
 
-      <section className="faq-section mt-4 p-4" style={{ background: 'transparent' }}>
-        <h2 className="pricing-title" style={{ fontSize: '2rem', textAlign: 'center', marginBottom: 'var(--space-6)' }}>Frequently Asked Questions</h2>
+      <section className="faq-section mt-4 p-4">
+        <h2 className="pricing-section-title">Frequently Asked Questions</h2>
         <div className="faq-accordion">
           {faqs.map((faq, index) => {
             const isExpanded = expandedIdx === index;
@@ -149,9 +148,9 @@ const Pricing = () => {
         </div>
       </section>
 
-      <section className="cta-section section-padding" style={{ textAlign: 'center' }}>
-        <h2 className="pricing-title" style={{ fontSize: '2rem' }}>Not sure which plan to choose?</h2>
-        <p className="pricing-subtitle" style={{ marginBottom: 'var(--space-6)' }}>Start with our free plan and upgrade when you're ready</p>
+      <section className="cta-section section-padding pricing-cta">
+        <h2 className="pricing-section-title">Not sure which plan to choose?</h2>
+        <p className="pricing-subtitle">Start with our free plan and upgrade when you're ready</p>
         <Link to="/services" className="btn btn-primary btn-large">
           Try for Free
         </Link>

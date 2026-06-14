@@ -50,19 +50,6 @@
   letter-spacing: -0.02em;
 }
 
-.sidebar .nav-services {
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-xs);
-  padding: var(--space-xs) 0;
-}
-
-.sidebar .nav-item {
-  width: 100%;
-  justify-content: flex-start;
-  padding: var(--space-md);
-  font-size: 14px;
-}
 .nav-item {
   display: flex;
   align-items: center;

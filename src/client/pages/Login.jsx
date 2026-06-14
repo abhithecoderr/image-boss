@@ -91,7 +91,7 @@ const Login = () => {
             </p>
 
             <div className="auth-feature-cards">
-              <div className="auth-feature-card animate-slide-up" style={{ animationDelay: "100ms" }}>
+              <div className="auth-feature-card animate-slide-up">
                 <span className="auth-feature-card-icon">✂️</span>
                 <div>
                   <h4 className="auth-feature-card-title">Background Removal</h4>
@@ -99,7 +99,7 @@ const Login = () => {
                 </div>
               </div>
 
-              <div className="auth-feature-card animate-slide-up" style={{ animationDelay: "200ms" }}>
+              <div className="auth-feature-card animate-slide-up">
                 <span className="auth-feature-card-icon">🔎</span>
                 <div>
                   <h4 className="auth-feature-card-title">Super Upscaling</h4>
@@ -107,7 +107,7 @@ const Login = () => {
                 </div>
               </div>
 
-              <div className="auth-feature-card animate-slide-up" style={{ animationDelay: "300ms" }}>
+              <div className="auth-feature-card animate-slide-up">
                 <span className="auth-feature-card-icon">✨</span>
                 <div>
                   <h4 className="auth-feature-card-title">Smart Magic Eraser</h4>
@@ -126,7 +126,7 @@ const Login = () => {
         <main className="auth-form-side">
           <div className="auth-form-wrapper">
             <header className="auth-form-header">
-              <Link to="/" className="auth-logo-link" style={{ display: "none" }}>
+              <Link to="/" className="auth-logo-link hidden">
                 ⚡ IMAGE BOSS
               </Link>
               <h2 className="auth-form-title">Welcome back</h2>

@@ -134,7 +134,7 @@ const SignUp = () => {
             </p>
 
             <div className="auth-feature-cards">
-              <div className="auth-feature-card animate-slide-up" style={{ animationDelay: "100ms" }}>
+              <div className="auth-feature-card animate-slide-up">
                 <span className="auth-feature-card-icon">⚡</span>
                 <div>
                   <h4 className="auth-feature-card-title">100% Web Local</h4>
@@ -142,7 +142,7 @@ const SignUp = () => {
                 </div>
               </div>
 
-              <div className="auth-feature-card animate-slide-up" style={{ animationDelay: "200ms" }}>
+              <div className="auth-feature-card animate-slide-up">
                 <span className="auth-feature-card-icon">🔒</span>
                 <div>
                   <h4 className="auth-feature-card-title">Strict Privacy Safeguard</h4>
@@ -150,7 +150,7 @@ const SignUp = () => {
                 </div>
               </div>
 
-              <div className="auth-feature-card animate-slide-up" style={{ animationDelay: "300ms" }}>
+              <div className="auth-feature-card animate-slide-up">
                 <span className="auth-feature-card-icon">🌀</span>
                 <div>
                   <h4 className="auth-feature-card-title">Powerful Workflows</h4>
@@ -239,9 +239,7 @@ const SignUp = () => {
                       <div className={`auth-strength-bar ${strength.score >= 3 ? strength.class : ""}`}></div>
                       <div className={`auth-strength-bar ${strength.score >= 5 ? strength.class : ""}`}></div>
                     </div>
-                    <span className={`auth-strength-label`} style={{
-                      color: strength.class === "strong" ? "var(--success)" : strength.class === "medium" ? "var(--warning)" : "var(--error)"
-                    }}>
+                    <span className={`auth-strength-label is-${strength.class || 'weak'}`}>
                       Password Strength: {strength.label}
                     </span>
                   </div>
@@ -261,7 +259,7 @@ const SignUp = () => {
                 />
 
                 {/* User Agreements */}
-                <div style={{ marginTop: "var(--space-2)" }}>
+                <div className="auth-terms-block">
                   <label className="auth-remember">
                     <input
                       type="checkbox"
@@ -270,10 +268,10 @@ const SignUp = () => {
                       disabled={isPending}
                     />
                     <span>
-                      I agree to the <a href="#terms" onClick={(e) => {e.preventDefault(); alert("We respect your data. Your files are processed entirely locally.");}} style={{ color: "var(--accent-primary)" }}>Terms of Service</a> and <a href="#privacy" onClick={(e) => {e.preventDefault(); alert("Local privacy guaranteed.");}} style={{ color: "var(--accent-primary)" }}>Privacy Policy</a>
+                      I agree to the <a href="#terms" className="auth-inline-link" onClick={(e) => {e.preventDefault(); alert("We respect your data. Your files are processed entirely locally.");}}>Terms of Service</a> and <a href="#privacy" className="auth-inline-link" onClick={(e) => {e.preventDefault(); alert("Local privacy guaranteed.");}}>Privacy Policy</a>
                     </span>
                   </label>
-                  {formState?.errors?.terms && <span className="auth-input-error" style={{ display: "block", marginTop: "4px" }}>{formState?.errors?.terms}</span>}
+                  {formState?.errors?.terms && <span className="auth-input-error auth-terms-error">{formState?.errors?.terms}</span>}
                 </div>
 
                 {/* Submit Action Button */}
