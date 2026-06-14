@@ -1,4 +1,4 @@
-import { useCallback, useMemo } from 'react';
+
 import { useLocation, useNavigate, matchPath } from 'react-router-dom';
 import { SERVICE_ORDER } from '../config/app';
 import { SERVICES } from '../config/services';
@@ -14,15 +14,13 @@ export const useServiceEngine = () => {
   const match = matchPath("/services/:serviceId", pathname);
 
   // Source of truth for active service
-  const serviceId = useMemo(() => match?.params?.serviceId || SERVICE_ORDER[0], [match]);
+  const serviceId = match?.params?.serviceId || SERVICE_ORDER[0];
 
-  const currentService = useMemo(() => {
-    return SERVICES[serviceId] || SERVICES[SERVICE_ORDER[0]];
-  }, [serviceId]);
+  const currentService = SERVICES[serviceId] || SERVICES[SERVICE_ORDER[0]];
 
-  const selectService = useCallback((targetServiceId) => {
+  const selectService = (targetServiceId) => {
     navigate(`/services/${targetServiceId}`);
-  }, [navigate]);
+  };
 
   return {
     currentService,

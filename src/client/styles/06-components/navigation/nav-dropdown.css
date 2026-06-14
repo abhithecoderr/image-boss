@@ -39,7 +39,7 @@
   position: absolute;
   top: 100%;
   left: 50%;
-  transform: translateX(-50%) translateY(12px);
+  transform: translateX(-50%) translateY(20px);
   width: 900px; /* Increased from 820px for greater text clarity and spacing */
   background: rgba(9, 9, 11, 0.98); /* Deep carbon black */
   border: 1px solid rgba(255, 255, 255, 0.08);
@@ -49,7 +49,7 @@
   opacity: 0;
   visibility: hidden;
   pointer-events: none;
-  transition: transform 0.25s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.25s cubic-bezier(0.16, 1, 0.3, 1), visibility 0.25s;
+  transition: transform 0.4s cubic-bezier(0.16, 1, 0.3, 1), opacity 0.35s ease-out, visibility 0.35s;
   z-index: 1000;
   display: flex;
   flex-direction: column;
@@ -112,10 +112,10 @@
 
 .nav-dropdown-item {
   display: flex;
-  gap: var(--space-3.5);
-  padding: var(--space-3.5) var(--space-4);
+  gap: 18px;
+  padding: var(--space-3) var(--space-4);
   border-radius: var(--radius-md);
-  transition: all var(--transition-fast);
+  transition: transform 0.25s var(--transition-fast), background 0.25s var(--transition-fast), border-color 0.25s var(--transition-fast);
   text-decoration: none;
   border: 1px solid transparent;
   background: transparent;
@@ -159,6 +159,11 @@
   flex-direction: column;
   justify-content: flex-start;
   min-width: 0;
+  transition: transform 0.3s cubic-bezier(0.25, 1, 0.5, 1);
+}
+
+.nav-dropdown-item:hover .nav-dropdown-info {
+  transform: translateX(10px);
 }
 
 .nav-dropdown-name {

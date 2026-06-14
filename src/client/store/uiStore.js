@@ -1,3 +1,6 @@
+/*
+ * Controls global workspace overlays, notifications, and loading bars
+ */
 import { create } from "zustand";
 
 let toastTimeout = null;

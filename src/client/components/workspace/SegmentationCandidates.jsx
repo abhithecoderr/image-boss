@@ -68,6 +68,7 @@ const SegmentationCandidates = () => {
   // Render first candidate on initial load
   useEffect(() => {
     if (segmentationResult?.options?.length > 0) {
+      setSelectedIndex(0);
       handleSelect(0);
     }
   }, [segmentationResult]);

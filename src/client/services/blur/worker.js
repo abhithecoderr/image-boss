@@ -10,13 +10,15 @@ import * as ort from "onnxruntime-web/webgpu";
 import {
   getGPUConfig,
   createProgressReporter,
+  fetchWithProgress,
+  imageToTensor,
+  configureOrt
 } from "../../core/worker-utils.js";
 import { BLUR_MODELS } from '../../config/models.js';
-import { fetchWithProgress, nms, applyBlur } from './helpers.js';
+import { nms, applyBlur } from './helpers.js';
 
-// Configure ONNX Runtime (Loaded locally to prevent COEP blocks)
-const ORT_VERSION = "1.20.1";
-ort.env.wasm.wasmPaths = '/onnx/';
+// Configure ONNX Runtime
+configureOrt(ort);
 
 // Optional: HuggingFace Token if repo is private (not needed for onnx-community)
 // const HF_TOKEN = '';
@@ -102,23 +104,16 @@ async function initDetector(variant = "nano", onProgress) {
 async function detectFaces(bitmap, width, height) {
   if (!session) throw new Error("Detector not initialized");
 
-  // 1. Preprocessing: Stretching to 640x640 (Custom ORT manual resize)
+  // 1. Preprocessing & Image to Tensor
   const inputSize = 640;
-  const canvas = new OffscreenCanvas(inputSize, inputSize);
-  const ctx = canvas.getContext("2d");
-  ctx.drawImage(bitmap, 0, 0, width, height, 0, 0, inputSize, inputSize);
-  const resizedData = ctx.getImageData(0, 0, inputSize, inputSize).data;
+  const tensorData = await imageToTensor(bitmap, inputSize, {
+    mean: [0, 0, 0],
+    std: [1, 1, 1],
+    layout: 'NCHW',
+    scale: 1.0 / 255.0
+  });
 
-  // 2. Image to Tensor
-  const inputTensorData = new Float32Array(3 * inputSize * inputSize);
-  for (let i = 0; i < inputSize * inputSize; i++) {
-    inputTensorData[i] = resizedData[i * 4] / 255.0;
-    inputTensorData[inputSize * inputSize + i] = resizedData[i * 4 + 1] / 255.0;
-    inputTensorData[2 * inputSize * inputSize + i] =
-      resizedData[i * 4 + 2] / 255.0;
-  }
-
-  const tensor = new ort.Tensor("float32", inputTensorData, [
+  const tensor = new ort.Tensor("float32", tensorData, [
     1,
     3,
     inputSize,

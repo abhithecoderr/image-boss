@@ -1,11 +1,9 @@
-import { useCallback, useRef, useEffect, useMemo } from 'react';
+/*
+ * Direct canvas overlay brush tool. Enables users to paint directly on the result mask canvas to erase or restore mask segments manually.
+ */
+import { useRef, useEffect } from 'react';
 import { useWorkspace, useSegmentation } from '../store';
 
-/* 
- useMaskEditor:
- Direct canvas overlay brush tool.
- Enables users to paint directly on the result mask canvas to erase or restore mask segments manually.
- */
 export const useMaskEditor = (resRef) => {
   const {
     originalCanvas,
@@ -19,19 +17,19 @@ export const useMaskEditor = (resRef) => {
   const setEditing = useSegmentation((state) => state.setEditing);
 
   // Compute the base canvas (either the original canvas, or the result of the previous step in a workflow)
-  const baseCanvas = useMemo(() => {
-    const activeStepId = editing.activeStepId;
-    if (!activeStepId || workflowSteps.length === 0) return originalCanvas;
-
+  let baseCanvas = originalCanvas;
+  const activeStepId = editing.activeStepId;
+  
+  if (activeStepId && workflowSteps.length > 0) {
     const activeItem = items.find((i) => i.id === activeItemId);
-    if (!activeItem) return originalCanvas;
-
-    const idx = workflowSteps.findIndex((s) => s.id === activeStepId);
-    if (idx <= 0) return originalCanvas;
-
-    const previousStep = workflowSteps[idx - 1];
-    return activeItem.stepResults?.[previousStep.id]?.resultCanvas || originalCanvas;
-  }, [editing.activeStepId, workflowSteps, items, activeItemId, originalCanvas]);
+    if (activeItem) {
+      const idx = workflowSteps.findIndex((s) => s.id === activeStepId);
+      if (idx > 0) {
+        const previousStep = workflowSteps[idx - 1];
+        baseCanvas = activeItem.stepResults?.[previousStep.id]?.resultCanvas || originalCanvas;
+      }
+    }
+  }
 
   // Hidden offscreen canvas buffer keeping track of the pure transparency mask image
   const maskCanvasRef = useRef(null);
@@ -59,7 +57,7 @@ export const useMaskEditor = (resRef) => {
   }, [resultCanvas]);
 
   // Redraws the composite (Base Canvas + Mask Buffer Overlay) onto the viewport display canvas
-  const updateDisplay = useCallback(() => {
+  const updateDisplay = () => {
     if (!resRef.current || !maskCanvasRef.current || !baseCanvas) return;
 
     const displayCanvas = resRef.current;
@@ -75,10 +73,10 @@ export const useMaskEditor = (resRef) => {
     ctx.globalCompositeOperation = 'destination-in';
     ctx.drawImage(mask, 0, 0);
     ctx.globalCompositeOperation = 'source-over';
-  }, [baseCanvas, resRef]);
+  };
 
   // Saves/Flushes the painted mask canvas back into the global workspace result context
-  const bakeMask = useCallback(() => {
+  const bakeMask = () => {
     if (!maskCanvasRef.current || !baseCanvas) return;
 
     const mask = maskCanvasRef.current;
@@ -92,11 +90,21 @@ export const useMaskEditor = (resRef) => {
     ctx.drawImage(mask, 0, 0);
     ctx.globalCompositeOperation = 'source-over';
 
-    setResultCanvas(finalCanvas);
-  }, [baseCanvas, setResultCanvas]);
+    setResultCanvas(finalCanvas, activeStepId || null);
+  };
+
+  // Normalize pointer coords from either a MouseEvent or a TouchEvent so the
+  // same draw handlers work for mouse drag and touch drag.
+  const getCoords = (e) => {
+    if (e.touches && e.touches.length > 0) {
+      return { x: e.touches[0].clientX, y: e.touches[0].clientY };
+    }
+    // touchend has no active touches, but we don't need coords there anyway.
+    return { x: e.clientX, y: e.clientY };
+  };
 
   // Draws brush strokes at coordinates (utilizing canvas coordinate scaling offsets)
-  const drawAt = useCallback((clientX, clientY) => {
+  const drawAt = (clientX, clientY) => {
     if (!resRef.current || !maskCanvasRef.current || editing.activeTool === 'none') return;
 
     const canvas = resRef.current;
@@ -124,26 +132,28 @@ export const useMaskEditor = (resRef) => {
     }
     maskCtx.restore();
     updateDisplay();
-  }, [editing.activeTool, editing.brushSize, baseCanvas, updateDisplay, resRef]);
+  };
 
   // Drawing event wrappers supporting mouse drag painting loops
-  const startDrawing = useCallback((e) => {
+  const startDrawing = (e) => {
     setEditing(prev => ({ ...prev, isDrawing: true }));
-    drawAt(e.clientX, e.clientY);
-  }, [setEditing, drawAt]);
+    const { x, y } = getCoords(e);
+    drawAt(x, y);
+  };
 
-  const moveDrawing = useCallback((e) => {
+  const moveDrawing = (e) => {
     if (editing.isDrawing) {
-      drawAt(e.clientX, e.clientY);
+      const { x, y } = getCoords(e);
+      drawAt(x, y);
     }
-  }, [editing.isDrawing, drawAt]);
+  };
 
-  const endDrawing = useCallback(() => {
+  const endDrawing = () => {
     setEditing(prev => ({ ...prev, isDrawing: false }));
     if (maskCanvasRef.current) {
       bakeMask();
     }
-  }, [setEditing, bakeMask]);
+  };
 
   return {
     startDrawing,

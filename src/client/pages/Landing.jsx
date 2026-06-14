@@ -1,24 +1,35 @@
+/*
+ * The central entry page for Image Boss. Renders the interactive sandbox playground, tool showreel, and core value props.
+ */
 import React from 'react';
+import { Navigate } from 'react-router-dom';
+import { useAuth } from '../store';
 import HomeSandbox from '../components/home/HomeSandbox';
 import ServiceCarousel from '../components/home/ServiceCarousel';
 import ValuePropSection from '../components/home/ValuePropSection';
 
-/* 
- Landing Page:
- The central entry page for Image Boss.
- Renders the interactive sandbox playground, tool showreel, and core value props.
-*/
 const Landing = () => {
+  const { isAuthenticated } = useAuth();
+
+  if (isAuthenticated) {
+    return <Navigate to="/services" replace />;
+  }
+
   return (
     <div className="landing-page marketing-container">
       {/* 1. Hero & Branding Title */}
-      <section className="landing-hero animate-fade-in" style={{ paddingBottom: '0', paddingTop: 'var(--space-8)' }}>
-        <div className="landing-hero-content" style={{ margin: '0 auto', textAlign: 'center', maxWidth: '750px' }}>
-          <p className="landing-hero-subtitle" style={{ fontSize: '1.8rem', fontWeight: '700', color: 'var(--text-main)', letterSpacing: '-0.02em', marginBottom: '12px' }}>
+      <section className="landing-hero landing-hero--compact animate-fade-in">
+        <div className="landing-hero-content">
+          <div className="landing-hero-badge-wrap">
+            <span className="landing-hero-badge">
+              ⚡ 100% Free & Browser-Local AI
+            </span>
+          </div>
+          <h1 className="landing-hero-heading">
             All image tools you need in one place.
-          </p>
-          <p style={{ color: 'var(--text-muted)', fontSize: '15px', marginBottom: 'var(--space-6)' }}>
-            Transform your photos directly in your browser using state-of-the-art web-local AI models.
+          </h1>
+          <p className="landing-hero-tagline">
+            Transform your photos directly in your browser using state-of-the-art web-local AI models. Secure, private, and lightning fast.
           </p>
         </div>
       </section>

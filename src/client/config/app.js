@@ -6,7 +6,6 @@ export const APP_CONFIG = {
   name: 'Image Boss',
   version: '1.0.0',
   maxFileSize: 5 * 1024 * 1024, // 5MB limit
-  samDefaultModel: 'Xenova/slimsam-77-uniform',
 };
 
 export const OPERATION_MODE = {

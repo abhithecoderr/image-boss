@@ -3,64 +3,107 @@
    ============================================ */
 
 .home-sandbox-container {
-  max-width: 800px;
+  max-width: 840px;
   width: 100%;
   margin: var(--space-8) auto;
-  background: transparent;
-  backdrop-filter: none;
-  border: none;
-  padding: 0;
-  box-shadow: none;
+  background: rgba(24, 24, 27, 0.4);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border: 1px solid rgba(255, 255, 255, 0.05);
+  padding: var(--space-6);
+  border-radius: var(--radius-lg);
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), 0 0 80px rgba(245, 166, 35, 0.02);
   transition: all var(--transition-normal);
 }
 
 .home-sandbox-container:hover {
-  border-color: transparent;
-  box-shadow: none;
+  border-color: rgba(245, 166, 35, 0.15);
+  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6), 0 0 100px rgba(245, 166, 35, 0.04);
 }
 
 .sandbox-upload-box {
   width: 100%;
-  height: 260px;
-  border: 2px dashed rgba(255, 255, 255, 0.1);
-  border-radius: var(--radius-md);
+  height: 220px;
+  position: relative;
+  overflow: hidden;
+  /* Premium Dark Tech Grid Background */
+  background-image: 
+    radial-gradient(circle at center, rgba(245, 166, 35, 0.02) 0%, transparent 70%),
+    linear-gradient(rgba(255, 255, 255, 0.01) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.01) 1px, transparent 1px);
+  background-size: 100% 100%, 24px 24px, 24px 24px;
+  background-position: center;
+  border: 2px dashed rgba(255, 255, 255, 0.08);
+  border-radius: var(--radius-lg);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  background: radial-gradient(circle at center, rgba(39, 39, 42, 0.2) 0%, rgba(9, 9, 11, 0.8) 100%);
   transition: all var(--transition-expo);
   margin-bottom: var(--space-6);
   text-align: center;
 }
 
 .sandbox-upload-box:hover {
-  border-color: var(--accent-primary);
-  background: radial-gradient(circle at center, rgba(245, 166, 35, 0.06) 0%, rgba(9, 9, 11, 0.9) 100%);
-  box-shadow: 0 0 25px rgba(245, 166, 35, 0.1);
+  border-color: rgba(255, 255, 255, 0.2);
+  background-image: 
+    radial-gradient(circle at center, rgba(255, 255, 255, 0.02) 0%, transparent 70%),
+    linear-gradient(rgba(255, 255, 255, 0.01) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.01) 1px, transparent 1px);
+  background-size: 100% 100%, 24px 24px, 24px 24px;
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6), inset 0 0 20px rgba(255, 255, 255, 0.01);
 }
 
-.sandbox-upload-box.has-file {
+.sandbox-upload-box.upload-area--drag-active {
+  border-color: var(--success);
+  background-image: 
+    radial-gradient(circle at center, rgba(16, 185, 129, 0.1) 0%, transparent 70%),
+    linear-gradient(rgba(16, 185, 129, 0.04) 1px, transparent 1px),
+    linear-gradient(90deg, rgba(16, 185, 129, 0.04) 1px, transparent 1px);
+  background-size: 100% 100%, 24px 24px, 24px 24px;
+  box-shadow: 0 0 30px rgba(16, 185, 129, 0.15);
+}
+
+.sandbox-upload-box.upload-area--has-file {
   border-style: solid;
-  border-color: rgba(245, 166, 35, 0.3);
-  background: radial-gradient(circle at center, rgba(24, 24, 27, 0.8) 0%, rgba(9, 9, 11, 0.95) 100%);
+  border-color: rgba(255, 255, 255, 0.15);
+  background-image: radial-gradient(circle at center, rgba(24, 24, 27, 0.7) 0%, rgba(9, 9, 11, 0.95) 100%);
+  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.6);
 }
 
-.sandbox-upload-preview {
-  display: flex;
-  flex-direction: column;
+.sandbox-upload-box .upload-icon-wrapper {
+  background: rgba(255, 255, 255, 0.02);
+  border: 1px solid rgba(255, 255, 255, 0.06);
+  width: 68px;
+  height: 68px;
+  border-radius: 50%;
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-3);
-  padding: var(--space-4);
+  justify-content: center;
+  margin-bottom: var(--space-4);
+  transition: all var(--transition-fast);
+  color: var(--text-muted);
+  box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.01);
 }
 
-.sandbox-thumb {
-  max-width: 120px;
-  max-height: 120px;
-  border-radius: var(--radius-sm);
-  object-fit: cover;
-  border: 1px solid var(--border-medium);
-  box-shadow: var(--shadow-sm);
+.sandbox-upload-box:hover .upload-icon-wrapper {
+  background: rgba(255, 255, 255, 0.05);
+  border-color: rgba(255, 255, 255, 0.15);
+  color: var(--text-main);
+}
+
+.sandbox-upload-box .upload-preview-thumb {
+  border-radius: var(--radius-md);
+  border: 2px solid rgba(255, 255, 255, 0.1);
+  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
+  max-height: 150px;
+  transition: all var(--transition-fast);
+  background: var(--bg-deep);
+}
+
+.sandbox-upload-box:hover .upload-preview-thumb {
+  border-color: rgba(255, 255, 255, 0.25);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.8);
 }
 
 .sandbox-file-info {

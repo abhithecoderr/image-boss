@@ -60,4 +60,4 @@ const ControlRenderer = ({ control, value, onChange }) => {
   );
 };
 
-export default React.memo(ControlRenderer);
+export default ControlRenderer;

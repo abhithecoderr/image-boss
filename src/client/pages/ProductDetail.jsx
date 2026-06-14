@@ -1,3 +1,6 @@
+/*
+ * Deep-dive view describing features and capabilities of specific services.
+ */
 import React, { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { SERVICES, SERVICE_ORDER } from "../config";

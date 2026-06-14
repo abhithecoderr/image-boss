@@ -12,7 +12,6 @@ export function createBatchItem({ id, name, file = null, sourceCanvas = null }) 
     resultCanvas: null,
     status: 'pending', // pending, processing, done, error
     error: null,
-    progress: 0,
     stepResults: {}, // For workflows
     downloaded: false,
     thumbnailUrl: null, // For caching pre-generated thumbnails

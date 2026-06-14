@@ -236,7 +236,7 @@ html {
   justify-content: center;
   padding: var(--space-lg);
   position: relative;
-  min-height: 320px;
+  min-height: 220px;
   background-image:
     linear-gradient(45deg, var(--bg-tertiary) 25%, transparent 25%),
     linear-gradient(-45deg, var(--bg-tertiary) 25%, transparent 25%),
@@ -274,38 +274,17 @@ html {
 
 /* --- Responsive Overrides --- */
 
-@media (max-width: 1024px) {
-  .services-layout {
-    flex-direction: column;
-  }
-
-  .services-sidebar {
-    width: 100%;
-  }
-
-  .services-nav {
-    position: static;
-    flex-direction: row;
-    overflow-x: auto;
-    padding-bottom: var(--space-sm);
-  }
-
-  .service-nav-item {
-    flex-shrink: 0;
+/* At/under tablet width the sidebar becomes a slide-in drawer (see sidebar.css),
+   so the layout row collapses to a single full-width column with tighter padding. */
+@media (max-width: 991px) {
+  /* The sidebar is position:fixed here, so it no longer participates in the flex row. */
+  #main {
+    padding-left: var(--space-md);
+    padding-right: var(--space-md);
   }
 }
 
 @media (max-width: 768px) {
-  #nav {
-    flex-direction: column;
-    padding: var(--space-md);
-  }
-
-  .nav-services {
-    width: 100%;
-    justify-content: flex-start;
-  }
-
   #main {
     padding: var(--space-md);
   }
@@ -318,7 +297,10 @@ html {
     flex-direction: column;
   }
 
-  .btn {
+  /* Scope full-width buttons to the primary action rows only — avoid forcing
+     workspace icon buttons / batch-strip controls to 100%. */
+  .actions .btn,
+  .actions-row .btn {
     width: 100%;
   }
 }

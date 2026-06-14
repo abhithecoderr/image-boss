@@ -1,13 +1,3 @@
-/**
- * Face Blur Processor (Main Thread Interface)
- * Uses YOLO26 via Web Worker for non-blocking face detection
- *
- * Features:
- * - WebGPU acceleration with WASM fallback
- * - Multiple model variants (nano, small, medium, large, xlarge)
- * - NMS-free detection (no post-processing overhead)
- * - Progress callbacks for UI feedback
- */
 
 import BlurWorker from './worker.js?worker';
 import { workerRegistry } from '../../core/worker-registry.js';

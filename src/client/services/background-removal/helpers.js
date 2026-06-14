@@ -1,9 +1,29 @@
 /**
- * Helper utilities for post-processing in the Background Removal service.
- * Handles CPU-intensive alpha channel extraction and morphological operations (erode/dilate).
+ * Consolidated helper utilities for the Background Removal service.
+ * Handles morphological operations, main-thread canvas masking, and worker-side alpha mask creation.
+ * Cross-runtime safe to run in both main and Web Worker threads.
  */
 
-//  Extract the alpha channel from canvas ImageData
+// Cross-runtime canvas creation helper
+function createCanvas(w, h) {
+  if (typeof document !== 'undefined') {
+    const canvas = document.createElement('canvas');
+    canvas.width = w;
+    canvas.height = h;
+    return canvas;
+  }
+  return new OffscreenCanvas(w, h);
+}
+
+// Module-level caches to prevent GC spikes and GPU thrashing from repeated allocations
+let cachedMaskCanvas = null;
+let cachedMaskCtx = null;
+let cachedFilterCanvas = null;
+let cachedFilterCtx = null;
+let cachedAlphaCanvas = null;
+let cachedAlphaCtx = null;
+
+// Extract the alpha channel from canvas ImageData
 export function extractAlphaChannel(imageData, W, H) {
   const out = new Uint8ClampedArray(W * H);
   const d = imageData.data;
@@ -28,29 +48,106 @@ export function writeAlphaChannel(imageData, alpha, W, H) {
 export function morphAlpha(alpha, W, H, radius, mode) {
   const out = new Uint8ClampedArray(W * H);
   const r = Math.ceil(radius);
-  for (let y = 0; y < H; y++) {
-    for (let x = 0; x < W; x++) {
-      let val = mode === 'erode' ? 255 : 0;
-      outer: for (let dy = -r; dy <= r; dy++) {
-        const ny = y + dy;
-        if (ny < 0 || ny >= H) continue;
-        for (let dx = -r; dx <= r; dx++) {
-          const nx = x + dx;
-          if (nx < 0 || nx >= W) continue;
-          if (dx * dx + dy * dy > r * r) continue; // circular kernel
-          const v = alpha[ny * W + nx];
-          if (mode === 'erode') {
-            if (v < val) val = v;
-            if (val === 0) break outer; // Early exit: cannot get below 0
-          } else {
-            if (v > val) val = v;
-            if (val === 255) break outer; // Early exit: cannot get above 255
-          }
-        }
+  if (r <= 0) {
+    out.set(alpha);
+    return out;
+  }
+
+  // Precompute offsets for circular kernel (relative index offsets)
+  const offsets = [];
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      if (dx * dx + dy * dy <= r * r) {
+        offsets.push(dy * W + dx);
       }
-      out[y * W + x] = val;
     }
   }
+  const numOffsets = offsets.length;
+
+  // Compute inner boundaries
+  const xMin = r;
+  const xMax = W - r;
+  const yMin = r;
+  const yMax = H - r;
+
+  // 1. Process Interior (fast loop: boundary checks completely eliminated)
+  if (xMax > xMin && yMax > yMin) {
+    for (let y = yMin; y < yMax; y++) {
+      const pixelOffset = y * W;
+      for (let x = xMin; x < xMax; x++) {
+        const idx = pixelOffset + x;
+        let val = mode === 'erode' ? 255 : 0;
+        
+        if (mode === 'erode') {
+          for (let i = 0; i < numOffsets; i++) {
+            const v = alpha[idx + offsets[i]];
+            if (v < val) {
+              val = v;
+              if (val === 0) break;
+            }
+          }
+        } else {
+          for (let i = 0; i < numOffsets; i++) {
+            const v = alpha[idx + offsets[i]];
+            if (v > val) {
+              val = v;
+              if (val === 255) break;
+            }
+          }
+        }
+        out[idx] = val;
+      }
+    }
+  }
+
+  // 2. Process Borders (requires boundary check safety guards)
+  const borderOffsets = [];
+  for (let dy = -r; dy <= r; dy++) {
+    for (let dx = -r; dx <= r; dx++) {
+      if (dx * dx + dy * dy <= r * r) {
+        borderOffsets.push({ dx, dy, offset: dy * W + dx });
+      }
+    }
+  }
+  const numBorderOffsets = borderOffsets.length;
+
+  const processBorderPixel = (x, y) => {
+    const idx = y * W + x;
+    let val = mode === 'erode' ? 255 : 0;
+    for (let i = 0; i < numBorderOffsets; i++) {
+      const k = borderOffsets[i];
+      const nx = x + k.dx;
+      if (nx < 0 || nx >= W) continue;
+      const ny = y + k.dy;
+      if (ny < 0 || ny >= H) continue;
+      
+      const v = alpha[idx + k.offset];
+      if (mode === 'erode') {
+        if (v < val) {
+          val = v;
+          if (val === 0) break;
+        }
+      } else {
+        if (v > val) {
+          val = v;
+          if (val === 255) break;
+        }
+      }
+    }
+    out[idx] = val;
+  };
+
+  // Top/Bottom border rows
+  for (let x = 0; x < W; x++) {
+    for (let y = 0; y < yMin; y++) processBorderPixel(x, y);
+    for (let y = Math.max(0, yMax); y < H; y++) processBorderPixel(x, y);
+  }
+  // Left/Right border columns
+  for (let y = yMin; y < yMax; y++) {
+    for (let x = 0; x < xMin; x++) processBorderPixel(x, y);
+    for (let x = Math.max(0, xMax); x < W; x++) processBorderPixel(x, y);
+  }
+
   return out;
 }
 
@@ -74,10 +171,18 @@ export function applyMaskToCanvas(sourceCanvas, maskResult, options = {}) {
   const maskW = resultBitmap.width;
   const maskH = resultBitmap.height;
 
-  const maskCanvas = document.createElement('canvas');
-  maskCanvas.width = maskW;
-  maskCanvas.height = maskH;
-  const maskCtx = maskCanvas.getContext('2d');
+  let maskCanvas;
+  let maskCtx;
+  if (cachedMaskCanvas && cachedMaskCanvas.width === maskW && cachedMaskCanvas.height === maskH) {
+    maskCanvas = cachedMaskCanvas;
+    maskCtx = cachedMaskCtx;
+    maskCtx.clearRect(0, 0, maskW, maskH);
+  } else {
+    maskCanvas = createCanvas(maskW, maskH);
+    maskCtx = maskCanvas.getContext('2d');
+    cachedMaskCanvas = maskCanvas;
+    cachedMaskCtx = maskCtx;
+  }
 
   // 2. Apply post-processing to the mask
   if (needsPostProcess) {
@@ -100,10 +205,18 @@ export function applyMaskToCanvas(sourceCanvas, maskResult, options = {}) {
 
     // Apply Blur and Contrast using hardware-accelerated Canvas Filters
     if (edgeSmoothness > 0 || edgeContrast > 0) {
-      const filterCanvas = document.createElement('canvas');
-      filterCanvas.width = maskW;
-      filterCanvas.height = maskH;
-      const filterCtx = filterCanvas.getContext('2d');
+      let filterCanvas;
+      let filterCtx;
+      if (cachedFilterCanvas && cachedFilterCanvas.width === maskW && cachedFilterCanvas.height === maskH) {
+        filterCanvas = cachedFilterCanvas;
+        filterCtx = cachedFilterCtx;
+        filterCtx.clearRect(0, 0, maskW, maskH);
+      } else {
+        filterCanvas = createCanvas(maskW, maskH);
+        filterCtx = filterCanvas.getContext('2d');
+        cachedFilterCanvas = filterCanvas;
+        cachedFilterCtx = filterCtx;
+      }
       
       const blur = edgeSmoothness > 0 ? `blur(${edgeSmoothness}px)` : '';
       const contrast = edgeContrast > 0 ? `contrast(${100 + edgeContrast * 25}%)` : '';
@@ -118,9 +231,7 @@ export function applyMaskToCanvas(sourceCanvas, maskResult, options = {}) {
   }
 
   // 3. Composite: source image masked by the (possibly modified) mask
-  const resultCanvas = document.createElement('canvas');
-  resultCanvas.width = W;
-  resultCanvas.height = H;
+  const resultCanvas = createCanvas(W, H);
   const ctx = resultCanvas.getContext('2d');
 
   ctx.drawImage(sourceCanvas, 0, 0);
@@ -132,3 +243,108 @@ export function applyMaskToCanvas(sourceCanvas, maskResult, options = {}) {
   return resultCanvas;
 }
 
+/**
+ * Converts a raw image (from Transformers.js output) to an ImageBitmap representing the alpha mask.
+ */
+export async function createAlphaMaskFromRawImage(rawImage) {
+  const w = rawImage.width;
+  const h = rawImage.height;
+  const maskData = rawImage.data;
+  const channels = rawImage.channels || Math.round(maskData.length / (w * h));
+
+  let maskCanvas;
+  let maskCtx;
+  if (cachedAlphaCanvas && cachedAlphaCanvas.width === w && cachedAlphaCanvas.height === h) {
+    maskCanvas = cachedAlphaCanvas;
+    maskCtx = cachedAlphaCtx;
+    maskCtx.clearRect(0, 0, w, h);
+  } else {
+    maskCanvas = new OffscreenCanvas(w, h);
+    maskCtx = maskCanvas.getContext("2d");
+    cachedAlphaCanvas = maskCanvas;
+    cachedAlphaCtx = maskCtx;
+  }
+  const imgData = maskCtx.createImageData(w, h);
+  const pixels = imgData.data;
+
+  // Calculate stats to determine if values are in [0, 1] or [0, 255]
+  let maxVal = -Infinity;
+  const sampleLength = Math.min(maskData.length, 10000);
+  for (let i = 0; i < sampleLength; i++) {
+    const v = maskData[i];
+    if (v > maxVal) maxVal = v;
+  }
+
+  const scale = (maxVal <= 1.0 && maxVal > 0.0) ? 255.0 : 1.0;
+
+  if (channels === 4) {
+    for (let i = 0; i < w * h; i++) {
+      pixels[i * 4 + 3] = Math.round(maskData[i * 4 + 3] * scale); // Scale alpha channel
+    }
+  } else if (channels === 1) {
+    for (let i = 0; i < w * h; i++) {
+      pixels[i * 4 + 3] = Math.round(maskData[i] * scale); // Scale single channel grayscale to alpha
+    }
+  } else {
+    // RGB or other: take R channel (or average) and scale
+    for (let i = 0; i < w * h; i++) {
+      pixels[i * 4 + 3] = Math.round(maskData[i * channels] * scale);
+    }
+  }
+
+  maskCtx.putImageData(imgData, 0, 0);
+  return await createImageBitmap(maskCanvas);
+}
+
+/**
+ * Maps raw model output tensor values (logits, direct probabilities, or min-max normalization) to an alpha mask bitmap.
+ * Reuses canvas and context to avoid garbage collection memory spikes.
+ */
+export async function createAlphaMaskFromTensors(outputData, size, outputType, canvas, ctx) {
+  const totalPixels = size * size;
+  const outImgData = ctx.createImageData(size, size);
+  const outPixels = outImgData.data;
+
+  let mode = outputType;
+  if (typeof outputType === "boolean") {
+    mode = outputType ? "logit" : "probability";
+  }
+
+  if (mode === "minmax") {
+    let min = Infinity;
+    let max = -Infinity;
+    for (let i = 0; i < totalPixels; i++) {
+      const val = outputData[i];
+      if (val < min) min = val;
+      if (val > max) max = val;
+    }
+    const range = max - min + 1e-8;
+    for (let i = 0; i < totalPixels; i++) {
+      const val = outputData[i];
+      const alpha = Math.round(((val - min) / range) * 255.0);
+      outPixels[i * 4 + 3] = alpha;
+    }
+  } else {
+    for (let i = 0; i < totalPixels; i++) {
+      const val = outputData[i];
+      let alpha;
+      if (mode === "logit") {
+        // Fast sigmoid calculation bypass for extreme values
+        if (val > 5) {
+          alpha = 255;
+        } else if (val < -5) {
+          alpha = 0;
+        } else {
+          alpha = Math.round((1.0 / (1.0 + Math.exp(-val))) * 255.0);
+        }
+      } else {
+        // Direct probabilities in [0.0, 1.0] (e.g. BEN2 model)
+        alpha = Math.round(Math.max(0.0, Math.min(1.0, val)) * 255.0);
+      }
+      outPixels[i * 4 + 3] = alpha; // Set the alpha channel
+    }
+  }
+
+  ctx.putImageData(outImgData, 0, 0);
+  return await createImageBitmap(canvas);
+}

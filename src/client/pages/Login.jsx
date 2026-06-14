@@ -3,6 +3,14 @@ import { Link, useNavigate, useLocation } from "react-router-dom";
 import { useAuth } from "../store";
 import FormInput from "../components/ui/FormInput";
 import Logo from "../components/ui/Logo";
+import {
+  MailIcon,
+  LockIcon,
+  EyeIcon,
+  EyeOffIcon,
+  ArrowRightIcon,
+  GoogleIcon
+} from "../components/ui/Icons";
 
 const Login = () => {
   const { login, isAuthenticated, loginWithGoogle } = useAuth();
@@ -139,12 +147,7 @@ const Login = () => {
                   error={formState?.errors?.email}
                   disabled={isPending}
                   required
-                  icon={
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <path d="M4 4h16c1.1 0 2 .9 2 2v12c0 1.1-.9 2-2 2H4c-1.1 0-2-.9-2-2V6c0-1.1.9-2 2-2z" />
-                      <polyline points="22,6 12,13 2,6" />
-                    </svg>
-                  }
+                  icon={<MailIcon size={15} strokeWidth={2} />}
                 />
 
                 {/* Password Input */}
@@ -157,12 +160,7 @@ const Login = () => {
                   error={formState?.errors?.password}
                   disabled={isPending}
                   required
-                  icon={
-                    <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                      <rect x="3" y="11" width="18" height="11" rx="2" ry="2" />
-                      <path d="M7 11V7a5 5 0 0 1 10 0v4" />
-                    </svg>
-                  }
+                  icon={<LockIcon size={15} strokeWidth={2} />}
                 >
                   <button
                     type="button"
@@ -171,15 +169,9 @@ const Login = () => {
                     tabIndex="-1"
                   >
                     {showPassword ? (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M17.94 17.94A10.07 10.07 0 0 1 12 20c-7 0-11-8-11-8a18.45 18.45 0 0 1 5.06-5.94M9.9 4.24A9.12 9.12 0 0 1 12 4c7 0 11 8 11 8a18.5 18.5 0 0 1-2.16 3.19m-6.72-1.07a3 3 0 1 1-4.24-4.24" />
-                        <line x1="1" y1="1" x2="23" y2="23" />
-                      </svg>
+                      <EyeOffIcon size={18} strokeWidth={2} />
                     ) : (
-                      <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
-                        <path d="M1 12s4-8 11-8 11 8 11 8-4 8-11 8-11-8-11-8z" />
-                        <circle cx="12" cy="12" r="3" />
-                      </svg>
+                      <EyeIcon size={18} strokeWidth={2} />
                     )}
                   </button>
                 </FormInput>
@@ -222,10 +214,7 @@ const Login = () => {
                   ) : (
                     <>
                       Sign In
-                      <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="5" y1="12" x2="19" y2="12" />
-                        <polyline points="12 5 19 12 12 19" />
-                      </svg>
+                      <ArrowRightIcon size={16} strokeWidth={2.5} />
                     </>
                   )}
                 </button>
@@ -246,9 +235,7 @@ const Login = () => {
                   }}
                   disabled={isSubmitting}
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
-                    <path d="M12.24 10.285V13.4h6.887C18.2 15.614 15.645 18 12.24 18c-3.86 0-7-3.14-7-7s3.14-7 7-7c1.7 0 3.25.61 4.47 1.635l2.437-2.437C17.312 1.48 14.93 0 12.24 0 6.033 0 1 5.033 1 11.24s5.033 11.24 11.24 11.24c6.478 0 10.793-4.537 10.793-10.985 0-.74-.067-1.3-.193-1.854H12.24z"/>
-                  </svg>
+                  <GoogleIcon size={16} />
                   Google
                 </button>
               </div>

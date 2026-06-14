@@ -1,3 +1,6 @@
+/*
+ * Marketing content detailing use cases and custom integrations for enterprise clients.
+ */
 import React, { useEffect, useState } from "react";
 import { useParams, Link, useNavigate } from "react-router-dom";
 import { SOLUTIONS, SOLUTIONS_ORDER, SERVICES } from "../config";

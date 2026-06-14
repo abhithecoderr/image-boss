@@ -1,3 +1,6 @@
+/*
+ * Drizzle ORM database schema definitions for users, sessions, accounts, and verifications.
+ */
 import { sqliteTable, text, integer } from "drizzle-orm/sqlite-core";
 
 export const user = sqliteTable("user", {
@@ -6,6 +9,7 @@ export const user = sqliteTable("user", {
 	email: text("email").notNull().unique(),
 	emailVerified: integer("emailVerified", { mode: "boolean" }).notNull(),
 	image: text("image"),
+	credits: integer("credits").default(100).notNull(),
 	createdAt: integer("createdAt", { mode: "timestamp" }).notNull(),
 	updatedAt: integer("updatedAt", { mode: "timestamp" }).notNull()
 });

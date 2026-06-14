@@ -1,10 +1,5 @@
-/**
- * magic-erase/worker.js
- * handles LaMa inpainting inference in a background thread.
- */
-
 import * as ort from 'onnxruntime-web';
-import { createProgressReporter } from '../../core/worker-utils.js';
+import { createProgressReporter, fetchWithProgress, configureOrt } from '../../core/worker-utils.js';
 import {
     getMeta,
     getDims,
@@ -21,20 +16,7 @@ let lastSessionOptions = null;
 const DEBUG = false;
 
 // Configure ORT
-// Note: We use the version from package.json for the bundle.
-// With Cross-Origin-Embedder-Policy enabled, cross-origin CDN requests for WASM workers are blocked.
-// We host these assets locally on the same origin under /onnx/ to resolve this.
-const ORT_VERSION = '1.20.1'; 
-ort.env.wasm.numThreads = self.crossOriginIsolated ? 4 : 1;
-ort.env.wasm.simd = true;
-ort.env.wasm.wasmPaths = '/onnx/';
-ort.env.debug = false;
-
-try {
-    ort.env.logLevel = 'error';
-} catch (e) {
-    console.warn('Failed to set ort.env.logLevel, continuing without it.', e);
-}
+configureOrt(ort, self.crossOriginIsolated ? 4 : 1);
 
 function wlog(...args) {
     if (!DEBUG) return;
@@ -75,40 +57,14 @@ async function initSession(url) {
         wlog("Attempting to load session", { providers, modelURL });
         lastSessionOptions = buildSessionOptions(providers);
 
-        // Intercept with Cache API
-        report(0, 0, 'Checking cache...')();
-        let modelBuffer;
-        try {
-            const cache = await caches.open('lama-model-cache-v1');
-            let response = await cache.match(modelURL);
-            if (!response) {
-                wlog("Model not found in cache. Downloading from network...");
-                response = await fetch(modelURL);
-                if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-                
-                const contentLength = response.headers.get('Content-Length');
-                const total = contentLength ? parseInt(contentLength, 10) : 0;
-                let loaded = 0;
-                
-                const reader = response.clone().body.getReader();
-                const reportDownload = report(0.1, 0.7, 'Downloading model (~50MB)...');
-                
-                while (true) {
-                    const { done, value } = await reader.read();
-                    if (done) break;
-                    loaded += value.length;
-                    if (total) reportDownload((loaded / total) * 100);
-                }
-
-                await cache.put(modelURL, response.clone());
-            } else {
-                wlog("Model instantly loaded from browser Cache API.");
-            }
-            modelBuffer = await response.arrayBuffer();
-        } catch (cacheErr) {
-            wlog("Cache API failed, falling back to direct ORT load", cacheErr);
-            modelBuffer = modelURL;
-        }
+        const modelBuffer = await fetchWithProgress(
+            modelURL,
+            'LaMa inpainting model (~50MB)',
+            report,
+            0.1,
+            0.8,
+            'lama-model-cache-v1'
+        );
 
         report(0.8, 0.8, 'Compiling ONNX WebAssembly Graph...')();
         session = await ort.InferenceSession.create(modelBuffer, lastSessionOptions);

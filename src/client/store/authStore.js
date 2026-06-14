@@ -1,10 +1,15 @@
+/*
+ * Handles login, signup, social authentication, and logout state management.
+ */
 import { create } from "zustand";
 import { signIn, signUp, signOut } from "../lib/auth-client";
 import { useUIStore } from "./uiStore";
 
 const toast = (msg, type) => useUIStore.getState().showToast(msg, type);
 
+
 export const useAuthStore = create(() => ({
+  
   login: async (email, password) => {
     const { error } = await signIn.email({ email, password });
     if (error) {
@@ -15,6 +20,7 @@ export const useAuthStore = create(() => ({
     return { success: true };
   },
 
+  
   loginWithGoogle: async () => {
     const { error } = await signIn.social({
       provider: "google",
@@ -39,6 +45,7 @@ export const useAuthStore = create(() => ({
     return { success: true };
   },
 
+  
   logout: async () => {
     await signOut();
     toast("You have been signed out successfully.", "info");

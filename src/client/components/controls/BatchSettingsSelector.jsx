@@ -1,3 +1,6 @@
+/*
+ * Dropdown control for toggling between applying settings to a single active image or the entire batch.
+ */
 import React from "react";
 import { useWorkspace, useService } from "../../store";
 import Button from "../ui/Button";

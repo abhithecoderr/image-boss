@@ -13,6 +13,59 @@
   gap: var(--space-6);
 }
 
+/* Compact, centered hero used on the Landing entry screen. */
+.landing-hero--compact {
+  padding: var(--space-8) 0 var(--space-4);
+}
+
+.landing-hero--compact .landing-hero-content {
+  margin: 0 auto;
+  text-align: center;
+  max-width: 850px;
+}
+
+.landing-hero-badge-wrap {
+  display: flex;
+  justify-content: center;
+  margin-bottom: var(--space-4);
+}
+
+.landing-hero-badge {
+  font-size: 11px;
+  font-weight: 700;
+  color: var(--accent-primary);
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  background: var(--accent-soft);
+  border: 1px solid rgba(245, 166, 35, 0.3);
+  padding: 6px 14px;
+  border-radius: var(--radius-pill);
+  box-shadow: 0 0 15px rgba(245, 166, 35, 0.05);
+  backdrop-filter: blur(8px);
+}
+
+.landing-hero-heading {
+  font-size: clamp(1.8rem, 6vw, 3rem);
+  font-weight: 800;
+  line-height: 1.25;
+  letter-spacing: -0.02em;
+  margin: 0 auto var(--space-2);
+  max-width: 14ch;
+  background: linear-gradient(135deg, #ffffff 40%, var(--accent-primary) 100%);
+  -webkit-background-clip: text;
+  background-clip: text;
+  -webkit-text-fill-color: transparent;
+  color: transparent;
+}
+
+.landing-hero-tagline {
+  color: var(--text-muted);
+  font-size: clamp(0.9rem, 2.5vw, 1rem);
+  line-height: 1.5;
+  max-width: 620px;
+  margin: 0 auto var(--space-3);
+}
+
 @media (min-width: 768px) {
   .landing-hero {
     flex-direction: row;
@@ -114,7 +167,7 @@
 }
 
 .landing-section-title {
-  font-size: 2.5rem;
+  font-size: clamp(1.75rem, 5vw, 2.5rem);
   font-weight: 700;
   text-align: center;
   margin-bottom: var(--space-2);
@@ -130,7 +183,8 @@
 
 .landing-services-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(280px, 1fr));
+  /* Cap the track at 100% so a single card never overflows on narrow phones. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 280px), 1fr));
   gap: var(--space-5);
 }
 
@@ -184,7 +238,7 @@
 }
 
 .landing-cta-title {
-  font-size: 2.5rem;
+  font-size: clamp(1.75rem, 5vw, 2.5rem);
   font-weight: 700;
   margin-bottom: var(--space-2);
   letter-spacing: -0.03em;
@@ -205,7 +259,7 @@
 }
 
 .pricing-title {
-  font-size: 2.5rem;
+  font-size: clamp(1.75rem, 5vw, 2.5rem);
   margin-bottom: var(--space-3);
   letter-spacing: -0.03em;
 }
@@ -217,7 +271,8 @@
 
 .pricing-grid {
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  /* Cap the track at 100% so pricing cards never overflow on narrow phones. */
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 300px), 1fr));
   gap: var(--space-5);
   max-width: 1000px;
   margin: 0 auto;
@@ -340,7 +395,7 @@
 }
 
 .services-header h1 {
-  font-size: 2.5rem;
+  font-size: clamp(1.75rem, 5vw, 2.5rem);
   font-weight: 700;
   margin-bottom: var(--space-sm);
 }
@@ -358,6 +413,17 @@
   width: 100%;
   padding: 0 var(--space-2xl) var(--space-2xl);
   gap: var(--space-xl);
+}
+
+@media (max-width: 768px) {
+  .services-header {
+    padding: var(--space-xl) var(--space-md);
+  }
+
+  .services-layout {
+    padding: 0 var(--space-md) var(--space-lg);
+    gap: var(--space-md);
+  }
 }
 
 .services-sidebar {
@@ -424,4 +490,73 @@
   display: flex;
   flex-direction: column;
   gap: var(--space-xl);
+}
+
+/* FAQ Accordion Styles */
+.faq-accordion {
+  max-width: 760px;
+  margin: 0 auto;
+  display: flex;
+  flex-direction: column;
+  gap: var(--space-3);
+}
+
+.faq-accordion-item {
+  background: var(--bg-secondary);
+  border: 1px solid var(--border);
+  border-radius: var(--radius-md);
+  overflow: hidden;
+  transition: border-color var(--transition-normal), box-shadow var(--transition-normal);
+}
+
+.faq-accordion-item:hover {
+  border-color: rgba(255, 255, 255, 0.12);
+}
+
+.faq-accordion-item.is-expanded {
+  border-color: rgba(245, 166, 35, 0.25);
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.4), inset 0 1px 0 rgba(255, 255, 255, 0.02);
+}
+
+.faq-accordion-header {
+  padding: 12px 18px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  cursor: pointer;
+  user-select: none;
+  font-weight: 600;
+  font-size: 15px;
+  color: var(--text-main);
+  transition: color var(--transition-fast);
+}
+
+.faq-accordion-header:hover {
+  color: var(--highlight);
+}
+
+.faq-accordion-icon {
+  font-size: 11px;
+  color: var(--text-dim);
+  transition: transform var(--transition-normal), color var(--transition-fast);
+}
+
+.faq-accordion-item.is-expanded .faq-accordion-icon {
+  transform: rotate(180deg);
+  color: var(--highlight);
+}
+
+.faq-accordion-content {
+  max-height: 0;
+  overflow: hidden;
+  transition: max-height 0.3s cubic-bezier(0.16, 1, 0.3, 1), padding 0.3s cubic-bezier(0.16, 1, 0.3, 1);
+  padding: 0 18px;
+  color: var(--text-muted);
+  font-size: 14px;
+  line-height: 1.6;
+}
+
+.faq-accordion-item.is-expanded .faq-accordion-content {
+  max-height: 200px;
+  padding-bottom: 12px;
 }

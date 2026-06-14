@@ -8,6 +8,8 @@
   inset: 0;
   z-index: 150;
   cursor: none;
+  /* Stop the browser from scrolling/zooming while painting with touch. */
+  touch-action: none;
 }
 
 .brush-preview {

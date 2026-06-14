@@ -1,3 +1,6 @@
+/*
+ * Main client entry point. Sets up the React Router routes, public layouts, protected workspace routes, and global providers.
+ */
 import {
   createBrowserRouter,
   RouterProvider,
@@ -13,16 +16,13 @@ import Login from "./pages/Login";
 import SignUp from "./pages/Signup";
 import ProductDetail from "./pages/ProductDetail";
 import SolutionsDetail from "./pages/SolutionsDetail";
-import { AppProvider, useAuth } from "./store/index.jsx";
+import Profile from "./pages/Profile";
+import { useAuth } from "./store/index.jsx";
 
 // 1. Create a Root wrapper that includes your Providers
 // This ensures that providers have access to the Router context
 function Root() {
-  return (
-    <AppProvider>
-      <Outlet />
-    </AppProvider>
-  );
+  return <Outlet />;
 }
 
 // 2. Create a secure ProtectedRoute component
@@ -57,6 +57,14 @@ export const router = createBrowserRouter([
           {
             path: "solutions/:solutionId?",
             element: <SolutionsDetail />,
+          },
+          {
+            path: "profile",
+            element: (
+              <ProtectedRoute>
+                <Profile />
+              </ProtectedRoute>
+            ),
           },
         ],
       },

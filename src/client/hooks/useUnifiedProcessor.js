@@ -1,5 +1,9 @@
-import { useCallback, useEffect, useRef } from "react";
-import { useUI, useWorkspace, useService } from "../store";
+/*
+ * Orchestrates processing queues, active models, and background execution flow for batch workflows.
+ */
+import { useEffect, useRef } from "react";
+import { useWorkspace, useService, useAuth } from "../store";
+import { useUIStore } from "../store/uiStore";
 import { processorEngine } from "../core/processor-engine";
 import { useDownloadActions, useQueueActions } from "./useFileUpload";
 import {
@@ -9,18 +13,16 @@ import {
   reorderSteps as utilReorderSteps,
 } from "../core/canvas-utils";
 
-/* 
- useUnifiedProcessor:
- The single source of truth for all image processing logic.
- Orchestrates Single, Batch, and Workflow pipelines using a unified state and routing system.
-*/
 export const useUnifiedProcessor = () => {
-  // --- Context Hooks Extraction ---
-  const uiContext = useUI(); // UI states (progress tracking, notifications, toasts)
-  const workspaceContext = useWorkspace(); // Active workspace files, canvases, and step queues
-  const serviceContext = useService(); // Current AI services configurations and metadata
+  // Stable action selectors: Zustand action references never change, so these
+  // subscriptions cause zero extra re-renders from UI state changes.
+  const updateProgress = useUIStore((s) => s.updateProgress);
+  const showToast = useUIStore((s) => s.showToast);
 
-  const { updateProgress, showToast } = uiContext;
+  const workspaceContext = useWorkspace();
+  const serviceContext = useService();
+  const { refetchSession } = useAuth();
+
   const lastRunStepsRef = useRef(null);
   const {
     items,
@@ -31,6 +33,7 @@ export const useUnifiedProcessor = () => {
     setWorkflowSteps,
     originalCanvas,
     setResultCanvas,
+    isProcessing,
     setIsProcessing,
     batchMode,
     setBatchMode,
@@ -46,14 +49,13 @@ export const useUnifiedProcessor = () => {
    Shared helper callback that runs a single image item through an AI service engine.
    Feeds progress reports back to the UI progress bar.
   */
-  const processItem = useCallback(
-    async (
-      item,
-      serviceId,
-      options,
-      progressPrefix = "",
-      overrideCanvas = null,
-    ) => {
+  const processItem = async (
+    item,
+    serviceId,
+    options,
+    progressPrefix = "",
+    overrideCanvas = null,
+  ) => {
       const source = overrideCanvas || item.sourceCanvas;
       if (!source) return null;
 
@@ -79,15 +81,13 @@ export const useUnifiedProcessor = () => {
         console.error(`Processing failed for ${item.name}:`, err);
         throw err;
       }
-    },
-    [updateProgress],
-  );
+    };
 
   /* 
    _resetItems:
    Resets status, step details, and results of all queue items back to 'pending'.
   */
-  const _resetItems = useCallback((itemsList) => {
+  const _resetItems = (itemsList) => {
     return itemsList.map((item) => {
       // Clear background removal and blur caches to prevent blank images or stale cache bugs on rerun
       if (item.sourceCanvas) {
@@ -122,9 +122,9 @@ export const useUnifiedProcessor = () => {
         stepResults: {},
       };
     });
-  }, []);
+  };
 
-  const updateItemOverride = useCallback((itemId, serviceOrStepId, key, value) => {
+  const updateItemOverride = (itemId, serviceOrStepId, key, value) => {
     setItems((prevItems) =>
       prevItems.map((item) => {
         if (item.id !== itemId) return item;
@@ -142,10 +142,9 @@ export const useUnifiedProcessor = () => {
         };
       })
     );
-  }, [setItems]);
+  };
 
-  const executeSingleItemInBatch = useCallback(
-    async (serviceId, globalOptions) => {
+  const executeSingleItemInBatch = async (serviceId, globalOptions) => {
       const itemId = batchSettingsTarget;
       const item = items.find((i) => i.id === itemId);
       if (!item) return;
@@ -176,12 +175,10 @@ export const useUnifiedProcessor = () => {
       setItems([...workingItems]);
       setIsProcessing(false);
       showToast("Selected image processed successfully", "success");
-    },
-    [batchSettingsTarget, items, processItem, setItems, setIsProcessing, activeItemId, setResultCanvas, showToast]
-  );
+      refetchSession?.();
+    };
 
-  const executeSingleItemInWorkflow = useCallback(
-    async () => {
+  const executeSingleItemInWorkflow = async () => {
       const itemId = batchSettingsTarget;
       const item = items.find((i) => i.id === itemId);
       if (!item) return;
@@ -245,13 +242,11 @@ export const useUnifiedProcessor = () => {
       setItems([...workingItems]);
       setIsProcessing(false);
       showToast("Selected image workflow complete", "success");
-    },
-    [batchSettingsTarget, items, workflowSteps, processItem, setItems, setIsProcessing, activeItemId, setResultCanvas, showToast]
-  );
+      refetchSession?.();
+    };
 
   // --- Single Processor Strategy Implementation ---
-  const executeSingle = useCallback(
-    async (serviceId, options, sourceCanvas) => {
+  const executeSingle = async (serviceId, options, sourceCanvas) => {
       setIsProcessing(true); // Lock the UI viewport by marking processing in-progress
       try {
         // Call the pure processing engine with optional progress report listeners
@@ -281,6 +276,7 @@ export const useUnifiedProcessor = () => {
             ),
           );
           showToast("Processing complete", "success");
+          refetchSession?.();
         }
 
         return result;
@@ -297,20 +293,10 @@ export const useUnifiedProcessor = () => {
       } finally {
         setIsProcessing(false); // Release UI lock
       }
-    },
-    [
-      setIsProcessing,
-      updateProgress,
-      setResultCanvas,
-      setItems,
-      activeItemId,
-      showToast,
-    ],
-  );
+    };
 
   // --- Batch Processor Strategy Implementation ---
-  const executeBatch = useCallback(
-    async (serviceId, options, runOptions = {}) => {
+  const executeBatch = async (serviceId, options, runOptions = {}) => {
       const { forceReset = false } = runOptions;
 
       // Step 1: Initialize current items queue (resetting status if rerun/reset is requested)
@@ -361,13 +347,11 @@ export const useUnifiedProcessor = () => {
 
       setIsProcessing(false); // Unlock workspace viewport
       showToast("Batch processing complete", "success");
-    },
-    [items, setItems, setIsProcessing, showToast, processItem, _resetItems],
-  );
+      refetchSession?.();
+    };
 
   // --- Workflow Processor Strategy Implementation ---
-  const executeWorkflow = useCallback(
-    async (options = {}) => {
+  const executeWorkflow = async (options = {}) => {
       const { forceReset = false } = options;
       if (workflowSteps.length === 0)
         return showToast("Add steps to your pipeline first", "warning");
@@ -494,48 +478,25 @@ export const useUnifiedProcessor = () => {
       }
 
       showToast("Workflow pipeline complete", "success");
-    },
-    [
-      items,
-      workflowSteps,
-      setItems,
-      setIsProcessing,
-      showToast,
-      processItem,
-      activeItemId,
-      setResultCanvas,
-      _resetItems,
-    ],
-  );
+      refetchSession?.();
+    };
 
   // --- Pipeline Steps Construction APIs ---
-  const addStep = useCallback(
-    (serviceId, options) => {
+  const addStep = (serviceId, options) => {
       setWorkflowSteps((prev) => [...prev, createStep(serviceId, options)]);
-    },
-    [setWorkflowSteps],
-  );
+    };
 
-  const removeStep = useCallback(
-    (id) => {
+  const removeStep = (id) => {
       setWorkflowSteps((prev) => utilRemoveStep(prev, id));
-    },
-    [setWorkflowSteps],
-  );
+    };
 
-  const updateStepOptions = useCallback(
-    (id, options) => {
+  const updateStepOptions = (id, options) => {
       setWorkflowSteps((prev) => utilUpdateStepOptions(prev, id, options));
-    },
-    [setWorkflowSteps],
-  );
+    };
 
-  const reorderSteps = useCallback(
-    (startIndex, endIndex) => {
+  const reorderSteps = (startIndex, endIndex) => {
       setWorkflowSteps((prev) => utilReorderSteps(prev, startIndex, endIndex));
-    },
-    [setWorkflowSteps],
-  );
+    };
 
   // Download actions configuration
   const { downloadSelected, downloadAll } = useDownloadActions(
@@ -545,20 +506,17 @@ export const useUnifiedProcessor = () => {
   );
 
   // Helper utility to completely reset the status indicators of all queue items
-  const resetItemsStatus = useCallback(() => {
+  const resetItemsStatus = () => {
     setItems((prevItems) => _resetItems(prevItems));
-  }, [setItems, _resetItems]);
+  };
 
-  const resetProcessingState = useCallback(
-    (shouldResetItems = true) => {
+  const resetProcessingState = (shouldResetItems = true) => {
       setIsProcessing(false);
       updateProgress(0, "");
       if (shouldResetItems) {
         resetItemsStatus();
       }
-    },
-    [setIsProcessing, updateProgress, resetItemsStatus],
-  );
+    };
 
   // --- Mapped Execution Router & Active State Detections ---
   const batchAvailable = ![
@@ -574,15 +532,21 @@ export const useUnifiedProcessor = () => {
         : "single";
 
   // Service changes synchronization pass
+  const lastServiceIdRef = useRef(currentService.id);
   useEffect(() => {
-    resetProcessingState(currentService.id !== "workflows");
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [currentService.id]);
+    // Only reset the workspace if the service actually changed to a DIFFERENT service,
+    // and we are not currently executing a process job.
+    if (currentService.id !== lastServiceIdRef.current) {
+      lastServiceIdRef.current = currentService.id;
+      if (!isProcessing) {
+        resetProcessingState(currentService.id !== "workflows");
+      }
+    }
+  }, [currentService.id, isProcessing]);
 
 
   // Central Router: Delegates execution flow dynamically to unified methods
-  const execute = useCallback(
-    async (options = {}, runOptions = {}) => {
+  const execute = async (options = {}, runOptions = {}) => {
       switch (activeMode) {
         case "workflow":
           return executeWorkflow(runOptions);
@@ -591,16 +555,7 @@ export const useUnifiedProcessor = () => {
         default:
           return executeSingle(currentService.id, options, originalCanvas);
       }
-    },
-    [
-      activeMode,
-      currentService.id,
-      originalCanvas,
-      executeWorkflow,
-      executeBatch,
-      executeSingle,
-    ],
-  );
+    };
 
   // Context-compatible properties derived dynamically for UI elements
   const activeItemIdDerived =
@@ -610,13 +565,10 @@ export const useUnifiedProcessor = () => {
       ? 0
       : items.filter((i) => i.status === "done").length;
 
-  const setMode = useCallback(
-    (nextMode) => {
+  const setMode = (nextMode) => {
       setBatchMode(nextMode);
       resetProcessingState(true);
-    },
-    [setBatchMode, resetProcessingState],
-  );
+    };
 
   // --- Final Unified Interface API Return ---
   const result = {

@@ -1,9 +1,13 @@
-import BackgroundRemovalWorker from "./background-removal.worker.js?worker";
+/*
+ * Main-thread coordinator for Background Removal. Manages canvas caching, options parsing, and worker jobs.
+ */
+import BackgroundRemovalWorker from "./worker.js?worker";
 import { resizeCanvas } from "../../core/canvas-utils.js";
 import { workerRegistry } from "../../core/worker-registry.js";
 import { runWorkerJob } from "../../core/worker-utils.js";
-import { BACKGROUND_REMOVAL_MODELS } from "../../config/models.js";
+import { BACKGROUND_REMOVAL_MODELS, PAID_MODELS_CONFIG } from "../../config/models.js";
 import { applyMaskToCanvas } from "./helpers.js";
+import { removeBackground, loadImage } from "../../api/birefnet.js";
 
 const SERVICE_ID = "background-removal";
 
@@ -15,6 +19,76 @@ function getWorker() {
 export async function process(sourceCanvas, options = {}, onProgress) {
   const modelId = options.model || "birefnet-lite";
   const method = options.method || "pipeline";
+  const tier = options.tier || "free";
+
+  if (tier === "paid") {
+    // --- Cache hit: serve post-processing adjustments without re-calling the API ---
+    const paidCache = sourceCanvas._bgRemovalCache || {};
+    if (
+      paidCache.sourceCanvas === sourceCanvas &&
+      paidCache.maskBitmap &&
+      paidCache.modelId === modelId &&
+      paidCache.tier === "paid"
+    ) {
+      return applyMaskToCanvas(
+        sourceCanvas,
+        { resultBitmap: paidCache.maskBitmap },
+        options,
+      );
+    }
+
+    // --- Cache miss: call the paid Cloud API ---
+    onProgress?.(0.1, "Converting image to payload...");
+    const imageBlob = await new Promise((resolve) => sourceCanvas.toBlob(resolve, "image/png"));
+
+    const paidModelCfg = PAID_MODELS_CONFIG[modelId];
+    const apiModelTag = paidModelCfg ? paidModelCfg.api_model_tag : "birefnet-lite";
+
+    onProgress?.(0.3, `Processing on Cloud API (${apiModelTag})...`);
+    try {
+      // Call the SDK's removeBackground helper (returns a transparent PNG cutout blob)
+      const cutoutBlob = await removeBackground("/api", imageBlob, { model: apiModelTag, device: "cpu" });
+
+      onProgress?.(0.8, "Loading result image...");
+      const resultImg = await loadImage(cutoutBlob);
+
+      // Draw the cutout into a temporary canvas so we can extract the alpha mask as a bitmap
+      const cutoutCanvas = document.createElement("canvas");
+      cutoutCanvas.width = resultImg.naturalWidth || resultImg.width;
+      cutoutCanvas.height = resultImg.naturalHeight || resultImg.height;
+      const cutoutCtx = cutoutCanvas.getContext("2d");
+      cutoutCtx.drawImage(resultImg, 0, 0);
+
+      if (resultImg.src.startsWith('blob:')) {
+        URL.revokeObjectURL(resultImg.src);
+      }
+
+      // Capture the cutout as a reusable ImageBitmap — this IS the mask for post-processing
+      const maskBitmap = await createImageBitmap(cutoutCanvas);
+
+      // Dispose any previously cached bitmap for this canvas
+      const oldCache = sourceCanvas._bgRemovalCache || {};
+      if (oldCache.maskBitmap && oldCache.maskBitmap !== maskBitmap) {
+        try { oldCache.maskBitmap.close(); } catch (_) {}
+      }
+
+      // Store in the same per-canvas cache structure used by the free tier
+      sourceCanvas._bgRemovalCache = {
+        sourceCanvas,
+        modelId,
+        method,
+        tier: "paid",
+        maskBitmap,
+      };
+
+      onProgress?.(1.0, "Background removal completed.");
+      // Composite via applyMaskToCanvas so post-processing options are applied immediately
+      return applyMaskToCanvas(sourceCanvas, { resultBitmap: maskBitmap }, options);
+    } catch (err) {
+      console.error(`[Background Removal Paid] Processing failed:`, err);
+      throw err;
+    }
+  }
 
   // Check cache for post-processing adjustments (canvas-scoped to prevent memory leaks)
   const cache = sourceCanvas._bgRemovalCache || {};
@@ -22,7 +96,8 @@ export async function process(sourceCanvas, options = {}, onProgress) {
     cache.sourceCanvas === sourceCanvas &&
     cache.maskBitmap &&
     cache.modelId === modelId &&
-    cache.method === method
+    cache.method === method &&
+    cache.tier === tier
   ) {
     return applyMaskToCanvas(
       sourceCanvas,
@@ -70,6 +145,7 @@ export async function process(sourceCanvas, options = {}, onProgress) {
       modelId,
       method,
       maskBitmap: result.resultBitmap,
+      tier
     };
 
     return applyMaskToCanvas(sourceCanvas, result, options);
@@ -78,6 +154,7 @@ export async function process(sourceCanvas, options = {}, onProgress) {
     // Terminate worker thread on crash so it recreates on next call
     workerRegistry.terminate(SERVICE_ID);
     throw err;
+
   } finally {
     bitmap.close();
   }

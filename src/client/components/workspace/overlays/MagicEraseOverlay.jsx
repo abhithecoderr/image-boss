@@ -1,8 +1,9 @@
-import { useRef, useEffect, useCallback } from "react";
-import { useSegmentation, useService } from "../../../store";
+import { useRef, useEffect } from "react";
+import { useSegmentation, useService, useWorkspace } from "../../../store";
 
 const MagicEraseOverlay = ({ srcRef }) => {
   const { currentService, serviceSettings } = useService();
+  const { originalCanvas } = useWorkspace();
   const setMagicEraseMaskCanvas = useSegmentation((state) => state.setMagicEraseMaskCanvas);
   const overlayRef = useRef(null);
   const canvasRef = useRef(null);
@@ -51,7 +52,7 @@ const MagicEraseOverlay = ({ srcRef }) => {
       ro.disconnect();
       window.removeEventListener("resize", sync);
     };
-  }, [srcRef, currentService]);
+  }, [srcRef, currentService, originalCanvas]);
 
   useEffect(() => {
     if (currentService?.id !== "magic-erase") {
@@ -63,7 +64,7 @@ const MagicEraseOverlay = ({ srcRef }) => {
     return () => setMagicEraseMaskCanvas(null);
   }, [currentService, setMagicEraseMaskCanvas]);
 
-  const getCanvasCoords = useCallback((e) => {
+  const getCanvasCoords = (e) => {
     const canvas = canvasRef.current;
     if (!canvas) return null;
     const rect = canvas.getBoundingClientRect();
@@ -73,10 +74,9 @@ const MagicEraseOverlay = ({ srcRef }) => {
       x: (e.clientX - rect.left) * scaleX,
       y: (e.clientY - rect.top) * scaleY,
     };
-  }, []);
+  };
 
-  const drawBrush = useCallback(
-    (x, y) => {
+  const drawBrush = (x, y) => {
       const canvas = canvasRef.current;
       if (!canvas) return;
       const ctx = canvas.getContext("2d");
@@ -92,44 +92,58 @@ const MagicEraseOverlay = ({ srcRef }) => {
       ctx.beginPath();
       ctx.arc(x, y, scaledBrush / 2, 0, Math.PI * 2);
       ctx.fill();
-    },
-    [brushRadius],
-  );
+    };
 
-  const handleMouseDown = useCallback(
-    (e) => {
-      if (currentService?.id !== "magic-erase") return;
+  const handleMouseDown = (e) => {
+    if (currentService?.id !== "magic-erase") return;
 
-      if (e.button === 0) {
-        // Left-click
-        isDrawingRef.current = true;
-        const coords = getCanvasCoords(e);
-        if (coords) drawBrush(coords.x, coords.y);
-      }
-    },
-    [currentService, getCanvasCoords, drawBrush],
-  );
-
-  const handleMouseMove = useCallback(
-    (e) => {
-      if (!isDrawingRef.current) return;
+    if (e.button === 0) {
+      // Left-click
+      isDrawingRef.current = true;
       const coords = getCanvasCoords(e);
       if (coords) drawBrush(coords.x, coords.y);
-    },
-    [getCanvasCoords, drawBrush],
-  );
+    }
+  };
 
-  const handleMouseUp = useCallback(() => {
+  const handleMouseMove = (e) => {
+    if (!isDrawingRef.current) return;
+    const coords = getCanvasCoords(e);
+    if (coords) drawBrush(coords.x, coords.y);
+  };
+
+  const handleMouseUp = () => {
     isDrawingRef.current = false;
-  }, []);
+  };
 
-  const clearMask = useCallback(() => {
+  // Touch equivalents — feed the first touch's coords into the same draw path.
+  const handleTouchStart = (e) => {
+    if (currentService?.id !== "magic-erase") return;
+    if (e.touches.length === 0) return;
+    e.preventDefault();
+    isDrawingRef.current = true;
+    const coords = getCanvasCoords(e.touches[0]);
+    if (coords) drawBrush(coords.x, coords.y);
+  };
+
+  const handleTouchMove = (e) => {
+    if (!isDrawingRef.current) return;
+    if (e.touches.length === 0) return;
+    e.preventDefault();
+    const coords = getCanvasCoords(e.touches[0]);
+    if (coords) drawBrush(coords.x, coords.y);
+  };
+
+  const handleTouchEnd = () => {
+    isDrawingRef.current = false;
+  };
+
+  const clearMask = () => {
     if (canvasRef.current) {
       const ctx = canvasRef.current.getContext("2d");
       ctx.fillStyle = "black";
       ctx.fillRect(0, 0, canvasRef.current.width, canvasRef.current.height);
     }
-  }, []);
+  };
 
   // Cleanup: listen for mouseup on window
   useEffect(() => {

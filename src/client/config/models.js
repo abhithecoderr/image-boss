@@ -3,6 +3,7 @@
  * This file contains all repository IDs and direct URLs for the AI models used in the app.
  */
 
+
 // --- Background Removal (RMBG) ---
 export const BACKGROUND_REMOVAL_MODELS = {
   birefnet: {
@@ -193,3 +194,34 @@ export const UPSCALING_MODELS = {
     outputLayout: "NCHW",
   },
 };
+
+export const PAID_MODELS_CONFIG = {
+  // Background Removal
+  "birefnet": {
+    api_model_tag: "birefnet-general",
+    api_runtime: "cpu"
+  },
+  "birefnet-lite": {
+    api_model_tag: "birefnet-lite",
+    api_runtime: "cpu"
+  },
+  // Object Segmentation (local model IDs mapped to API tags)
+  "onnx-community/sam2.1-hiera-tiny-ONNX": {
+    api_model_tag: "sam-tiny",
+    api_runtime: "cpu"
+  },
+  "onnx-community/sam2.1-hiera-small-ONNX": {
+    api_model_tag: "sam-small",
+    api_runtime: "cpu"
+  },
+  "onnx-community/sam2.1-hiera-large-ONNX": {
+    api_model_tag: "sam-large",
+    api_runtime: "gpu"
+  },
+  // Upscaling
+  "esrgan": {
+    api_model_tag: "esrgan",
+    api_runtime: "gpu"
+  }
+};
+

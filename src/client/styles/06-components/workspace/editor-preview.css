@@ -62,3 +62,11 @@
   border: 1px dashed var(--border);
   border-radius: var(--radius-md);
 }
+
+/* --- Mobile: avoid the preview frame being taller than the viewport --- */
+@media (max-width: 767px) {
+  .editor-preview-container,
+  .editor-preview-placeholder {
+    min-height: 280px;
+  }
+}

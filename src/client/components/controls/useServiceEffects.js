@@ -1,3 +1,6 @@
+/*
+ * Local React hooks managing sidebar size estimation and format conversions.
+ */
 import { useState, useEffect, useRef } from 'react';
 import { useWorkspace, useService } from '../../store';
 import { hasAlphaTransparency } from '../../core/canvas-utils';

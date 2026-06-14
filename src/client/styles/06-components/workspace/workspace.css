@@ -62,7 +62,8 @@
   display: flex !important;
   justify-content: space-between !important;
   align-items: center !important;
-  height: 42px;
+  min-height: 42px;
+  height: auto;
 }
 
 .preview-image-wrapper {
@@ -72,7 +73,7 @@
   justify-content: center;
   padding: var(--space-6);
   position: relative;
-  min-height: 440px;
+  min-height: 220px;
   background-color: var(--bg-surface);
   background-image:
     radial-gradient(circle at center, rgba(255, 170, 0, 0.015) 0%, transparent 60%),
@@ -324,4 +325,157 @@
   border-color: var(--highlight);
   box-shadow: 0 0 0 2px rgba(255, 170, 0, 0.15);
 }
+
+/* ============================================
+   Editing-mode toolbar (mask touch-up)
+   ============================================ */
+.editor-toolbar {
+  display: flex;
+  align-items: center;
+  gap: var(--space-2);
+  width: 100%;
+  justify-content: space-between;
+  flex-wrap: wrap;
+}
+
+.editor-toolbar-group {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+
+.editor-active-indicator {
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--accent-primary);
+  box-shadow: 0 0 8px var(--accent-primary);
+  margin-right: 4px;
+  flex-shrink: 0;
+}
+
+.editor-toolbar-divider {
+  width: 1px;
+  height: 14px;
+  background: rgba(255, 255, 255, 0.12);
+  margin: 0 2px;
+  flex-shrink: 0;
+}
+
+.editor-brush-control {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  color: var(--text-muted);
+  font-size: 11px;
+}
+
+.editor-brush-range {
+  width: 50px;
+  height: 4px;
+  accent-color: var(--accent-primary);
+  cursor: pointer;
+}
+
+.editor-brush-value {
+  min-width: 30px;
+  font-size: 10px;
+  font-family: var(--font-mono);
+}
+
+/* Shared tool-button base (was inline-styled 28x28 in Workspace.jsx). */
+.editor-tool-btn {
+  background: transparent;
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  border-radius: var(--radius-sm);
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  flex-shrink: 0;
+  transition: all var(--transition-fast);
+}
+
+.editor-tool-btn:hover:not(:disabled) {
+  color: var(--text-main);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+.editor-tool-btn.is-active {
+  background: var(--accent-soft);
+  border-color: rgba(245, 166, 35, 0.4);
+  color: var(--accent-primary);
+}
+
+.editor-tool-btn:disabled {
+  color: var(--text-dim);
+  cursor: not-allowed;
+  opacity: 0.4;
+}
+
+.editor-tool-btn--danger {
+  background: rgba(239, 68, 68, 0.12);
+  border-color: rgba(239, 68, 68, 0.25);
+  color: #ef4444;
+}
+
+.editor-tool-btn--success {
+  background: rgba(16, 185, 129, 0.12);
+  border-color: rgba(16, 185, 129, 0.25);
+  color: #10b981;
+}
+
+/* Floating download button on the result canvas. */
+.result-download-fab {
+  position: absolute;
+  bottom: 16px;
+  right: 16px;
+  background: rgba(255, 255, 255, 0.08);
+  color: var(--text-muted);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 50%;
+  width: 36px;
+  height: 36px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  cursor: pointer;
+  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.2);
+  z-index: 200;
+  transition: transform 0.2s ease, background var(--transition-fast), color var(--transition-fast), border-color var(--transition-fast);
+}
+
+.result-download-fab:hover {
+  transform: scale(1.05);
+  background: rgba(255, 255, 255, 0.15);
+  color: var(--text-main);
+  border-color: rgba(255, 255, 255, 0.2);
+}
+
+/* --- Mobile: wrap the toolbar and enlarge tool tap targets --- */
+@media (max-width: 767px) {
+  .editor-toolbar {
+    gap: var(--space-1);
+    row-gap: var(--space-2);
+  }
+
+  .editor-brush-range {
+    width: 80px;
+  }
+
+  /* Bigger tap targets for touch (44px is the recommended minimum). */
+  .editor-tool-btn {
+    width: 40px;
+    height: 40px;
+  }
+
+  .result-download-fab {
+    width: 44px;
+    height: 44px;
+  }
+}
+
 

@@ -9,34 +9,25 @@ import {
   RawImage,
   env
 } from '@huggingface/transformers';
-import { getGPUConfig, createProgressReporter } from '../../core/worker-utils.js';
+import { getGPUConfig, createProgressReporter, bitmapToRawImage } from '../../core/worker-utils.js';
 import { CAPTIONING_MODELS } from '../../config/models.js';
 
 
 // v4: no wasm.proxy workaround needed — build system no longer double-proxies
 env.allowLocalModels = false;
+env.useWasmCache = false; // Disable buggy/redundant WASM preloader cache
+if (env.backends?.onnx) {
+  env.backends.onnx.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0-dev.20260416-b7804b056c/dist/';
+  env.backends.onnx.wasm.numThreads = Math.min(4, self.navigator?.hardwareConcurrency || 4);
+  if (!env.backends.onnx.webgpu) {
+    env.backends.onnx.webgpu = {};
+  }
+  env.backends.onnx.webgpu.powerPreference = "high-performance";
+}
 
 let model = null;
 let processor = null;
 let currentModelId = null;  // Track loaded model to detect switches
-
-
-
-/**
- * Convert ImageBitmap to OffscreenCanvas for RawImage compatibility.
- * Reuse a cached canvas to avoid per-call allocations.
- */
-let cachedCanvas = null;
-let cachedCtx = null;
-
-function bitmapToCanvas(bitmap) {
-  if (!cachedCanvas || cachedCanvas.width !== bitmap.width || cachedCanvas.height !== bitmap.height) {
-    cachedCanvas = new OffscreenCanvas(bitmap.width, bitmap.height);
-    cachedCtx = cachedCanvas.getContext('2d');
-  }
-  cachedCtx.drawImage(bitmap, 0, 0);
-  return cachedCanvas;
-}
 
 
 /**
@@ -57,9 +48,6 @@ async function teardown() {
   processor = null;
   currentModelId = null;
 }
-
-
-
 
 
 // ─── LFM 2.5 VL Pipeline ───────────────────────────────────────────────────
@@ -150,8 +138,7 @@ self.onmessage = async ({ data }) => {
       // 2. Prepare image
       let image;
       try {
-        const canvas = bitmapToCanvas(bitmap);
-        image = await RawImage.fromCanvas(canvas);
+        image = await bitmapToRawImage(bitmap);
       } catch (imgErr) {
         throw new Error(`Failed to convert image to RawImage: ${imgErr.message || imgErr}`);
       }

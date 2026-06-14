@@ -1,22 +1,18 @@
-import React, { useCallback, useMemo } from 'react';
+/*
+ * Consolidates stores and exports React-friendly hook adapters with selectors.
+ */
+import { useMemo } from 'react';
 import { useWorkspaceStore } from './workspaceStore';
 import { useServiceStore } from './serviceStore';
 import { useUIStore } from './uiStore';
 import { useSegmentationStore } from './segmentationStore';
 import { useAuthStore } from './authStore';
-import { useServiceEngine } from '../hooks/useServiceEngine';
 import { useSession } from '../lib/auth-client';
-import { useUnifiedProcessor } from '../hooks/useUnifiedProcessor';
 import { getDownloadMetadata as calculateMetadata } from '../core/canvas-utils';
+import { useNavigate } from 'react-router-dom';
+import { SERVICE_ORDER } from '../config/app';
+import { SERVICES } from '../config/services';
 
-/**
- * AppProvider
- * Render pass-through now that all states are managed via Zustand stores.
- * No Context Providers are nested here.
- */
-export const AppProvider = ({ children }) => {
-  return <>{children}</>;
-};
 
 // --- Standardized Store Hook Exports ---
 
@@ -36,97 +32,85 @@ export const useSegmentation = (selector) => {
 
 export const useAuth = () => {
   const store = useAuthStore();
-  const { data, isPending } = useSession();
+  const { data, isPending, refetch } = useSession();
 
-  const user = useMemo(() => {
-    if (!data?.user) return null;
-    return {
+  let user = null;
+  if (data?.user) {
+    user = {
       ...data.user,
       initials: data.user.name
         ? data.user.name.split(" ").map((n) => n[0]).join("").toUpperCase().slice(0, 2)
         : "US",
     };
-  }, [data?.user]);
+  }
 
   return {
     ...store,
     user,
     loading: isPending,
     isAuthenticated: !!user,
+    refetchSession: refetch,
   };
 };
 
-export const useController = () => {
-  return useUnifiedProcessor();
-};
 
-// Export backward compatible Zustand bridge hooks with memoization to prevent infinite loops
+
+// Export backward compatible Zustand bridge hooks with selector optimization
 export const useWorkspace = (selector) => {
-  const storeState = useWorkspaceStore();
-  const selectorResult = useWorkspaceStore(selector || ((s) => s));
-
-  const memoizedResult = useMemo(() => {
-    const activeItem = storeState.items.find((i) => i.id === storeState.activeItemId) || null;
-    return {
-      ...storeState,
-      activeItem,
-      originalCanvas: activeItem?.sourceCanvas || null,
-      originalFile: activeItem?.file || null,
-      resultCanvas: activeItem?.resultCanvas || null,
-    };
-  }, [storeState]);
-
   if (selector) {
-    return selectorResult;
+    return useWorkspaceStore(selector);
   }
 
-  return memoizedResult;
+  const storeState = useWorkspaceStore();
+  const activeItem = useMemo(
+    () => storeState.items.find((i) => i.id === storeState.activeItemId) || null,
+    [storeState.items, storeState.activeItemId],
+  );
+  
+  return {
+    ...storeState,
+    activeItem,
+    originalCanvas: activeItem?.sourceCanvas || null,
+    originalFile: activeItem?.file || null,
+    resultCanvas: activeItem?.resultCanvas || null,
+  };
 };
 
 export const useService = (selector) => {
-  const { currentService, serviceId, selectService } = useServiceEngine();
-  
-  const activeItemId = useWorkspaceStore((state) => state.activeItemId);
-  const items = useWorkspaceStore((state) => state.items);
-  
-  const activeItem = useMemo(() => items.find((i) => i.id === activeItemId) || null, [items, activeItemId]);
-  const originalFile = activeItem?.file || null;
-  const resultCanvas = activeItem?.resultCanvas || null;
-
-  const storeState = useServiceStore();
-  const selectorResult = useServiceStore(selector || ((s) => s));
-
-  const getDownloadMetadata = useCallback(
-    (item = null, overrideServiceId = null, resultCanvasArg = null) => {
-      const canvas = resultCanvasArg || item?.resultCanvas || resultCanvas;
-      const sourceFile = item?.file || originalFile;
-      const activeServiceId = overrideServiceId || currentService.id;
-
-      return calculateMetadata(
-        canvas,
-        sourceFile,
-        activeServiceId,
-        useServiceStore.getState().serviceSettings,
-      );
-    },
-    [originalFile, currentService.id, resultCanvas],
-  );
-
-  const memoizedResult = useMemo(() => {
-    return {
-      ...storeState,
-      currentService,
-      serviceId,
-      selectService,
-      getDownloadMetadata,
-    };
-  }, [storeState, currentService, serviceId, selectService, getDownloadMetadata]);
-
   if (selector) {
-    return selectorResult;
+    return useServiceStore(selector);
   }
 
-  return memoizedResult;
+  const storeState = useServiceStore();
+  const activeServiceId = storeState.activeServiceId || SERVICE_ORDER[0];
+  const currentService = SERVICES[activeServiceId] || SERVICES[SERVICE_ORDER[0]];
+
+  const navigate = useNavigate();
+  const selectService = (targetServiceId) => {
+    navigate(`/services/${targetServiceId}`);
+  };
+
+  // Callers (Workspace.jsx) always pass resultCanvasArg and item explicitly.
+  const getDownloadMetadata = (item = null, overrideServiceId = null, resultCanvasArg = null) => {
+    const canvas = resultCanvasArg || item?.resultCanvas;
+    const sourceFile = item?.file;
+    const activeServiceIdForMetadata = overrideServiceId || activeServiceId;
+
+    return calculateMetadata(
+      canvas,
+      sourceFile,
+      activeServiceIdForMetadata,
+      storeState.serviceSettings,
+    );
+  };
+
+  return {
+    ...storeState,
+    currentService,
+    serviceId: activeServiceId,
+    selectService,
+    getDownloadMetadata,
+  };
 };
 
 // Re-export raw stores for direct access

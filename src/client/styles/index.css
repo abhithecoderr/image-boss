@@ -29,6 +29,7 @@
 @import './06-components/ui/toast.css';
 @import './06-components/ui/progress.css';
 @import './06-components/ui/canvas-area.css';
+@import './06-components/ui/confirm-modal.css';
 
 /* 06 Components - Controls */
 @import './06-components/controls/control-panel.css';

@@ -1,9 +1,13 @@
-import { useController, useService, useWorkspace, useSegmentation } from "../../store";
+/*
+ * Main workspace sidebar housing settings, models, sliders, and batch settings for the active service.
+ */
+import { useService, useWorkspace, useSegmentation } from "../../store";
+import { useUnifiedProcessor as useController } from "../../hooks/useUnifiedProcessor";
 import { useSAM } from "../../hooks/useSAM";
 import { OPERATION_MODE } from "../../config/app";
 import { CONTROLS_CONFIG } from "../../config/controls";
 import { BACKGROUND_REMOVAL_MODELS } from "../../config/models";
-import React, { useEffect, useRef } from "react";
+import React, { useEffect, useRef, useState } from "react";
 import ControlRenderer from "./ControlRenderer";
 import Select from "../ui/Select";
 import Slider from "../ui/Slider";
@@ -69,6 +73,24 @@ const ObjectSegmentationPointsClear = ({ clearPoints }) => {
 };
 
 const BatchActionsPanel = ({ batch, serviceSettings, currentServiceId }) => {
+  const [resetPending, setResetPending] = useState(false);
+  const resetTimerRef = useRef(null);
+
+  const handleResetClick = () => {
+    if (resetPending) {
+      // Second click within the window — execute
+      clearTimeout(resetTimerRef.current);
+      setResetPending(false);
+      batch.rerunAll(serviceSettings[currentServiceId]);
+    } else {
+      // First click — arm the confirmation
+      setResetPending(true);
+      resetTimerRef.current = setTimeout(() => setResetPending(false), 3000);
+    }
+  };
+
+  useEffect(() => () => clearTimeout(resetTimerRef.current), []);
+
   return (
     <div
       className="control-group"
@@ -91,83 +113,17 @@ const BatchActionsPanel = ({ batch, serviceSettings, currentServiceId }) => {
           Deselect All
         </Button>
         <Button
-          variant="secondary"
+          variant={resetPending ? "primary" : "secondary"}
           size="tiny"
-          onClick={() => {
-            if (
-              confirm(
-                "Clear all batch results? This marks them as pending for rerunning.",
-              )
-            ) {
-              batch.rerunAll(serviceSettings[currentServiceId]);
-            }
-          }}
+          onClick={handleResetClick}
           icon={
             <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
               <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67" />
             </svg>
           }
         >
-          Reset
+          {resetPending ? "Confirm Reset?" : "Reset"}
         </Button>
-      </div>
-    </div>
-  );
-};
-
-const ManualTouchupControls = ({ editing, setEditing }) => {
-  return (
-    <div className="control-group control-section-divider">
-      <label className="control-label" style={{ marginBottom: "12px" }}>
-        Manual Mask Touch-up
-      </label>
-      <div className="control-manual-touchup">
-        <div className="tab-group control-tabs">
-          <Button
-            variant={editing.activeTool === "none" ? "primary" : "secondary"}
-            className={editing.activeTool === "none" ? "active" : ""}
-            onClick={() =>
-              setEditing((prev) => ({ ...prev, activeTool: "none" }))
-            }
-          >
-            Move
-          </Button>
-          <Button
-            variant={editing.activeTool === "erase" ? "primary" : "secondary"}
-            className={editing.activeTool === "erase" ? "active" : ""}
-            onClick={() =>
-              setEditing((prev) => ({ ...prev, activeTool: "erase" }))
-            }
-          >
-            Erase
-          </Button>
-          <Button
-            variant={editing.activeTool === "restore" ? "primary" : "secondary"}
-            className={editing.activeTool === "restore" ? "active" : ""}
-            onClick={() =>
-              setEditing((prev) => ({ ...prev, activeTool: "restore" }))
-            }
-          >
-            Restore
-          </Button>
-        </div>
-
-        {editing.activeTool !== "none" && (
-          <Slider
-            label="Brush Size"
-            min={5}
-            max={150}
-            step={5}
-            value={editing.brushSize}
-            unit="px"
-            onChange={(val) =>
-              setEditing((prev) => ({
-                ...prev,
-                brushSize: val,
-              }))
-            }
-          />
-        )}
       </div>
     </div>
   );
@@ -198,7 +154,7 @@ const ControlPanel = () => {
     originalCanvas,
   );
 
-  const handleControlChange = React.useCallback((id, val, parse) => {
+  const handleControlChange = (id, val, parse) => {
     const parsedVal = parse ? parse(val) : val;
 
     if (batch.batchSettingsTarget && batch.batchSettingsTarget !== "all") {
@@ -207,6 +163,21 @@ const ControlPanel = () => {
         const modelCfg = BACKGROUND_REMOVAL_MODELS[parsedVal];
         if (modelCfg && modelCfg.method !== "hybrid") {
           batch.updateItemOverride(batch.batchSettingsTarget, currentService.id, "method", modelCfg.method);
+        }
+      }
+      if (id === "tier" && parsedVal === "paid") {
+        const currentOverrides = batch.items.find((i) => i.id === batch.batchSettingsTarget)?.settingsOverrides?.[currentService.id] || {};
+        const globalSettings = serviceSettings[currentService.id] || {};
+        if (currentService.id === "background-removal") {
+          const activeModel = currentOverrides.model ?? globalSettings.model;
+          if (activeModel !== "birefnet" && activeModel !== "birefnet-lite") {
+            batch.updateItemOverride(batch.batchSettingsTarget, currentService.id, "model", "birefnet-lite");
+          }
+        } else if (currentService.id === "upscaling") {
+          const activeModelId = currentOverrides.modelId ?? globalSettings.modelId;
+          if (activeModelId !== "esrgan") {
+            batch.updateItemOverride(batch.batchSettingsTarget, currentService.id, "modelId", "esrgan");
+          }
         }
       }
       return;
@@ -219,6 +190,22 @@ const ControlPanel = () => {
 
     updateServiceSetting(currentService.id, id, parsedVal);
 
+    if (id === "tier" && parsedVal === "paid") {
+      if (currentService.id === "background-removal") {
+        const currentModel = nextSettings.model;
+        if (currentModel !== "birefnet" && currentModel !== "birefnet-lite") {
+          updateServiceSetting(currentService.id, "model", "birefnet-lite");
+          nextSettings.model = "birefnet-lite";
+        }
+      } else if (currentService.id === "upscaling") {
+        const currentModelId = nextSettings.modelId;
+        if (currentModelId !== "esrgan") {
+          updateServiceSetting(currentService.id, "modelId", "esrgan");
+          nextSettings.modelId = "esrgan";
+        }
+      }
+    }
+
     if (currentService.id === "background-removal" && id === "model") {
       const modelCfg = BACKGROUND_REMOVAL_MODELS[parsedVal];
       if (modelCfg && modelCfg.method !== "hybrid") {
@@ -227,6 +214,7 @@ const ControlPanel = () => {
       }
     }
 
+
     const isBgRemovalPostProcessControl =
       currentService.id === "background-removal" &&
       ["edgeShift", "edgeSmoothness", "edgeContrast"].includes(id);
@@ -234,10 +222,10 @@ const ControlPanel = () => {
     if (isBgRemovalPostProcessControl && originalCanvas && resultCanvas) {
       clearTimeout(bgPostProcessDebounceRef.current);
       bgPostProcessDebounceRef.current = setTimeout(() => {
-        execute({ ...nextSettings, _postProcess: true });
+        execute(nextSettings);
       }, 80);
     }
-  }, [currentService.id, serviceSettings, updateServiceSetting, originalCanvas, resultCanvas, execute, batch]);
+  };
 
   useEffect(() => {
     return () => clearTimeout(bgPostProcessDebounceRef.current);
@@ -312,19 +300,27 @@ const ControlPanel = () => {
 
   return (
     <>
-      <div style={{ display: "flex", justifyContent: "flex-end", marginBottom: "8px", width: "100%" }}>
-        <Button
-          variant="primary"
-          onClick={getProcessAction()}
-          style={{ padding: "6px 16px", fontSize: "13px" }}
-          disabled={
-            (activeMode === OPERATION_MODE.BATCH && batch.items.length === 0) || isProcessing
-          }
-          isLoading={isProcessing}
-        >
-          {getProcessLabel()}
-        </Button>
-      </div>
+      {activeMode === OPERATION_MODE.BATCH && batch.items.length > 0 && (
+        <div style={{
+          display: "flex",
+          justifyContent: "flex-end",
+          marginTop: "20px",
+          marginBottom: "16px",
+          width: "100%",
+          position: "relative",
+          zIndex: 10
+        }}>
+          <Button
+            variant="primary"
+            onClick={getProcessAction()}
+            style={{ padding: "6px 16px", fontSize: "13px" }}
+            disabled={isProcessing}
+            isLoading={isProcessing}
+          >
+            {getProcessLabel()}
+          </Button>
+        </div>
+      )}
 
       <div className="controls">
         {activeMode === OPERATION_MODE.BATCH && <BatchSettingsSelector />}
@@ -418,10 +414,6 @@ const ControlPanel = () => {
             />
           )}
         </div>
-
-        {showManualTouchup && (
-          <ManualTouchupControls editing={editing} setEditing={setEditing} />
-        )}
       </div>
     </>
   );

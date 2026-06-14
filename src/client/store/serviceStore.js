@@ -1,3 +1,6 @@
+/*
+ * Manages active services and individual parameter values for all tool settings.
+ */
 import { create } from "zustand";
 import { CONTROLS_CONFIG } from "../config/controls";
 
@@ -17,6 +20,8 @@ const getInitialServiceSettings = () => {
 
 export const useServiceStore = create((set) => ({
   serviceSettings: getInitialServiceSettings(),
+  activeServiceId: null,
+  setActiveServiceId: (id) => set({ activeServiceId: id }),
 
   setServiceSettings: (updater) =>
     set((state) => ({

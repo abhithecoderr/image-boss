@@ -167,6 +167,14 @@
   opacity: 1;
 }
 
+/* Touch devices have no hover, so the per-item remove button would be
+   unreachable. Always show it on coarse pointers. */
+@media (hover: none), (pointer: coarse) {
+  .batch-remove {
+    opacity: 1;
+  }
+}
+
 .batch-remove:hover {
   background: var(--error) !important;
   color: #ffffff !important;

@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { useController, useWorkspace, useService, useUI } from '../../store';
+import { useWorkspace, useService, useUI } from '../../store';
+import { useUnifiedProcessor as useController } from '../../hooks/useUnifiedProcessor';
 import { CONTROLS_CONFIG } from '../../config/controls';
 import { SERVICE_ORDER } from '../../config/app';
 import { SERVICES } from '../../config/services';
@@ -24,7 +25,6 @@ export default function HomeSandbox() {
 
   const { 
     currentService, 
-    selectService, 
     serviceSettings,
     updateServiceSetting
   } = useService();
@@ -39,7 +39,6 @@ export default function HomeSandbox() {
 
   const handleServiceChange = (val) => {
     if (val === 'magic-erase' || val === 'object-segmentation' || val === 'image-editor') {
-      selectService(val);
       navigate(`/services/${val}`);
     } else {
       setSelectedServiceId(val);
@@ -52,8 +51,6 @@ export default function HomeSandbox() {
       showToast('Please upload an image first', 'warning');
       return;
     }
-    // Sync local selection to global store before redirecting
-    selectService(selectedServiceId);
     showToast('Redirecting to Workspace...', 'success');
     navigate(`/services/${selectedServiceId}`, { state: { autoProcess: true } });
   };
@@ -93,11 +90,15 @@ export default function HomeSandbox() {
 
         {modelControls.map(control => {
           const value = serviceSettings[selectedServiceId]?.[control.id] ?? control.defaultValue;
+          const resolvedOptions = typeof control.options === "function"
+            ? control.options(serviceSettings[selectedServiceId] || {})
+            : (control.options || []);
+
           return (
             <div key={control.id} className="sandbox-control-item">
               <label className="sandbox-control-label">{control.label}</label>
               <Select
-                options={control.options}
+                options={resolvedOptions}
                 value={value}
                 onChange={(val) => updateServiceSetting(selectedServiceId, control.id, control.parse ? control.parse(val) : val)}
               />

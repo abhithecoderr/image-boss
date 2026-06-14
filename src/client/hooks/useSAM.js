@@ -1,12 +1,10 @@
-import { useCallback } from 'react';
-import { useController, useSegmentation, useWorkspace, useUI, useService } from '../store';
+/*
+ * Controller hook for Segment Anything, coordinating coordinates points and worker threads.
+ */
+import { useSegmentation, useWorkspace, useUI, useService } from '../store';
+import { useUnifiedProcessor as useController } from './useUnifiedProcessor';
 import { APP_CONFIG } from '../config/app';
 
-/* 
- useSAM:
- Bridge hook linking interactive viewport clicks to Segment Anything Model capabilities.
- Manages points selection coords, clear routines, and compiles prompt arrays to send to the AI worker.
-*/
 export const useSAM = () => {
   const samPoints = useSegmentation((state) => state.samPoints);
   const setSamPoints = useSegmentation((state) => state.setSamPoints);
@@ -19,7 +17,7 @@ export const useSAM = () => {
   const { execute } = useController();
 
   // Appends a mouse click coordinate point to the prompt list for positive (keep) or negative (remove) filters
-  const addPoint = useCallback((x, y, forcedLabel = null) => {
+  const addPoint = (x, y, forcedLabel = null) => {
     if (!originalCanvas) return;
     
     // Determine label: use forced label if provided, otherwise fallback to UI setting
@@ -28,21 +26,25 @@ export const useSAM = () => {
     
     const newPoints = [...samPoints, { x, y, label }];
     setSamPoints(newPoints);
-  }, [samPoints, setSamPoints, originalCanvas, serviceSettings]);
+  };
 
   // Clears all currently placed selection points from the workspace editor
-  const clearPoints = useCallback(() => {
+  const clearPoints = () => {
     setSamPoints([]);
-  }, [setSamPoints]);
+  };
 
   // Compiles points prompting arrays and executes the SAM AI segmentation worker task
-  const executeSmartSelect = useCallback(async () => {
+  const executeSmartSelect = async () => {
     if (!originalCanvas || samPoints.length === 0) {
       showToast('Please select at least one point', 'info');
       return;
     }
 
+    // Clear stale segmentation results before starting new inference
+    setSegmentationResult(null);
+
     const options = {
+      ...serviceSettings['object-segmentation'],
       points: samPoints.map(p => ({ x: p.x, y: p.y, label: p.label })),
       mode: editing.activeMode || 'extract',
       modelId: serviceSettings['object-segmentation']?.modelId || APP_CONFIG.samDefaultModel
@@ -57,7 +59,7 @@ export const useSAM = () => {
     } catch (err) {
       console.error('[SAM] Smart select failed:', err);
     }
-  }, [originalCanvas, samPoints, editing.activeMode, execute, showToast, setSegmentationResult, serviceSettings]);
+  };
 
   return {
     samPoints,

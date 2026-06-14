@@ -1,4 +1,7 @@
-import React, { useState, useRef, useEffect, useCallback } from "react";
+/*
+ * Split-screen visual overlay allowing users to slide and compare the original image side-by-side with processed output.
+ */
+import React, { useState, useRef, useEffect } from "react";
 import { useWorkspace, useService } from "../../store";
 
 const ComparisonSlider = () => {
@@ -35,16 +38,22 @@ const ComparisonSlider = () => {
     }
   }, [originalCanvas, resultCanvas]);
 
-  const handleMove = useCallback((clientX) => {
+  const handleMove = (clientX) => {
     if (!containerRef.current) return;
     const rect = containerRef.current.getBoundingClientRect();
     const x = Math.max(0, Math.min(rect.width, clientX - rect.left));
     setPosition((x / rect.width) * 100);
-  }, []);
+  };
 
   const onMouseDown = (e) => {
     setIsDragging(true);
     handleMove(e.clientX);
+  };
+
+  const onTouchStart = (e) => {
+    if (e.touches.length === 0) return;
+    setIsDragging(true);
+    handleMove(e.touches[0].clientX);
   };
 
   useEffect(() => {
@@ -54,16 +63,32 @@ const ComparisonSlider = () => {
 
     const onMouseUp = () => setIsDragging(false);
 
+    // Touch equivalents: read the first touch's clientX. preventDefault on move
+    // so the page doesn't scroll while dragging the comparison handle.
+    const onTouchMove = (e) => {
+      if (e.touches.length === 0) return;
+      e.preventDefault();
+      handleMove(e.touches[0].clientX);
+    };
+
+    const onTouchEnd = () => setIsDragging(false);
+
     if (isDragging) {
       window.addEventListener("mousemove", onMouseMove);
       window.addEventListener("mouseup", onMouseUp);
+      window.addEventListener("touchmove", onTouchMove, { passive: false });
+      window.addEventListener("touchend", onTouchEnd);
     } else {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchend", onTouchEnd);
     }
     return () => {
       window.removeEventListener("mousemove", onMouseMove);
       window.removeEventListener("mouseup", onMouseUp);
+      window.removeEventListener("touchmove", onTouchMove);
+      window.removeEventListener("touchend", onTouchEnd);
     };
   }, [isDragging, handleMove]);
 
@@ -76,6 +101,7 @@ const ComparisonSlider = () => {
       ref={containerRef}
       className="comparison-slider-container"
       onMouseDown={onMouseDown}
+      onTouchStart={onTouchStart}
       style={{
         aspectRatio: `${aspectRatio}`,
       }}

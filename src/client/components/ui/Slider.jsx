@@ -44,6 +44,7 @@ const Slider = ({
 
       <div className="slider-controls-row">
         <button
+          type="button"
           className="slider-step-btn"
           onClick={handleDecrement}
           disabled={disabled || value <= min}
@@ -77,6 +78,7 @@ const Slider = ({
         </div>
 
         <button
+          type="button"
           className="slider-step-btn"
           onClick={handleIncrement}
           disabled={disabled || value >= max}

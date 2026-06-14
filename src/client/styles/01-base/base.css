@@ -102,7 +102,15 @@ p, h1, h2, h3, h4, h5, h6 {
   --space-5: 24px;
   --space-6: 32px;
   --space-8: 48px;
+  --space-10: 80px;
   --space-12: 64px;
+
+  /* Breakpoint scale (reference only — @media queries can't read var()).
+     sm 576 = large phones, md 768 = tablets, lg 992 = small laptops, xl 1200 = desktop. */
+  --bp-sm: 576px;
+  --bp-md: 768px;
+  --bp-lg: 992px;
+  --bp-xl: 1200px;
   
   /* Transitions */
   --transition-fast: 150ms cubic-bezier(0.4, 0, 0.2, 1);

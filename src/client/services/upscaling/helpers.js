@@ -2,41 +2,7 @@
 // Contains downloading, tiling edge-clamping, and tensor processing.
 
 
-/**
- * Downloads a binary resource (model, weights, etc.) with progressive progress reporting
- */
-export async function fetchWithProgress(url, label, report, startWeight, endWeight) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Failed to fetch ${label}: ${response.statusText}`);
 
-  const contentLength = response.headers.get('Content-Length');
-  const total = contentLength ? parseInt(contentLength, 10) : 0;
-  let loaded = 0;
-
-  const reader = response.body.getReader();
-  const chunks = [];
-  const reportProgress = report(startWeight, endWeight, `Downloading ${label}...`);
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    loaded += value.length;
-
-    if (total) {
-      reportProgress((loaded / total) * 100);
-    }
-  }
-
-  const result = new Uint8Array(loaded);
-  let offset = 0;
-  for (const chunk of chunks) {
-    result.set(chunk, offset);
-    offset += chunk.length;
-  }
-
-  return result.buffer;
-}
 
 /**
  * Renders an overlapping tile from a source bitmap, clamping margins to boundary pixels

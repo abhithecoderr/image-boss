@@ -9,17 +9,34 @@ export const CONTROLS_CONFIG = {
 
   'background-removal': [
     {
+      id: 'tier',
+      label: 'Tier',
+      type: 'select',
+      defaultValue: 'free',
+      options: [
+        { value: 'free', label: 'Free (Local WebGPU)' },
+        { value: 'paid', label: 'Paid (Cloud API)' }
+      ]
+    },
+    {
       id: 'model',
       label: 'RMBG Model',
       type: 'select',
       defaultValue: 'birefnet-lite',
-      options: [
-        { value: 'birefnet', label: 'RMBG Pro (BiRefNet)' },
-        { value: 'birefnet-lite', label: 'RMBG Lite (BiRefNet Lite)' },
-        { value: 'isnet', label: 'ISNet (Background Removal)' },
-        { value: 'u2net', label: 'U2Net (Custom ORT)' }
-      ]
-
+      options: (settings) => {
+        if (settings.tier === 'paid') {
+          return [
+            { value: 'birefnet', label: 'RMBG Pro (BiRefNet)' },
+            { value: 'birefnet-lite', label: 'RMBG Lite (BiRefNet Lite)' }
+          ];
+        }
+        return [
+          { value: 'birefnet', label: 'RMBG Pro (BiRefNet)' },
+          { value: 'birefnet-lite', label: 'RMBG Lite (BiRefNet Lite)' },
+          { value: 'isnet', label: 'ISNet (Background Removal)' },
+          { value: 'u2net', label: 'U2Net (Custom ORT)' }
+        ];
+      }
     },
     { id: 'edgeShift', label: 'Edge Shift', type: 'range', min: -20, max: 20, step: 1, defaultValue: 0 },
     { id: 'edgeSmoothness', label: 'Edge Smoothness', type: 'range', min: 0, max: 20, step: 1, defaultValue: 0 },
@@ -31,15 +48,27 @@ export const CONTROLS_CONFIG = {
   ],
   'object-segmentation': [
     {
+      id: 'tier',
+      label: 'Tier',
+      type: 'select',
+      defaultValue: 'free',
+      options: [
+        { value: 'free', label: 'Free (Local WebGPU)' },
+        { value: 'paid', label: 'Paid (Cloud API)' }
+      ]
+    },
+    {
       id: 'modelId',
       label: 'SAM Model',
       type: 'select',
       defaultValue: SEGMENTATION_MODELS.sam2_1_tiny.model_id,
-      options: [
-        { value: SEGMENTATION_MODELS.sam2_1_tiny.model_id, label: 'SAM 2.1 Hiera Tiny (Fastest)' },
-        { value: SEGMENTATION_MODELS.sam2_1_small.model_id, label: 'SAM 2.1 Hiera Small (Balanced)' },
-        { value: SEGMENTATION_MODELS.sam2_1_large.model_id, label: 'SAM 2.1 Hiera Large (Best Quality)' }
-      ]
+      options: (settings) => {
+        return [
+          { value: SEGMENTATION_MODELS.sam2_1_tiny.model_id, label: 'SAM 2.1 Hiera Tiny (Fastest)' },
+          { value: SEGMENTATION_MODELS.sam2_1_small.model_id, label: 'SAM 2.1 Hiera Small (Balanced)' },
+          { value: SEGMENTATION_MODELS.sam2_1_large.model_id, label: 'SAM 2.1 Hiera Large (Best Quality)' }
+        ];
+      }
     },
     {
       id: 'pointLabel',
@@ -55,21 +84,39 @@ export const CONTROLS_CONFIG = {
 
   'upscaling': [
     {
+      id: 'tier',
+      label: 'Tier',
+      type: 'select',
+      defaultValue: 'free',
+      options: [
+        { value: 'free', label: 'Free (Local WebGPU)' },
+        { value: 'paid', label: 'Paid (Cloud API)' }
+      ]
+    },
+    {
       id: 'modelId',
       label: 'Upscale Model',
       type: 'select',
       defaultValue: 'esrgan',
-      options: [
-        { value: 'esrgan', label: 'Real-ESRGAN (General 4x)' },
-        { value: 'esrgan_pro', label: 'ESRGAN Pro (General 4x)' },
-        { value: 'esrgan_ultra', label: 'ESRGAN Ultra (General 4x)' },
-        { value: 'bsrgan_x4', label: 'BSRGAN (Detail 4x)' },
-        { value: 'bsrgan_x2', label: 'BSRGAN (Detail 2x)' },
-        { value: 'real_esr_anime_x4', label: 'Real-ESRGAN (Anime 4x)' }
-      ]
+      options: (settings) => {
+        if (settings.tier === 'paid') {
+          return [
+            { value: 'esrgan', label: 'Real-ESRGAN (General 4x)' }
+          ];
+        }
+        return [
+          { value: 'esrgan', label: 'Real-ESRGAN (General 4x)' },
+          { value: 'esrgan_pro', label: 'ESRGAN Pro (General 4x)' },
+          { value: 'esrgan_ultra', label: 'ESRGAN Ultra (General 4x)' },
+          { value: 'bsrgan_x4', label: 'BSRGAN (Detail 4x)' },
+          { value: 'bsrgan_x2', label: 'BSRGAN (Detail 2x)' },
+          { value: 'real_esr_anime_x4', label: 'Real-ESRGAN (Anime 4x)' }
+        ];
+      }
     }
   ],
   'blur': [
+
     {
       id: 'variant',
       label: 'YOLO Variant',

@@ -4,10 +4,9 @@
  */
 
 import * as ort from "onnxruntime-web/webgpu";
-import { createProgressReporter } from "../../core/worker-utils.js";
+import { createProgressReporter, fetchWithProgress, configureOrt } from "../../core/worker-utils.js";
 import { UPSCALING_MODELS } from "../../config/models.js";
 import {
-  fetchWithProgress,
   packTilePlanar,
   packTileNHWC,
   unpackTilePlanar,
@@ -15,8 +14,7 @@ import {
 } from "./helpers.js";
 
 // Configure ONNX Runtime for stability
-ort.env.wasm.numThreads = Math.min(4, self.navigator.hardwareConcurrency || 4);
-ort.env.wasm.wasmPaths = "/onnx/";
+configureOrt(ort);
 
 let session = null;
 let currentModelId = null;

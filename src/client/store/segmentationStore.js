@@ -1,3 +1,6 @@
+/*
+ * Stores points, labels, masks, and active tools for interactive SAM object segmentation.
+ */
 import { create } from "zustand";
 
 const initialEditingState = {
@@ -32,13 +35,13 @@ export const useSegmentationStore = create((set) => ({
   setActiveEditorTab: (tab) => set({ activeEditorTab: tab }),
   setMagicEraseMaskCanvas: (canvas) => set({ magicEraseMaskCanvas: canvas }),
 
-  resetSegmentationState: () =>
-    set({
+  resetSegmentationState: (excludeMagicErase = false) =>
+    set((state) => ({
       samPoints: [],
       samPointLabel: 1,
       segmentationResult: null,
       editing: { ...initialEditingState },
       activeEditorTab: "composition",
-      magicEraseMaskCanvas: null,
-    }),
+      magicEraseMaskCanvas: excludeMagicErase ? state.magicEraseMaskCanvas : null,
+    })),
 }));

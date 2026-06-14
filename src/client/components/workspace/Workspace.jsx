@@ -1,5 +1,9 @@
-import React, { useRef, useEffect } from "react";
+/*
+ * Central canvas workstation displaying the comparison slider, overlays, processing state, and batch stripes.
+ */
+import React, { useRef, useEffect, useState } from "react";
 import { useUI, useWorkspace, useService, useSegmentation } from "../../store";
+import { useUnifiedProcessor } from "../../hooks/useUnifiedProcessor";
 import { useFileUpload } from "../../hooks/useFileUpload";
 import SAMOverlay from "./overlays/SAMOverlay";
 import SegmentationCandidates from "./SegmentationCandidates";
@@ -12,6 +16,7 @@ import { downloadCanvas } from "../../core/canvas-utils";
 import Progress from "../ui/Progress";
 import UploadZone from "../ui/UploadZone";
 import Button from "../ui/Button";
+import { useSAM } from "../../hooks/useSAM";
 
 const StatusBar = () => {
   const { progress } = useUI();
@@ -25,35 +30,129 @@ const StatusBar = () => {
   );
 };
 
-const Workspace = ({ batch }) => {
-  const { currentService, getDownloadMetadata } = useService();
+const Workspace = () => {
+  const batch = useUnifiedProcessor();
+  const { currentService, getDownloadMetadata, serviceSettings } = useService();
+  const { executeSmartSelect } = useSAM();
+  const magicEraseMaskCanvas = useSegmentation((state) => state.magicEraseMaskCanvas);
+
+  const getProcessAction = () => {
+    if (currentService.id === "object-segmentation") return executeSmartSelect;
+    if (currentService.id === "magic-erase") {
+      return () =>
+        batch.execute({
+          ...serviceSettings[currentService.id],
+          maskCanvas: magicEraseMaskCanvas,
+        });
+    }
+    return () => batch.execute(serviceSettings[currentService.id]);
+  };
+
+  const getProcessLabel = () => {
+    if (currentService.id === "object-segmentation") return "Segment Selected Points";
+    return "Process Image";
+  };
   
   const isProcessing = useWorkspace((state) => state.isProcessing);
   const resetImages = useWorkspace((state) => state.resetImages);
   const resetSegmentationState = useSegmentation((state) => state.resetSegmentationState);
   const items = useWorkspace((state) => state.items);
   const activeItemId = useWorkspace((state) => state.activeItemId);
-
-  // Clean up segmentation points and candidates when switching services
-  useEffect(() => {
-    resetSegmentationState();
-  }, [currentService.id, resetSegmentationState]);
-
-  const handleReset = () => {
-    resetImages();
-    resetSegmentationState();
-  };
+  const setResultCanvas = useWorkspace((state) => state.setResultCanvas);
+  const editing = useSegmentation((state) => state.editing);
+  const setEditing = useSegmentation((state) => state.setEditing);
 
   const activeItem = items.find((i) => i.id === activeItemId) || null;
   const srcCanvasState = activeItem?.sourceCanvas || null;
   const resCanvasState = activeItem?.resultCanvas || null;
 
+  const [initialCanvasBackup, setInitialCanvasBackup] = useState(null);
+  const [historyStack, setHistoryStack] = useState([]);
+  const [historyIndex, setHistoryIndex] = useState(-1);
+
+  // Clean up segmentation points and candidates when switching services
+  useEffect(() => {
+    resetSegmentationState(currentService.id === "magic-erase");
+    // Reset editing state on switch
+    setEditing((prev) => ({ ...prev, activeTool: "none" }));
+    setInitialCanvasBackup(null);
+    setHistoryStack([]);
+    setHistoryIndex(-1);
+  }, [currentService.id, resetSegmentationState, setEditing]);
+
+  const handleReset = () => {
+    resetImages();
+    resetSegmentationState();
+    setEditing((prev) => ({ ...prev, activeTool: "none" }));
+    setInitialCanvasBackup(null);
+    setHistoryStack([]);
+    setHistoryIndex(-1);
+  };
+
+  // When result canvas updates while editing, record it to history stack
+  useEffect(() => {
+    if (editing.activeTool !== "none" && resCanvasState) {
+      if (historyStack[historyIndex] === resCanvasState) {
+        return;
+      }
+      const newStack = historyStack.slice(0, historyIndex + 1);
+      newStack.push(resCanvasState);
+      setHistoryStack(newStack);
+      setHistoryIndex(newStack.length - 1);
+    }
+  }, [resCanvasState, editing.activeTool]);
+
+  const handleUndo = () => {
+    if (historyIndex > 0) {
+      const prevIndex = historyIndex - 1;
+      setHistoryIndex(prevIndex);
+      setResultCanvas(historyStack[prevIndex], editing.activeStepId || null);
+    } else if (historyIndex === 0 && initialCanvasBackup) {
+      setHistoryIndex(-1);
+      setResultCanvas(initialCanvasBackup, editing.activeStepId || null);
+    }
+  };
+
+  const handleRedo = () => {
+    if (historyIndex < historyStack.length - 1) {
+      const nextIndex = historyIndex + 1;
+      setHistoryIndex(nextIndex);
+      setResultCanvas(historyStack[nextIndex], editing.activeStepId || null);
+    }
+  };
+
+  const handleCancel = () => {
+    if (initialCanvasBackup) {
+      setResultCanvas(initialCanvasBackup, editing.activeStepId || null);
+    }
+    setEditing((prev) => ({ ...prev, activeTool: "none" }));
+    setInitialCanvasBackup(null);
+    setHistoryStack([]);
+    setHistoryIndex(-1);
+  };
+
+  const handleSave = () => {
+    setEditing((prev) => ({ ...prev, activeTool: "none" }));
+    setInitialCanvasBackup(null);
+    setHistoryStack([]);
+    setHistoryIndex(-1);
+  };
+
+  const startTouchupMode = () => {
+    if (resCanvasState) {
+      setInitialCanvasBackup(resCanvasState);
+      setHistoryStack([resCanvasState]);
+      setHistoryIndex(0);
+      setEditing((prev) => ({ ...prev, activeTool: "erase" }));
+    }
+  };
+
   const { handleFile } = useFileUpload();
   const srcRef = useRef(null);
   const resRef = useRef(null);
 
-  const isBatchView = batch.mode === "batch";
-  const isWorkflowView = batch.mode === "workflow";
+  const isBatchView = batch.batchMode === "batch" || currentService.id === "workflows";
+  const isWorkflowView = currentService.id === "workflows";
   const isMultiMode = isBatchView || isWorkflowView;
 
   const activeItemFromBatch = batch.items.find((i) => i.id === batch.activeItemId);
@@ -126,24 +225,7 @@ const Workspace = ({ batch }) => {
       <StatusBar />
 
       {isBatchView && batch.items.length > 0 && (
-        <BatchStrip
-          items={batch.items}
-          activeItemId={batch.activeItemId}
-          selectedIds={batch.selectedIds}
-          onSelectItem={batch.selectItem}
-          onToggleSelect={batch.toggleItemSelection}
-          onReorder={batch.reorderItems}
-          onRemove={batch.removeItem}
-          onAddFiles={batch.addFiles}
-          onClearMemory={() => {
-            // Send global dispose to all AI workers to free GPU memory
-            import("../../core/worker-registry").then(
-              ({ workerRegistry }) => {
-                workerRegistry.activate(""); // switches to 'null' service, evicting all others
-              },
-            );
-          }}
-        />
+        <BatchStrip />
       )}
 
       <div className="preview-container">
@@ -209,30 +291,162 @@ const Workspace = ({ batch }) => {
           </div>
         ) : (
           <div className="preview-panel">
-            <div className="preview-label preview-header">
-              <span>Result</span>
-              {resCanvasState && (
-                <Button
-                  variant="secondary"
-                  size="tiny"
-                  onClick={() => {
-                    const { filename, mimeType } = getDownloadMetadata(
-                      null,
-                      null,
-                      resCanvasState,
-                    );
-                    downloadCanvas(resCanvasState, filename, mimeType);
-                  }}
-                  icon={
-                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                      <polyline points="7 10 12 15 17 10" />
-                      <line x1="12" y1="15" x2="12" y2="3" />
-                    </svg>
-                  }
-                >
-                  Download
-                </Button>
+            <div className="preview-label preview-header" style={{ position: 'relative', minHeight: '38px', display: 'flex', alignItems: 'center' }}>
+              {editing.activeTool !== "none" ? (
+                /* Editing Mode Toolbar */
+                <div className="editor-toolbar">
+                  {/* Left Side: Tools & Brush Size */}
+                  <div className="editor-toolbar-group">
+                    {/* Glowing indicator */}
+                    <div className="editor-active-indicator" title="Edit Mode Active" />
+
+                    {/* Erase Tool */}
+                    <button
+                      type="button"
+                      title="Erase Mode (E)"
+                      onClick={() => setEditing((prev) => ({ ...prev, activeTool: "erase" }))}
+                      className={`editor-tool-btn${editing.activeTool === "erase" ? " is-active" : ""}`}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="m14 3-4.9 4.9"/>
+                        <path d="m8.5 8.5-5 5A2 2 0 0 0 5 17h10l5-5a2 2 0 0 0 0-2.8l-6-6Z"/>
+                      </svg>
+                    </button>
+
+                    {/* Restore Tool */}
+                    <button
+                      type="button"
+                      title="Restore Mode (R)"
+                      onClick={() => setEditing((prev) => ({ ...prev, activeTool: "restore" }))}
+                      className={`editor-tool-btn${editing.activeTool === "restore" ? " is-active" : ""}`}
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="m12 22 .7-2.7a2 2 0 0 0-.5-1.7l-8.2-8.2A2 2 0 0 1 6.8 6.6l8.2 8.2a2 2 0 0 0 1.7.5L19.4 16A1 1 0 0 0 21 15.3l.5-4.5a3 3 0 0 0-.8-2.3L12 1.3A3 3 0 0 0 9.7.5L5.2 1a1 1 0 0 0-.7 1.5Z"/>
+                      </svg>
+                    </button>
+
+                    <div className="editor-toolbar-divider" />
+
+                    {/* Brush Size Slider */}
+                    <div className="editor-brush-control">
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" title="Brush Size">
+                        <circle cx="12" cy="12" r="8"/>
+                        <circle cx="12" cy="12" r="3" fill="currentColor"/>
+                      </svg>
+                      <input
+                        type="range"
+                        min="5"
+                        max="150"
+                        value={editing.brushSize}
+                        onChange={(e) => setEditing((prev) => ({ ...prev, brushSize: parseInt(e.target.value) }))}
+                        className="editor-brush-range"
+                      />
+                      <span className="editor-brush-value">{editing.brushSize}px</span>
+                    </div>
+                  </div>
+
+                  {/* Right Side: Undo, Redo, Cancel, Save */}
+                  <div className="editor-toolbar-group">
+                    {/* Undo Button */}
+                    <button
+                      type="button"
+                      title="Undo stroke"
+                      onClick={handleUndo}
+                      disabled={historyIndex < 0}
+                      className="editor-tool-btn"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M3 7v6h6"/>
+                        <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>
+                      </svg>
+                    </button>
+
+                    {/* Redo Button */}
+                    <button
+                      type="button"
+                      title="Redo stroke"
+                      onClick={handleRedo}
+                      disabled={historyIndex >= historyStack.length - 1}
+                      className="editor-tool-btn"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M21 7v6h-6"/>
+                        <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/>
+                      </svg>
+                    </button>
+
+                    <div className="editor-toolbar-divider" />
+
+                    {/* Cancel Button */}
+                    <button
+                      type="button"
+                      title="Cancel changes"
+                      onClick={handleCancel}
+                      className="editor-tool-btn editor-tool-btn--danger"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <line x1="18" y1="6" x2="6" y2="18"/>
+                        <line x1="6" y1="6" x2="18" y2="18"/>
+                      </svg>
+                    </button>
+
+                    {/* Save Button */}
+                    <button
+                      type="button"
+                      title="Save changes"
+                      onClick={handleSave}
+                      className="editor-tool-btn editor-tool-btn--success"
+                    >
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                        <polyline points="20 6 9 17 4 12"/>
+                      </svg>
+                    </button>
+                  </div>
+                </div>
+              ) : (
+                /* Standard Mode Header */
+                <>
+                  <span>Result</span>
+                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                    {resCanvasState && ["background-removal", "object-segmentation"].includes(currentService.id) && (
+                      <button
+                        type="button"
+                        title="Touch up result manually"
+                        onClick={startTouchupMode}
+                        style={{
+                          background: 'transparent',
+                          border: '1px solid rgba(255, 255, 255, 0.08)',
+                          color: 'var(--text-muted)',
+                          borderRadius: 'var(--radius-sm)',
+                          padding: '4px 8px',
+                          cursor: 'pointer',
+                          display: 'inline-flex',
+                          alignItems: 'center',
+                          gap: '6px',
+                          fontSize: '12px',
+                          fontWeight: '600',
+                          transition: 'all var(--transition-fast)'
+                        }}
+                        onMouseEnter={(e) => {
+                          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                          e.currentTarget.style.color = 'var(--text-main)';
+                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)';
+                        }}
+                        onMouseLeave={(e) => {
+                          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                          e.currentTarget.style.color = 'var(--text-muted)';
+                          e.currentTarget.style.background = 'transparent';
+                        }}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M12 20h9"/>
+                          <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+                        </svg>
+                        Touchup
+                      </button>
+                    )}
+                  </div>
+                </>
               )}
             </div>
             <div className="preview-image-wrapper">
@@ -250,6 +464,7 @@ const Workspace = ({ batch }) => {
                     readOnly
                   />
                   <button
+                    type="button"
                     className="btn-copy-caption"
                     onClick={(e) => {
                       navigator.clipboard.writeText(resCanvas.dataset?.caption || "");
@@ -275,6 +490,28 @@ const Workspace = ({ batch }) => {
                 ref={resRef}
                 className={(!resCanvas || currentService.id === "captioning") ? "hidden" : ""}
               ></canvas>
+
+              {resCanvasState && !isProcessing && (
+                <button
+                  type="button"
+                  title="Download Result"
+                  className="result-download-fab"
+                  onClick={() => {
+                    const { filename, mimeType } = getDownloadMetadata(
+                      null,
+                      currentService.id,
+                      resCanvasState,
+                    );
+                    downloadCanvas(resCanvasState, filename, mimeType);
+                  }}
+                >
+                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                    <polyline points="7 10 12 15 17 10" />
+                    <line x1="12" y1="15" x2="12" y2="3" />
+                  </svg>
+                </button>
+              )}
             </div>
           </div>
         )}
@@ -282,67 +519,56 @@ const Workspace = ({ batch }) => {
 
       {currentService.id === "object-segmentation" && <SegmentationCandidates />}
 
-      <div className="actions actions-row">
-        <Button variant="secondary" onClick={handleReset}>
-          New Image
-        </Button>
+      {!isMultiMode && srcCanvas && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '28px 0', width: '100%' }}>
+          <Button variant="secondary" onClick={handleReset} style={{ padding: "6px 16px", fontSize: "13px" }}>
+            New Image
+          </Button>
 
-        {isMultiMode ? (
-          <>
-            <Button
-              variant="primary"
-              onClick={batch.downloadSelected}
-              disabled={batch.selectedIds.size === 0}
-              icon={
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="7 10 12 15 17 10" />
-                  <line x1="12" y1="15" x2="12" y2="3" />
-                </svg>
-              }
-            >
-              Download Selected ({batch.selectedIds.size})
-            </Button>
-            <Button
-              variant="primary"
-              onClick={batch.downloadAll}
-              disabled={batch.doneCount === 0}
-              icon={
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="7 10 12 15 17 10" />
-                  <line x1="12" y1="15" x2="12" y2="3" />
-                </svg>
-              }
-            >
-              Download All
-            </Button>
-          </>
-        ) : (
-          resCanvasState && (
-            <Button
-              variant="primary"
-              onClick={() => {
-                const { filename, mimeType } = getDownloadMetadata(
-                  null,
-                  currentService.id,
-                  resCanvasState,
-                );
-                downloadCanvas(resCanvasState, filename, mimeType);
-              }}
-              icon={
-                <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                  <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                  <polyline points="7 10 12 15 17 10" />
-                  <line x1="12" y1="15" x2="12" y2="3" />
-                </svg>
-              }
-            >
-              Download Result
-            </Button>
-          )
-        )}
-      </div>
+          <Button
+            variant="primary"
+            onClick={getProcessAction()}
+            style={{ padding: "6px 16px", fontSize: "13px" }}
+            disabled={isProcessing}
+            isLoading={isProcessing}
+          >
+            {getProcessLabel()}
+          </Button>
+        </div>
+      )}
+
+      {isMultiMode && (
+        <div className="actions actions-row" style={{ marginTop: '20px' }}>
+          <Button
+            variant="primary"
+            onClick={batch.downloadSelected}
+            disabled={batch.selectedIds.size === 0}
+            icon={
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+            }
+          >
+            Download Selected ({batch.selectedIds.size})
+          </Button>
+          <Button
+            variant="primary"
+            onClick={batch.downloadAll}
+            disabled={batch.doneCount === 0}
+            icon={
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                <polyline points="7 10 12 15 17 10" />
+                <line x1="12" y1="15" x2="12" y2="3" />
+              </svg>
+            }
+          >
+            Download All
+          </Button>
+        </div>
+      )}
     </div>
   );
 };

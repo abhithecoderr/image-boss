@@ -4,7 +4,7 @@
  */
 
 import imageCompression from 'browser-image-compression';
-import { loadImage, imageToCanvas, canvasToBlob } from '../../core/canvas-utils.js';
+import { loadImage, imageToCanvas, canvasToBlob, hasAlphaTransparency } from '../../core/canvas-utils.js';
 import { createProgressReporter } from '../../core/worker-utils.js';
 
 /**
@@ -23,17 +23,7 @@ export async function process(sourceCanvas, options = {}, onProgress) {
 
   // Detect transparency: if the image has an alpha channel, use lossless-friendly
   // WebP instead of JPEG to avoid destroying the transparent background.
-  let mimeType = 'image/jpeg';
-  try {
-    const sampleCtx = sourceCanvas.getContext('2d');
-    if (sampleCtx) {
-      // Sample a corner pixel — if alpha < 255 the image has transparency
-      const pixel = sampleCtx.getImageData(0, 0, 1, 1).data;
-      if (pixel[3] < 255) {
-        mimeType = 'image/webp';
-      }
-    }
-  } catch (_) { /* ignore — if sampling fails, default to jpeg */ }
+  const mimeType = hasAlphaTransparency(sourceCanvas) ? 'image/webp' : 'image/jpeg';
 
   // Convert canvas to blob/file for the compression library
   const blob = await canvasToBlob(sourceCanvas, mimeType, 1);

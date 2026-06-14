@@ -1,7 +1,8 @@
+/*
+ * Tracks batch items, active file selections, and workflow step histories.
+ */
 import { create } from "zustand";
 import { disposeBatchItem } from "../core/BatchItem";
-
-import { useSegmentationStore } from "./segmentationStore";
 
 export const useWorkspaceStore = create((set, get) => ({
   items: [],
@@ -48,23 +49,21 @@ export const useWorkspaceStore = create((set, get) => ({
     }));
   },
 
-  setResultCanvas: (canvas) => {
+  // stepId: optional — pass when updating a specific workflow step result (e.g. from mask editor)
+  setResultCanvas: (canvas, stepId = null) => {
     const { activeItemId } = get();
-    const activeStepId = useSegmentationStore.getState().editing.activeStepId;
-
     set((state) => ({
       items: state.items.map((item) => {
         if (item.id !== activeItemId) return item;
 
-        if (activeStepId) {
+        if (stepId) {
           const stepResults = item.stepResults || {};
-          const currentStepRes = stepResults[activeStepId] || {};
           return {
             ...item,
             stepResults: {
               ...stepResults,
-              [activeStepId]: {
-                ...currentStepRes,
+              [stepId]: {
+                ...(stepResults[stepId] || {}),
                 resultCanvas: canvas,
                 status: "done",
               },

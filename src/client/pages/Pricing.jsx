@@ -1,6 +1,37 @@
+/*
+ * Product pricing plans and feature comparisons.
+ */
+import React, { useState } from 'react';
 import { Link } from 'react-router-dom';
+import { useAuth } from '../store';
 
 const Pricing = () => {
+  const { isAuthenticated } = useAuth();
+  const [expandedIdx, setExpandedIdx] = useState(null);
+
+  const toggleFaq = (index) => {
+    setExpandedIdx(expandedIdx === index ? null : index);
+  };
+
+  const faqs = [
+    {
+      q: 'What image formats are supported?',
+      a: 'We support PNG, JPEG, WebP, and most common image formats.'
+    },
+    {
+      q: 'Is my data secure?',
+      a: 'Yes, all processing happens in your browser. Your images never leave your device.'
+    },
+    {
+      q: 'Can I cancel anytime?',
+      a: 'Absolutely. You can cancel your subscription at any time with no penalties.'
+    },
+    {
+      q: 'Do you offer refunds?',
+      a: 'We offer a 7-day money-back guarantee for all paid plans.'
+    }
+  ];
+
   const plans = [
     {
       name: 'Free',
@@ -79,33 +110,42 @@ const Pricing = () => {
                   </li>
                 ))}
               </ul>
-              <Link to="/services" className={`btn ${plan.popular ? 'btn-primary' : 'btn-secondary'} btn-large`}>
-                {plan.cta}
-              </Link>
+              {isAuthenticated && plan.name === 'Free' ? (
+                <button
+                  type="button"
+                  className="btn btn-secondary btn-large"
+                  disabled
+                  style={{ opacity: 0.6, cursor: 'not-allowed' }}
+                >
+                  Current Plan
+                </button>
+              ) : (
+                <Link to="/services" className={`btn ${plan.popular ? 'btn-primary' : 'btn-secondary'} btn-large`}>
+                  {isAuthenticated && plan.name === 'Pro' ? 'Upgrade to Pro' : plan.cta}
+                </Link>
+              )}
             </div>
           ))}
         </div>
       </section>
 
-      <section className="faq-section mt-4 p-4" style={{ background: 'var(--bg-surface)', borderRadius: 'var(--radius-lg)' }}>
+      <section className="faq-section mt-4 p-4" style={{ background: 'transparent' }}>
         <h2 className="pricing-title" style={{ fontSize: '2rem', textAlign: 'center', marginBottom: 'var(--space-6)' }}>Frequently Asked Questions</h2>
-        <div className="faq-grid" style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit, minmax(250px, 1fr))', gap: 'var(--space-6)', maxWidth: '900px', margin: '0 auto' }}>
-          <div className="faq-item">
-            <h3 style={{ marginBottom: 'var(--space-2)', color: 'var(--text-main)' }}>What image formats are supported?</h3>
-            <p className="text-muted">We support PNG, JPEG, WebP, and most common image formats.</p>
-          </div>
-          <div className="faq-item">
-            <h3 style={{ marginBottom: 'var(--space-2)', color: 'var(--text-main)' }}>Is my data secure?</h3>
-            <p className="text-muted">Yes, all processing happens in your browser. Your images never leave your device.</p>
-          </div>
-          <div className="faq-item">
-            <h3 style={{ marginBottom: 'var(--space-2)', color: 'var(--text-main)' }}>Can I cancel anytime?</h3>
-            <p className="text-muted">Absolutely. You can cancel your subscription at any time with no penalties.</p>
-          </div>
-          <div className="faq-item">
-            <h3 style={{ marginBottom: 'var(--space-2)', color: 'var(--text-main)' }}>Do you offer refunds?</h3>
-            <p className="text-muted">We offer a 7-day money-back guarantee for all paid plans.</p>
-          </div>
+        <div className="faq-accordion">
+          {faqs.map((faq, index) => {
+            const isExpanded = expandedIdx === index;
+            return (
+              <div key={index} className={`faq-accordion-item ${isExpanded ? 'is-expanded' : ''}`}>
+                <div className="faq-accordion-header" onClick={() => toggleFaq(index)}>
+                  <span>{faq.q}</span>
+                  <span className="faq-accordion-icon">▼</span>
+                </div>
+                <div className="faq-accordion-content">
+                  <p>{faq.a}</p>
+                </div>
+              </div>
+            );
+          })}
         </div>
       </section>
 

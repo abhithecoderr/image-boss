@@ -123,3 +123,43 @@
   background: rgba(31, 41, 55, 0.95);
   border-color: #ef4444;
 }
+
+/* Touch-only positive/negative toggle (replaces right-click/shift on touch devices). */
+.sam-touch-toggle {
+  position: absolute;
+  top: 10px;
+  left: 10px;
+  display: flex;
+  gap: 6px;
+  z-index: 160;
+  pointer-events: auto;
+}
+
+.sam-touch-toggle-btn {
+  padding: 6px 12px;
+  border-radius: var(--radius-sm);
+  font-size: 12px;
+  font-weight: 600;
+  cursor: pointer;
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  background: rgba(31, 41, 55, 0.85);
+  color: var(--text-muted);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  backdrop-filter: blur(4px);
+  transition: all var(--transition-fast);
+  min-height: 36px;
+}
+
+.sam-touch-toggle-btn.is-active.positive {
+  background: rgba(74, 222, 128, 0.2);
+  color: #4ade80;
+  border-color: rgba(74, 222, 128, 0.5);
+}
+
+.sam-touch-toggle-btn.is-active.negative {
+  background: rgba(239, 68, 68, 0.2);
+  color: #ef4444;
+  border-color: rgba(239, 68, 68, 0.5);
+}

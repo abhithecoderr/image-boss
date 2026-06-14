@@ -1,12 +1,38 @@
-import React from "react";
+import React, { useState, useEffect, useRef } from "react";
 import { Link } from "react-router-dom";
 import Logo from "../ui/Logo";
 import { useAuth } from "../../store";
 import { SERVICES, SERVICE_ORDER, SOLUTIONS, SOLUTIONS_ORDER } from "../../config";
 import NavDropdown from "./NavDropdown";
+import ConfirmModal from "../ui/ConfirmModal";
+import { UserIcon, LogOutIcon } from "../ui/Icons";
+import { useMediaQuery } from "../../hooks/useMediaQuery";
 
-const Navbar = ({ minimal = false }) => {
+const Navbar = ({ minimal = false, onToggleSidebar }) => {
   const { user, logout, isAuthenticated } = useAuth();
+
+  const [isDropdownOpen, setIsDropdownOpen] = useState(false);
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+  const dropdownRef = useRef(null);
+
+  // Secondary nav links (Product/Solutions/Pricing/About) are hidden on phones;
+  // the app-sidebar hamburger only appears in the minimal (app) shell.
+  const isMobile = useMediaQuery("(max-width: 991px)");
+
+  useEffect(() => {
+    const handleClickOutside = (event) => {
+      if (dropdownRef.current && !dropdownRef.current.contains(event.target)) {
+        setIsDropdownOpen(false);
+      }
+    };
+
+    if (isDropdownOpen) {
+      document.addEventListener("mousedown", handleClickOutside);
+    }
+    return () => {
+      document.removeEventListener("mousedown", handleClickOutside);
+    };
+  }, [isDropdownOpen]);
 
   const activeServiceIds = SERVICE_ORDER.filter(id => !SERVICES[id]?.disabled);
 
@@ -31,9 +57,25 @@ const Navbar = ({ minimal = false }) => {
   return (
     <nav className="navbar">
       <div className="navbar-container">
+        {minimal && isMobile && (
+          <button
+            type="button"
+            className="navbar-hamburger"
+            onClick={onToggleSidebar}
+            aria-label="Open services menu"
+          >
+            <svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round">
+              <line x1="3" y1="6" x2="21" y2="6" />
+              <line x1="3" y1="12" x2="21" y2="12" />
+              <line x1="3" y1="18" x2="21" y2="18" />
+            </svg>
+          </button>
+        )}
+
         <Logo />
-        
-        {!minimal && (
+
+        {/* Marketing nav links — hidden on phones (mobile decision: keep only auth actions). */}
+        {!minimal && !isAuthenticated && !isMobile && (
           <div className="navbar-links">
             <NavDropdown
               triggerText="Product"
@@ -63,40 +105,72 @@ const Navbar = ({ minimal = false }) => {
             </Link>
           </div>
         )}
-        
+
         <div className="navbar-actions">
           {isAuthenticated ? (
             <>
-              <Link to="/services" className="navbar-link" style={{ fontWeight: "500" }}>
+              <Link to="/services" className="navbar-link navbar-dashboard-link">
                 Dashboard
               </Link>
-              <div style={{ display: "flex", alignItems: "center", gap: "var(--space-3)" }}>
+              <div className="navbar-right-group">
+                {/* Credits Indicator */}
                 <div
-                  title={user?.email}
-                  style={{
-                    width: "32px",
-                    height: "32px",
-                    borderRadius: "50%",
-                    backgroundColor: "var(--accent-primary)",
-                    color: "var(--text-inverse)",
-                    display: "flex",
-                    alignItems: "center",
-                    justifyContent: "center",
-                    fontWeight: "600",
-                    fontSize: "12px",
-                    userSelect: "none",
-                    boxShadow: "0 0 0 2px rgba(245, 166, 35, 0.2)"
-                  }}
+                  className="navbar-credits"
+                  title="Your remaining processing credits"
                 >
-                  {user?.initials || "US"}
+                  <svg
+                    className="navbar-credits-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2.5"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                  >
+                    <circle cx="12" cy="12" r="8"/>
+                    <line x1="12" y1="8" x2="12" y2="16"/>
+                    <line x1="8" y1="12" x2="16" y2="12"/>
+                  </svg>
+                  <span>{typeof user?.credits === 'number' ? user.credits : 100} Cr</span>
                 </div>
-                <button
-                  onClick={logout}
-                  className="btn btn-secondary btn-tiny"
-                  style={{ padding: "var(--space-1) var(--space-3)", borderRadius: "var(--radius-sm)" }}
-                >
-                  Sign Out
-                </button>
+
+                {/* Profile Dropdown Container */}
+                <div ref={dropdownRef} className="profile-menu-container">
+                  <button
+                    type="button"
+                    onClick={() => setIsDropdownOpen(!isDropdownOpen)}
+                    className="profile-avatar-btn"
+                  >
+                    {user?.initials || "US"}
+                  </button>
+
+                  {isDropdownOpen && (
+                    <div className="profile-dropdown">
+                      <div className="dropdown-header">
+                        <span className="dropdown-name">{user?.name || "Member"}</span>
+                        <span className="dropdown-email">{user?.email}</span>
+                      </div>
+                      <div className="dropdown-divider"></div>
+                      <Link
+                        to="/profile"
+                        className="dropdown-item"
+                        onClick={() => setIsDropdownOpen(false)}
+                      >
+                        <UserIcon size={14} /> My Profile
+                      </Link>
+                      <button
+                        type="button"
+                        className="dropdown-item logout-btn"
+                        onClick={() => {
+                          setIsDropdownOpen(false);
+                          setShowLogoutConfirm(true);
+                        }}
+                      >
+                        <LogOutIcon size={14} /> Log Out
+                      </button>
+                    </div>
+                  )}
+                </div>
               </div>
             </>
           ) : (
@@ -111,6 +185,18 @@ const Navbar = ({ minimal = false }) => {
           )}
         </div>
       </div>
+      <ConfirmModal
+        isOpen={showLogoutConfirm}
+        onClose={() => setShowLogoutConfirm(false)}
+        onConfirm={() => {
+          setShowLogoutConfirm(false);
+          logout();
+        }}
+        title="Confirm Log Out"
+        message="Are you sure you want to log out of your Image Boss account?"
+        confirmText="Log Out"
+        isDanger
+      />
     </nav>
   );
 };

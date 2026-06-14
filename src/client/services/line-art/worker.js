@@ -4,11 +4,10 @@
  */
 
 import * as ort from "onnxruntime-web/webgpu";
-import { getGPUConfig, createProgressReporter } from '../../core/worker-utils.js';
+import { getGPUConfig, createProgressReporter, fetchWithProgress, imageToTensor, configureOrt } from '../../core/worker-utils.js';
 
-// Configure ONNX Runtime (Loaded locally to prevent COEP blocks)
-const ORT_VERSION = "1.20.1";
-ort.env.wasm.wasmPaths = '/onnx/';
+// Configure ONNX Runtime
+configureOrt(ort);
 
 import { LINE_ART_MODELS } from '../../config/models.js';
 
@@ -20,39 +19,6 @@ let session = null;
 let currentVariant = null;
 let currentDevice = "wasm";
 let isInitializing = false;
-
-async function fetchWithProgress(url, label, report, startWeight, endWeight) {
-  const response = await fetch(url);
-  if (!response.ok) throw new Error(`Failed to fetch ${label}: ${response.statusText}`);
-
-  const contentLength = response.headers.get("Content-Length");
-  const total = contentLength ? parseInt(contentLength, 10) : 0;
-  let loaded = 0;
-
-  const reader = response.body.getReader();
-  const chunks = [];
-  const reportProgress = report(startWeight, endWeight, `Downloading ${label}...`);
-
-  while (true) {
-    const { done, value } = await reader.read();
-    if (done) break;
-    chunks.push(value);
-    loaded += value.length;
-
-    if (total) {
-      reportProgress((loaded / total) * 100);
-    }
-  }
-
-  const result = new Uint8Array(loaded);
-  let offset = 0;
-  for (const chunk of chunks) {
-    result.set(chunk, offset);
-    offset += chunk.length;
-  }
-
-  return result.buffer;
-}
 
 async function initSession(variant = "anime", onProgress) {
   if (session && currentVariant === variant) return session;
@@ -105,19 +71,13 @@ async function runInference(bitmap, options, onProgress) {
   const width = bitmap.width;
   const height = bitmap.height;
 
-  // 1. Preprocessing
-  const canvas = new OffscreenCanvas(MODEL_SIZE, MODEL_SIZE);
-  const ctx = canvas.getContext('2d');
-  ctx.drawImage(bitmap, 0, 0, width, height, 0, 0, MODEL_SIZE, MODEL_SIZE);
-  const imageData = ctx.getImageData(0, 0, MODEL_SIZE, MODEL_SIZE).data;
-
-  // Image to Tensor (BCHW, Normalized)
-  const tensorData = new Float32Array(1 * 3 * MODEL_SIZE * MODEL_SIZE);
-  for (let i = 0; i < MODEL_SIZE * MODEL_SIZE; i++) {
-    tensorData[i] = imageData[i * 4] / 255.0; // R
-    tensorData[MODEL_SIZE * MODEL_SIZE + i] = imageData[i * 4 + 1] / 255.0; // G
-    tensorData[2 * MODEL_SIZE * MODEL_SIZE + i] = imageData[i * 4 + 2] / 255.0; // B
-  }
+  // 1. Preprocessing & Image to Tensor
+  const tensorData = await imageToTensor(bitmap, MODEL_SIZE, {
+    mean: [0, 0, 0],
+    std: [1, 1, 1],
+    layout: 'NCHW',
+    scale: 1.0 / 255.0
+  });
 
   const tensor = new ort.Tensor("float32", tensorData, [1, 3, MODEL_SIZE, MODEL_SIZE]);
 

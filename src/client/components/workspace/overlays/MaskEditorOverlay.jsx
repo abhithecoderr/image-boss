@@ -8,30 +8,56 @@ const MaskEditorOverlay = ({ resRef }) => {
   const { startDrawing, moveDrawing, endDrawing } = useMaskEditor(resRef);
   const brushPreviewRef = useRef(null);
 
+  // Move the brush-preview circle to the pointer. Works for mouse and touch;
+  // `target` is the overlay div, and `point` is either the MouseEvent or a
+  // Touch from e.touches[0].
+  const updatePreview = (target, clientX, clientY) => {
+    if (!brushPreviewRef.current) return;
+    const rect = target.getBoundingClientRect();
+    const x = clientX - rect.left;
+    const y = clientY - rect.top;
+    const size = editing.brushSize;
+
+    brushPreviewRef.current.style.display = "block";
+    brushPreviewRef.current.style.left = `${x - size / 2}px`;
+    brushPreviewRef.current.style.top = `${y - size / 2}px`;
+    brushPreviewRef.current.style.width = `${size}px`;
+    brushPreviewRef.current.style.height = `${size}px`;
+  };
+
   const handleMouseMove = (e) => {
     // Call the mask editor's drawing handler
     moveDrawing(e);
+    updatePreview(e.currentTarget, e.clientX, e.clientY);
+  };
 
-    // Update brush preview position and size (centered on cursor, relative to container)
+  const handleMouseLeave = () => {
+    // End drawing
+    endDrawing();
+    // Hide brush preview
     if (brushPreviewRef.current) {
-      const rect = e.currentTarget.getBoundingClientRect();
-      const x = e.clientX - rect.left;
-      const y = e.clientY - rect.top;
-      const size = editing.brushSize;
-
-      brushPreviewRef.current.style.display = "block";
-      brushPreviewRef.current.style.left = `${x - size / 2}px`;
-      brushPreviewRef.current.style.top = `${y - size / 2}px`;
-      brushPreviewRef.current.style.width = `${size}px`;
-      brushPreviewRef.current.style.height = `${size}px`;
+      brushPreviewRef.current.style.display = "none";
     }
   };
 
-  const handleMouseLeave = (e) => {
-    // End drawing
-    endDrawing(e);
+  // Touch: feed the first touch into the same draw path. preventDefault stops
+  // the page from scrolling while the user paints with their finger.
+  const handleTouchStart = (e) => {
+    if (e.touches.length === 0) return;
+    e.preventDefault();
+    startDrawing(e);
+    updatePreview(e.currentTarget, e.touches[0].clientX, e.touches[0].clientY);
+  };
 
-    // Hide brush preview
+  const handleTouchMove = (e) => {
+    if (e.touches.length === 0) return;
+    e.preventDefault();
+    moveDrawing(e);
+    updatePreview(e.currentTarget, e.touches[0].clientX, e.touches[0].clientY);
+  };
+
+  const handleTouchEnd = () => {
+    endDrawing();
     if (brushPreviewRef.current) {
       brushPreviewRef.current.style.display = "none";
     }
@@ -47,6 +73,9 @@ const MaskEditorOverlay = ({ resRef }) => {
         onMouseMove={handleMouseMove}
         onMouseUp={endDrawing}
         onMouseLeave={handleMouseLeave}
+        onTouchStart={handleTouchStart}
+        onTouchMove={handleTouchMove}
+        onTouchEnd={handleTouchEnd}
       />
       <div ref={brushPreviewRef} className="brush-preview" />
     </>

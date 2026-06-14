@@ -8,6 +8,13 @@
       "when": 1780161092485,
       "tag": "0000_bright_true_believers",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "6",
+      "when": 1781377931353,
+      "tag": "0001_steady_switch",
+      "breakpoints": true
     }
   ]
 }

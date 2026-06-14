@@ -63,6 +63,24 @@ class ProcessorEngine {
   }
 
   /**
+   * Evict the active processor and terminate its worker.
+   */
+  clearActiveProcessor() {
+    workerRegistry.activate("");
+    if (this._activeId && this._processors[this._activeId]) {
+      const prev = this._processors[this._activeId];
+      if (prev.dispose) {
+        try {
+          prev.dispose();
+        } catch (err) {
+          console.warn(`[ProcessorEngine] Error disposing active processor:`, err);
+        }
+      }
+    }
+    this._activeId = null;
+  }
+
+  /**
    * Get the current active processor
    */
   get activeProcessor() {

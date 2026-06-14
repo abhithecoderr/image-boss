@@ -1,3 +1,6 @@
+/*
+ * Overlay preview canvas responsible for drawing overlay masks, manual brush touch-ups, and interactive segment selection.
+ */
 import React, {
   useState,
   useRef,
@@ -179,13 +182,13 @@ const EditorPreview = ({ sourceCanvas }) => {
 
   const { css: filterStyle, svg: svgFilterContent } = getEditorStyles(settings);
 
-  const onCropReady = React.useCallback((pixels) => {
+  const onCropReady = (pixels) => {
     updateServiceSetting("image-editor", "cropPixels", pixels);
-  }, [updateServiceSetting]);
+  };
 
-  const handleInteraction = React.useCallback(() => {
+  const handleInteraction = () => {
     updateServiceSetting("image-editor", "aspectRatio", "free");
-  }, [updateServiceSetting]);
+  };
 
   if (!imgSrc)
     return <div className="editor-preview-placeholder">Load image</div>;

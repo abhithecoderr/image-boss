@@ -88,3 +88,42 @@
   opacity: 0.25;
   cursor: not-allowed;
 }
+
+/* --- Mobile drawer --- */
+@media (max-width: 991px) {
+  /* Sidebar becomes a slide-in drawer off the left edge, below the fixed navbar. */
+  .sidebar {
+    position: fixed;
+    left: 0;
+    top: 72px;
+    bottom: 0;
+    height: auto;
+    width: 240px;
+    background: var(--bg-surface);
+    border-right: 1px solid var(--border-subtle);
+    box-shadow: var(--shadow-layered);
+    transform: translateX(-100%);
+    transition: transform var(--transition-normal);
+    z-index: 200;
+    padding-top: var(--space-4);
+    will-change: transform;
+  }
+
+  .sidebar.is-open {
+    transform: translateX(0);
+  }
+
+  /* Full-width tap target behind the drawer to close it. */
+  .sidebar-backdrop {
+    position: fixed;
+    inset: 72px 0 0 0;
+    background: rgba(0, 0, 0, 0.5);
+    z-index: 199;
+    animation: sidebarBackdropFade var(--transition-normal);
+  }
+
+  @keyframes sidebarBackdropFade {
+    from { opacity: 0; }
+    to { opacity: 1; }
+  }
+}

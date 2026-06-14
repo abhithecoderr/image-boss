@@ -15,7 +15,7 @@
     "better-auth": "^1.6.11",
     "browser-image-compression": "^2.0.2",
     "drizzle-orm": "^0.45.2",
-    "onnxruntime-web": "^1.20.1",
+    "onnxruntime-web": "1.26.0-dev.20260416-b7804b056c",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-image-crop": "^11.0.10",
@@ -23,9 +23,12 @@
     "zustand": "^5.0.14"
   },
   "devDependencies": {
+    "@babel/parser": "^7.29.7",
+    "@babel/traverse": "^7.29.7",
     "@cloudflare/vite-plugin": "^1.39.0",
     "@libsql/client": "^0.17.3",
     "@vitejs/plugin-react": "^4.3.4",
+    "babel-plugin-react-compiler": "^1.0.0",
     "dotenv": "^17.4.2",
     "drizzle-kit": "^0.31.10",
     "hono": "^4.12.23",

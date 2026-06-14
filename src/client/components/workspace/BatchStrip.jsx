@@ -1,5 +1,5 @@
 /**
- * BatchStrip — Horizontal thumbnail strip for batch mode.
+ * Horizontal thumbnail strip for batch mode.
  * Renders above the source canvas. Supports:
  * - Drag-to-reorder (native HTML5 DnD)
  * - Click to view, Ctrl+Click to multi-select
@@ -8,9 +8,11 @@
  * - Remove on hover (×)
  */
 
-import React, { useRef, useState, useCallback } from "react";
+import React, { useRef, useState } from "react";
 import Button from "../ui/Button";
 import Badge from "../ui/Badge";
+import { useUnifiedProcessor } from "../../hooks/useUnifiedProcessor";
+import { processorEngine } from "../../core/processor-engine";
 
 // Premium thin-line vector status icons
 const STATUS_ICONS = {
@@ -33,43 +35,48 @@ const STATUS_ICONS = {
   ),
 };
 
-const BatchStrip = ({
-  items,
-  activeItemId,
-  selectedIds,
-  onSelectItem,
-  onToggleSelect,
-  onReorder,
-  onRemove,
-  onAddFiles,
-  onClearMemory,
-}) => {
+const BatchStrip = () => {
+  const batch = useUnifiedProcessor();
+  const {
+    items,
+    activeItemId,
+    selectedIds,
+    selectItem: onSelectItem,
+    toggleItemSelection: onToggleSelect,
+    reorderItems: onReorder,
+    removeItem: onRemove,
+    addFiles: onAddFiles,
+  } = batch;
+
+  const onClearMemory = () => {
+    processorEngine.clearActiveProcessor();
+  };
+
   const fileInputRef = useRef(null);
   const [dragOverIdx, setDragOverIdx] = useState(null);
   const dragItemIdx = useRef(null);
 
   // --- Drag Handlers ---
-  const handleDragStart = useCallback((e, idx) => {
+  const handleDragStart = (e, idx) => {
     dragItemIdx.current = idx;
     e.dataTransfer.effectAllowed = "move";
     // Make the drag image semi-transparent
     e.currentTarget.style.opacity = "0.4";
-  }, []);
+  };
 
-  const handleDragEnd = useCallback((e) => {
+  const handleDragEnd = (e) => {
     e.currentTarget.style.opacity = "1";
     dragItemIdx.current = null;
     setDragOverIdx(null);
-  }, []);
+  };
 
-  const handleDragOver = useCallback((e, idx) => {
+  const handleDragOver = (e, idx) => {
     e.preventDefault();
     e.dataTransfer.dropEffect = "move";
     setDragOverIdx(idx);
-  }, []);
+  };
 
-  const handleDrop = useCallback(
-    (e, toIdx) => {
+  const handleDrop = (e, toIdx) => {
       e.preventDefault();
       const fromIdx = dragItemIdx.current;
       if (fromIdx !== null && fromIdx !== toIdx) {
@@ -77,21 +84,16 @@ const BatchStrip = ({
       }
       dragItemIdx.current = null;
       setDragOverIdx(null);
-    },
-    [onReorder],
-  );
+    };
 
   // --- Click Handler ---
-  const handleClick = useCallback(
-    (e, id) => {
+  const handleClick = (e, id) => {
       if (e.ctrlKey || e.metaKey) {
         onToggleSelect(id);
       } else {
         onSelectItem(id);
       }
-    },
-    [onSelectItem, onToggleSelect],
-  );
+    };
 
   // --- File Add ---
   const handleAddClick = () => {
