@@ -301,9 +301,100 @@ export async function imageToTensor(bitmap, size, options = {}) {
  */
 export function configureOrt(ort, threads = null) {
   ort.env.wasm.wasmPaths =
-    "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0-dev.20260416-b7804b056c/dist/";
+    "https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/";
   const resolvedThreads =
     threads || Math.min(4, self.navigator?.hardwareConcurrency || 4);
   ort.env.wasm.numThreads = resolvedThreads;
   ort.env.wasm.simd = true;
+}
+
+/**
+ * Factory for an ORT session lifecycle manager.
+ *
+ * Encapsulates the module-level session/variant/device state plus the
+ * re-entrancy guard that several workers (blur, line-art) were copy-pasting
+ * with an `isInitializing` busy-wait loop. A single pending-promise replaces
+ * the polling loop.
+ *
+ * Usage:
+ *   const mgr = createOrtSessionManager(ort, {
+ *     async resolveBuffer(variant, report) { ... return ArrayBuffer },
+ *     buildProviders(hw, variant) { return ["webgpu","wasm"] },
+ *   });
+ *   const session = await mgr.get(variant, onProgress);
+ *   mgr.release();  // on dispose
+ *
+ * @param {object} ort - the onnxruntime-web module
+ * @param {object} opts
+ * @param {(variant: string, report: Function) => Promise<ArrayBuffer>} opts.resolveBuffer
+ * @param {(hw: object, variant: string) => Array} [opts.buildProviders]
+ * @returns {{ get: Function, release: Function, getDevice: Function }}
+ */
+export function createOrtSessionManager(ort, opts) {
+  const { resolveBuffer, buildProviders } = opts;
+  let session = null;
+  let currentVariant = null;
+  let currentDevice = null;
+  let pendingPromise = null;
+
+  async function get(variant, onProgress) {
+    // Already loaded for this variant — reuse.
+    if (session && currentVariant === variant) return session;
+
+    // Another caller is already loading — await the same promise (no busy-wait).
+    if (pendingPromise) return pendingPromise;
+
+    pendingPromise = (async () => {
+      const report = createProgressReporter(onProgress);
+      try {
+        const modelBuffer = await resolveBuffer(variant, report);
+
+        let executionProviders;
+        let deviceLabel = "WASM";
+        if (buildProviders) {
+          executionProviders = buildProviders(await getGPUConfig(), variant);
+          deviceLabel = executionProviders[0] === "webgpu" ? "WEBGPU" : "WASM";
+        } else {
+          const hw = await getGPUConfig();
+          executionProviders = hw.supported ? ["webgpu", "wasm"] : ["wasm"];
+          deviceLabel = hw.supported ? "WEBGPU" : "WASM";
+        }
+
+        report(0.8, 0.8, `Initializing session (${deviceLabel})...`)(0);
+        session = await ort.InferenceSession.create(modelBuffer, {
+          executionProviders,
+          graphOptimizationLevel: "all",
+        });
+        currentVariant = variant;
+        currentDevice = executionProviders[0] === "webgpu" ? "webgpu" : "wasm";
+        report(0.9, 0.9, "Ready")(0);
+        return session;
+      } catch (err) {
+        // Reset so the next call can retry.
+        if (session) { try { session.release(); } catch (_) {} }
+        session = null;
+        currentVariant = null;
+        throw err;
+      } finally {
+        pendingPromise = null;
+      }
+    })();
+
+    return pendingPromise;
+  }
+
+  function release() {
+    if (session) {
+      try { session.release(); } catch (_) {}
+    }
+    session = null;
+    currentVariant = null;
+    currentDevice = null;
+  }
+
+  function getDevice() {
+    return currentDevice;
+  }
+
+  return { get, release, getDevice };
 }

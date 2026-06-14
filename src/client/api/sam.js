@@ -130,39 +130,3 @@ export function applySamOverlay(sourceImg, maskImg, color = 'rgba(0, 100, 255, 0
     ctx.drawImage(maskCanvas, 0, 0);
     return canvas;
 }
-
-/**
- * High-level plug-and-play function to segment an object and return a processed PNG Blob.
- * @param {string} apiUrl - Base API URL
- * @param {Blob|File} imageFile - The original image file
- * @param {Array<Array<number>>} points - Coordinate points array
- * @param {Array<number>} labels - Labels array
- * @param {object} [options] - Additional parameters
- * @param {string} [options.outputMode='cutout'] - Output mode ('cutout' for transparent background, 'overlay' for colored highlight)
- * @param {string} [options.overlayColor='rgba(0, 100, 255, 0.55)'] - Highlight color when outputMode is 'overlay'
- * @returns {Promise<Blob>} Output PNG image Blob
- */
-export async function segmentImage(apiUrl, imageFile, points, labels, options = {}) {
-    const fetchOptions = { ...options, outputType: 'mask' };
-    const maskBlob = await samPredict(apiUrl, imageFile, points, labels, fetchOptions);
-    
-    const [sourceImg, maskImg] = await Promise.all([
-        loadImage(imageFile),
-        loadImage(maskBlob)
-    ]);
-    
-    let canvas;
-    if (options.outputMode === 'overlay') {
-        canvas = applySamOverlay(sourceImg, maskImg, options.overlayColor);
-    } else {
-        canvas = applySamCutout(sourceImg, maskImg);
-    }
-    
-    // Clean up memory
-    if (sourceImg.src.startsWith('blob:')) URL.revokeObjectURL(sourceImg.src);
-    if (maskImg.src.startsWith('blob:')) URL.revokeObjectURL(maskImg.src);
-    
-    return new Promise((resolve) => {
-        canvas.toBlob((blob) => resolve(blob), 'image/png');
-    });
-}

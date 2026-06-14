@@ -12,7 +12,7 @@ env.allowLocalModels = false;
 env.useWasmCache = false; // Disable buggy/redundant WASM preloader cache
 
 if (env.backends?.onnx) {
-  env.backends.onnx.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0-dev.20260416-b7804b056c/dist/';
+  env.backends.onnx.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/';
   env.backends.onnx.wasm.numThreads = Math.min(4, self.navigator?.hardwareConcurrency || 4);
   if (!env.backends.onnx.webgpu) {
     env.backends.onnx.webgpu = {};
@@ -183,5 +183,6 @@ self.onmessage = async ({ data }) => {
     model = null;
     processor = null;
     currentModelId = null;
+    self.postMessage({ type: 'disposed' });
   }
 };

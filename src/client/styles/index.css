@@ -19,7 +19,6 @@
 
 /* 06 Components - Reusable UI */
 @import './06-components/ui/button.css';
-@import './06-components/ui/arrow-button.css';
 @import './06-components/ui/select.css';
 @import './06-components/ui/slider.css';
 @import './06-components/ui/toggle.css';

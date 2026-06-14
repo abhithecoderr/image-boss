@@ -348,3 +348,16 @@ export async function createAlphaMaskFromTensors(outputData, size, outputType, c
   ctx.putImageData(outImgData, 0, 0);
   return await createImageBitmap(canvas);
 }
+
+/**
+ * Drop the module-level canvas/ctx caches so their backing stores can be GC'd
+ * when the worker is being disposed. Called from the worker's `dispose` path.
+ */
+export function releaseHelperCaches() {
+  cachedMaskCanvas = null;
+  cachedMaskCtx = null;
+  cachedFilterCanvas = null;
+  cachedFilterCtx = null;
+  cachedAlphaCanvas = null;
+  cachedAlphaCtx = null;
+}

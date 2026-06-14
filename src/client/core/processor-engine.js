@@ -56,7 +56,7 @@ class ProcessorEngine {
     }
 
     // The engine is the single owner of activation/eviction policy.
-    workerRegistry.activate(serviceId);
+    await workerRegistry.activate(serviceId);
 
     this._activeId = serviceId;
     return this.load(serviceId);
@@ -65,8 +65,8 @@ class ProcessorEngine {
   /**
    * Evict the active processor and terminate its worker.
    */
-  clearActiveProcessor() {
-    workerRegistry.activate("");
+  async clearActiveProcessor() {
+    await workerRegistry.activate("");
     if (this._activeId && this._processors[this._activeId]) {
       const prev = this._processors[this._activeId];
       if (prev.dispose) {

@@ -13,6 +13,7 @@ export function createBatchItem({ id, name, file = null, sourceCanvas = null }) 
     status: 'pending', // pending, processing, done, error
     error: null,
     stepResults: {}, // For workflows
+    serviceResults: {}, // Persist final results per service
     downloaded: false,
     thumbnailUrl: null, // For caching pre-generated thumbnails
   };
@@ -51,6 +52,13 @@ export function disposeBatchItem(item) {
   }
   if (item.stepResults) {
     Object.values(item.stepResults).forEach(res => {
+      if (res.resultCanvas?.close) {
+        try { res.resultCanvas.close(); } catch (_) {}
+      }
+    });
+  }
+  if (item.serviceResults) {
+    Object.values(item.serviceResults).forEach(res => {
       if (res.resultCanvas?.close) {
         try { res.resultCanvas.close(); } catch (_) {}
       }

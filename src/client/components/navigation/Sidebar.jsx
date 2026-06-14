@@ -1,17 +1,40 @@
-import React from "react";
+import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { useService } from "../../store";
+import { useService, useWorkspace } from "../../store";
 import { SERVICE_ORDER } from "../../config/app";
 import { SERVICES } from "../../config/services";
 import ServiceIcon from "../ui/ServiceIcon";
+import ConfirmModal from "../ui/ConfirmModal";
 
 const Sidebar = ({ isOpen = false, onClose }) => {
   const { currentService } = useService();
+  const hasResult = useWorkspace(
+    (state) => !!state.items.find((i) => i.id === state.activeItemId)?.resultCanvas,
+  );
+  const isProcessing = useWorkspace((state) => state.isProcessing);
   const navigate = useNavigate();
 
+  const [pendingService, setPendingService] = useState(null);
+
   const handleNavigate = (id) => {
+    // Same service — no warning needed.
+    if (id === currentService.id) return;
+
+    // Only warn if the service is currently processing.
+    if (isProcessing) {
+      setPendingService({ id, name: SERVICES[id]?.name || id });
+      return;
+    }
+
     navigate(`/services/${id}`);
-    // Close the mobile drawer after navigating (no-op on desktop).
+    if (onClose) onClose();
+  };
+
+  const confirmSwitch = () => {
+    if (pendingService) {
+      navigate(`/services/${pendingService.id}`);
+    }
+    setPendingService(null);
     if (onClose) onClose();
   };
 
@@ -49,6 +72,21 @@ const Sidebar = ({ isOpen = false, onClose }) => {
           })}
         </nav>
       </aside>
+
+      <ConfirmModal
+        isOpen={!!pendingService}
+        onClose={() => setPendingService(null)}
+        onConfirm={confirmSwitch}
+        title="Switch service?"
+        message={
+          pendingService
+            ? `Switching to ${pendingService.name} will discard the current result. Continue?`
+            : ""
+        }
+        confirmText={`Switch to ${pendingService?.name || ""}`}
+        cancelText="Stay"
+        isDanger
+      />
     </>
   );
 };

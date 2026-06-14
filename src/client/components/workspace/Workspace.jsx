@@ -3,7 +3,7 @@
  */
 import React, { useRef, useEffect, useState } from "react";
 import { useUI, useWorkspace, useService, useSegmentation } from "../../store";
-import { useUnifiedProcessor } from "../../hooks/useUnifiedProcessor";
+import { useProcessor } from "../../hooks/useProcessorContext";
 import { useFileUpload } from "../../hooks/useFileUpload";
 import SAMOverlay from "./overlays/SAMOverlay";
 import SegmentationCandidates from "./SegmentationCandidates";
@@ -18,6 +18,26 @@ import UploadZone from "../ui/UploadZone";
 import Button from "../ui/Button";
 import { useSAM } from "../../hooks/useSAM";
 
+/**
+ * Release a single canvas's backing store. Works for HTMLCanvasElement
+ * (zero its size), OffscreenCanvas, and ImageBitmap (both have `.close()`).
+ */
+function disposeCanvas(canvas) {
+  if (!canvas) return;
+  if (typeof canvas.close === 'function') {
+    try { canvas.close(); } catch (_) {}
+  } else if (canvas.width !== undefined) {
+    // HTMLCanvasElement — shrink to 0×0 to free the pixel buffer immediately.
+    try { canvas.width = 0; canvas.height = 0; } catch (_) {}
+  }
+}
+
+/** Dispose every canvas in a history stack before it's discarded. */
+function disposeHistoryStack(stack) {
+  if (!Array.isArray(stack)) return;
+  for (const canvas of stack) disposeCanvas(canvas);
+}
+
 const StatusBar = () => {
   const { progress } = useUI();
   const isProcessing = useWorkspace((state) => state.isProcessing);
@@ -31,7 +51,7 @@ const StatusBar = () => {
 };
 
 const Workspace = () => {
-  const batch = useUnifiedProcessor();
+  const batch = useProcessor();
   const { currentService, getDownloadMetadata, serviceSettings } = useService();
   const { executeSmartSelect } = useSAM();
   const magicEraseMaskCanvas = useSegmentation((state) => state.magicEraseMaskCanvas);
@@ -76,6 +96,7 @@ const Workspace = () => {
     // Reset editing state on switch
     setEditing((prev) => ({ ...prev, activeTool: "none" }));
     setInitialCanvasBackup(null);
+    disposeHistoryStack(historyStack);
     setHistoryStack([]);
     setHistoryIndex(-1);
   }, [currentService.id, resetSegmentationState, setEditing]);
@@ -85,6 +106,7 @@ const Workspace = () => {
     resetSegmentationState();
     setEditing((prev) => ({ ...prev, activeTool: "none" }));
     setInitialCanvasBackup(null);
+    disposeHistoryStack(historyStack);
     setHistoryStack([]);
     setHistoryIndex(-1);
   };
@@ -127,6 +149,9 @@ const Workspace = () => {
     }
     setEditing((prev) => ({ ...prev, activeTool: "none" }));
     setInitialCanvasBackup(null);
+    // Note: we intentionally do NOT dispose the history stack here — its
+    // entries may still be referenced by resultCanvas until GC reclaims them.
+    // Disposal happens on reset / service-switch where all canvases are dropped.
     setHistoryStack([]);
     setHistoryIndex(-1);
   };

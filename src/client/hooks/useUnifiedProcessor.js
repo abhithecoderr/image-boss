@@ -24,6 +24,11 @@ export const useUnifiedProcessor = () => {
   const { refetchSession } = useAuth();
 
   const lastRunStepsRef = useRef(null);
+  // Run token: incremented whenever the active service changes. Execution paths
+  // capture the token at start and bail before writing results if it changed —
+  // this prevents a slow (post-eviction) result/progress from service A from
+  // leaking into service B after a fast switch.
+  const runTokenRef = useRef(0);
   const {
     items,
     setItems,
@@ -59,13 +64,22 @@ export const useUnifiedProcessor = () => {
       const source = overrideCanvas || item.sourceCanvas;
       if (!source) return null;
 
+      // Capture the run token so the progress callback stops firing if the
+      // user switches services while this job is still in flight (the eviction
+      // await can keep an old job running for ~1s after the switch).
+      const tokenAtStart = runTokenRef.current;
+      const onProgress = (prog, msg) => {
+        if (runTokenRef.current !== tokenAtStart) return;
+        updateProgress(prog, `${progressPrefix}${msg}`);
+      };
+
       try {
         // Execute the low-level processing engine
         const result = await processorEngine.process(
           serviceId,
           source,
           options,
-          (prog, msg) => updateProgress(prog, `${progressPrefix}${msg}`),
+          onProgress,
         );
 
         // Verify the returned object is a renderable canvas variant
@@ -113,6 +127,14 @@ export const useUnifiedProcessor = () => {
         });
       }
 
+      if (item.serviceResults) {
+        Object.values(item.serviceResults).forEach((res) => {
+          if (res.resultCanvas?.close) {
+            try { res.resultCanvas.close(); } catch (_) {}
+          }
+        });
+      }
+
       return {
         ...item,
         status: "pending",
@@ -120,6 +142,7 @@ export const useUnifiedProcessor = () => {
         progress: 0,
         resultCanvas: null,
         stepResults: {},
+        serviceResults: {},
       };
     });
   };
@@ -248,14 +271,25 @@ export const useUnifiedProcessor = () => {
   // --- Single Processor Strategy Implementation ---
   const executeSingle = async (serviceId, options, sourceCanvas) => {
       setIsProcessing(true); // Lock the UI viewport by marking processing in-progress
+      const tokenAtStart = runTokenRef.current;
       try {
         // Call the pure processing engine with optional progress report listeners
         const result = await processorEngine.process(
           serviceId,
           sourceCanvas,
           options,
-          (prog, msg) => updateProgress(prog, msg),
+          (prog, msg) => {
+            if (runTokenRef.current !== tokenAtStart) return;
+            updateProgress(prog, msg);
+          },
         );
+
+        // If the user switched services while this job was in flight (the
+        // eviction await can keep it running ~1s after a switch), drop the
+        // stale result instead of leaking it into the new service's view.
+        if (runTokenRef.current !== tokenAtStart) {
+          return result;
+        }
 
         // Extract the output canvas or image-data variant
         const canvas = result.canvas || result;
@@ -281,6 +315,7 @@ export const useUnifiedProcessor = () => {
 
         return result;
       } catch (err) {
+        if (runTokenRef.current !== tokenAtStart) return; // stale run — swallow
         showToast(`Error: ${err.message}`, "error");
         setResultCanvas(null);
         setItems((prev) =>
@@ -291,7 +326,11 @@ export const useUnifiedProcessor = () => {
           ),
         );
       } finally {
-        setIsProcessing(false); // Release UI lock
+        // Only release the processing lock if this run is still current — a
+        // later run (after a switch) owns the lock now.
+        if (runTokenRef.current === tokenAtStart) {
+          setIsProcessing(false);
+        }
       }
     };
 
@@ -312,10 +351,14 @@ export const useUnifiedProcessor = () => {
         return showToast("No images to process", "info");
 
       setIsProcessing(true); // Lock workspace viewport
+      const tokenAtStart = runTokenRef.current;
       const workingItems = [...currentItems];
 
       // Step 3: Run sequentially through the pending items
       for (let i = 0; i < pendingItems.length; i++) {
+        // Abort the batch if the user switched services mid-run.
+        if (runTokenRef.current !== tokenAtStart) break;
+
         const item = pendingItems[i];
         const itemIdx = workingItems.findIndex((ni) => ni.id === item.id);
 
@@ -334,9 +377,12 @@ export const useUnifiedProcessor = () => {
             activeOptions,
             `[${i + 1}/${pendingItems.length}] `,
           );
+          // Drop the result if the service changed while awaiting.
+          if (runTokenRef.current !== tokenAtStart) break;
           workingItems[itemIdx].resultCanvas = result;
           workingItems[itemIdx].status = "done";
         } catch (err) {
+          if (runTokenRef.current !== tokenAtStart) break;
           workingItems[itemIdx].status = "error";
           workingItems[itemIdx].error = err.message;
         }
@@ -345,9 +391,11 @@ export const useUnifiedProcessor = () => {
         setItems([...workingItems]);
       }
 
-      setIsProcessing(false); // Unlock workspace viewport
-      showToast("Batch processing complete", "success");
-      refetchSession?.();
+      if (runTokenRef.current === tokenAtStart) {
+        setIsProcessing(false); // Unlock workspace viewport
+        showToast("Batch processing complete", "success");
+        refetchSession?.();
+      }
     };
 
   // --- Workflow Processor Strategy Implementation ---
@@ -385,15 +433,18 @@ export const useUnifiedProcessor = () => {
       }
 
       setIsProcessing(true); // Lock workspace viewport
+      const tokenAtStart = runTokenRef.current;
       const workingItems = [...currentItems];
 
       try {
         // Step 3: Loop sequentially through each workflow step (Step-First / Breadth-First)
         for (let j = 0; j < workflowSteps.length; j++) {
+          if (runTokenRef.current !== tokenAtStart) break;
           const step = workflowSteps[j];
 
           // Run this step on all pending images that haven't encountered errors yet
           for (let i = 0; i < pendingItems.length; i++) {
+            if (runTokenRef.current !== tokenAtStart) break;
             const item = pendingItems[i];
             const itemIdx = workingItems.findIndex((ni) => ni.id === item.id);
 
@@ -474,11 +525,15 @@ export const useUnifiedProcessor = () => {
       } catch (globalErr) {
         console.error("Workflow global execution failed:", globalErr);
       } finally {
-        setIsProcessing(false); // Release workspace viewport lock
+        if (runTokenRef.current === tokenAtStart) {
+          setIsProcessing(false); // Release workspace viewport lock
+        }
       }
 
-      showToast("Workflow pipeline complete", "success");
-      refetchSession?.();
+      if (runTokenRef.current === tokenAtStart) {
+        showToast("Workflow pipeline complete", "success");
+        refetchSession?.();
+      }
     };
 
   // --- Pipeline Steps Construction APIs ---
@@ -537,9 +592,43 @@ export const useUnifiedProcessor = () => {
     // Only reset the workspace if the service actually changed to a DIFFERENT service,
     // and we are not currently executing a process job.
     if (currentService.id !== lastServiceIdRef.current) {
+      const oldServiceId = lastServiceIdRef.current;
       lastServiceIdRef.current = currentService.id;
+      // Invalidate any in-flight run so its late result/progress won't leak in.
+      runTokenRef.current += 1;
+      // Clear any lingering progress text from the previous service immediately.
+      updateProgress(0, "");
       if (!isProcessing) {
-        resetProcessingState(currentService.id !== "workflows");
+        setItems((prevItems) => {
+          return prevItems.map((item) => {
+            // Save current service results to item.serviceResults
+            const serviceResults = item.serviceResults || {};
+            const updatedServiceResults = {
+              ...serviceResults,
+              [oldServiceId]: {
+                resultCanvas: item.resultCanvas,
+                status: item.status,
+                error: item.error,
+              },
+            };
+
+            // Restore new service results if they exist, otherwise default to pending/null
+            const restored = updatedServiceResults[currentService.id] || {
+              resultCanvas: null,
+              status: "pending",
+              error: null,
+            };
+
+            return {
+              ...item,
+              serviceResults: updatedServiceResults,
+              resultCanvas: restored.resultCanvas,
+              status: restored.status,
+              error: restored.error,
+              progress: 0,
+            };
+          });
+        });
       }
     }
   }, [currentService.id, isProcessing]);

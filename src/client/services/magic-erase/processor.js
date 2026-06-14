@@ -1,4 +1,4 @@
-import { createProgressReporter } from '../../core/worker-utils.js';
+import { createProgressReporter, runWorkerJob } from '../../core/worker-utils.js';
 import { MAGIC_ERASE_MODELS } from '../../config/models.js';
 import { prepareInpaintInputs, composeInpaintOutput } from './helpers.js';
 import MagicEraseWorker from './worker.js?worker';
@@ -66,42 +66,29 @@ async function process(originalCanvas, options, onProgress) {
   if (!maskCanvas) {
       throw new Error("Mask canvas not found. Please brush an area to erase.");
   }
-  
+
   const { imageData, maskImageData, padParams } = prepareInpaintInputs(originalCanvas, maskCanvas);
-  
+
   report(0.3, 0.3, 'Running AI Inference...')();
-  
-  return new Promise((resolve, reject) => {
-      const messageHandler = (e) => {
-          const { type, output, error } = e.data;
-          
-          if (type === 'complete') {
-              worker.removeEventListener('message', messageHandler);
-              report(0.8, 0.8, 'Compositing result...')();
-              
-              const finalOutCanvas = composeInpaintOutput(output, padParams);
-              
-              report(1, 1, 'Complete')();
-              resolve(finalOutCanvas);
 
-          } else if (type === 'error') {
-              worker.removeEventListener('message', messageHandler);
-              reject(new Error(error));
-          }
-      };
-      
-      worker.addEventListener('message', messageHandler);
+  // Run via the shared worker-job runner (handles progress/complete/error,
+  // listener cleanup, transferables) instead of a hand-rolled listener.
+  const output = await runWorkerJob(
+    worker,
+    'inpaint',
+    {
+      image: imageData.data,
+      mask: maskImageData.data,
+      options: { strength: typeof options.strength === 'number' ? options.strength : 1.0 },
+    },
+    [imageData.data.buffer, maskImageData.data.buffer],
+    (prog, msg) => report(prog, prog, msg)(),
+  );
 
-      // Send ImageData arrays as transferable zero-copy buffers.
-      worker.postMessage({
-          type: 'inpaint',
-          payload: {
-              image: imageData.data,
-              mask: maskImageData.data,
-              options: { strength: typeof options.strength === 'number' ? options.strength : 1.0 }
-          }
-      }, [imageData.data.buffer, maskImageData.data.buffer]);
-  });
+  report(0.8, 0.8, 'Compositing result...')();
+  const finalOutCanvas = composeInpaintOutput(output, padParams);
+  report(1, 1, 'Complete')();
+  return finalOutCanvas;
 }
 
 function dispose() {

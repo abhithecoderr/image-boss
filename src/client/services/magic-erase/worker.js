@@ -1,4 +1,4 @@
-import * as ort from 'onnxruntime-web';
+import * as ort from 'onnxruntime-web/webgpu';
 import { createProgressReporter, fetchWithProgress, configureOrt } from '../../core/worker-utils.js';
 import {
     getMeta,
@@ -173,7 +173,7 @@ self.onmessage = async (e) => {
 
             self.postMessage({
                 type: 'complete',
-                output: image
+                result: image
             }, [image.buffer]);
 
         } catch (error) {

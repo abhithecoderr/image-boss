@@ -10,12 +10,11 @@
     "deploy": "npm run build && wrangler deploy"
   },
   "dependencies": {
-    "@better-auth/drizzle-adapter": "^1.6.11",
     "@huggingface/transformers": "^4.2.0",
     "better-auth": "^1.6.11",
     "browser-image-compression": "^2.0.2",
     "drizzle-orm": "^0.45.2",
-    "onnxruntime-web": "1.26.0-dev.20260416-b7804b056c",
+    "onnxruntime-web": "1.26.0",
     "react": "^19.0.0",
     "react-dom": "^19.0.0",
     "react-image-crop": "^11.0.10",

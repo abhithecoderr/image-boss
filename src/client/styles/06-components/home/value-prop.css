@@ -142,3 +142,46 @@
 .value-prop-card.paid-boost .pulse-glow {
   background: radial-gradient(circle, rgba(245, 166, 35, 0.04) 0%, transparent 70%);
 }
+
+/* --- Mobile compaction: shrink cards so the icon box and padding don't dominate phones. --- */
+@media (max-width: 767px) {
+  .home-value-prop-section {
+    margin: var(--space-8) auto;
+    padding-top: var(--space-8);
+  }
+
+  .value-prop-card {
+    padding: var(--space-5);
+    gap: var(--space-4);
+  }
+
+  .value-prop-graphic-box {
+    min-height: 130px;
+  }
+
+  .value-prop-icon {
+    font-size: 40px;
+  }
+
+  .value-prop-card-title {
+    font-size: 19px;
+  }
+
+  .value-prop-card-desc {
+    font-size: 13px;
+  }
+}
+
+@media (max-width: 390px) {
+  .value-prop-card {
+    padding: var(--space-4);
+  }
+
+  .value-prop-graphic-box {
+    min-height: 110px;
+  }
+
+  .value-prop-icon {
+    font-size: 34px;
+  }
+}

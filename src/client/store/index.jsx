@@ -2,6 +2,7 @@
  * Consolidates stores and exports React-friendly hook adapters with selectors.
  */
 import { useMemo } from 'react';
+import { useShallow } from 'zustand/react/shallow';
 import { useWorkspaceStore } from './workspaceStore';
 import { useServiceStore } from './serviceStore';
 import { useUIStore } from './uiStore';
@@ -55,25 +56,53 @@ export const useAuth = () => {
 
 
 
-// Export backward compatible Zustand bridge hooks with selector optimization
+// Export backward compatible Zustand bridge hooks with selector optimization.
+// When called without a selector, useShallow memoizes the derived object so the
+// consumer only re-renders when one of the selected primitives actually changes
+// (not on every store tick, e.g. batch status flips on unrelated items).
 export const useWorkspace = (selector) => {
   if (selector) {
     return useWorkspaceStore(selector);
   }
 
-  const storeState = useWorkspaceStore();
+  const storeState = useWorkspaceStore(
+    useShallow((s) => ({
+      items: s.items,
+      activeItemId: s.activeItemId,
+      setItems: s.setItems,
+      setOriginalCanvas: s.setOriginalCanvas,
+      setOriginalFile: s.setOriginalFile,
+      setResultCanvas: s.setResultCanvas,
+      resetImages: s.resetImages,
+      workflowSteps: s.workflowSteps,
+      setWorkflowSteps: s.setWorkflowSteps,
+      selectedIds: s.selectedIds,
+      setSelectedIds: s.setSelectedIds,
+      batchMode: s.batchMode,
+      setBatchMode: s.setBatchMode,
+      isProcessing: s.isProcessing,
+      setIsProcessing: s.setIsProcessing,
+      batchSettingsTarget: s.batchSettingsTarget,
+      setBatchSettingsTarget: s.setBatchSettingsTarget,
+      setActiveItemId: s.setActiveItemId,
+    })),
+  );
+
   const activeItem = useMemo(
     () => storeState.items.find((i) => i.id === storeState.activeItemId) || null,
     [storeState.items, storeState.activeItemId],
   );
-  
-  return {
-    ...storeState,
-    activeItem,
-    originalCanvas: activeItem?.sourceCanvas || null,
-    originalFile: activeItem?.file || null,
-    resultCanvas: activeItem?.resultCanvas || null,
-  };
+
+  return useMemo(
+    () => ({
+      ...storeState,
+      activeItem,
+      originalCanvas: activeItem?.sourceCanvas || null,
+      originalFile: activeItem?.file || null,
+      resultCanvas: activeItem?.resultCanvas || null,
+    }),
+    [storeState, activeItem],
+  );
 };
 
 export const useService = (selector) => {
@@ -81,14 +110,19 @@ export const useService = (selector) => {
     return useServiceStore(selector);
   }
 
-  const storeState = useServiceStore();
+  const navigate = useNavigate();
+  const storeState = useServiceStore(
+    useShallow((s) => ({
+      activeServiceId: s.activeServiceId,
+      setActiveServiceId: s.setActiveServiceId,
+      serviceSettings: s.serviceSettings,
+      setServiceSettings: s.setServiceSettings,
+      updateServiceSetting: s.updateServiceSetting,
+    })),
+  );
+
   const activeServiceId = storeState.activeServiceId || SERVICE_ORDER[0];
   const currentService = SERVICES[activeServiceId] || SERVICES[SERVICE_ORDER[0]];
-
-  const navigate = useNavigate();
-  const selectService = (targetServiceId) => {
-    navigate(`/services/${targetServiceId}`);
-  };
 
   // Callers (Workspace.jsx) always pass resultCanvasArg and item explicitly.
   const getDownloadMetadata = (item = null, overrideServiceId = null, resultCanvasArg = null) => {
@@ -102,6 +136,12 @@ export const useService = (selector) => {
       activeServiceIdForMetadata,
       storeState.serviceSettings,
     );
+  };
+
+  // selectService is the only non-store field — stable via useCallback-free
+  // closure; identity changes per render but callers use it in onClick only.
+  const selectService = (targetServiceId) => {
+    navigate(`/services/${targetServiceId}`);
   };
 
   return {

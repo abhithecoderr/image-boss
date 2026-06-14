@@ -9,6 +9,25 @@
   padding: 0 var(--space-4);
 }
 
+/* Section header (was inline-styled). */
+.carousel-header {
+  text-align: center;
+  margin-bottom: var(--space-6);
+}
+
+.carousel-heading {
+  font-size: clamp(1.4rem, 3vw, 26px);
+  font-weight: 700;
+  color: var(--text-main);
+  margin: 0 0 var(--space-2) 0;
+}
+
+.carousel-subtitle {
+  font-size: 14px;
+  color: var(--text-muted);
+  margin: 0;
+}
+
 .carousel-tabs-container {
   display: flex;
   justify-content: flex-start;
@@ -38,6 +57,9 @@
   cursor: pointer;
   transition: all var(--transition-fast);
   flex-shrink: 0;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .carousel-tab-btn:hover {
@@ -120,12 +142,29 @@
   font-size: 24px;
   font-weight: 700;
   color: var(--text-main);
+  display: inline-flex;
+  align-items: center;
+  gap: var(--space-2);
 }
 
 .carousel-service-desc {
   font-size: 15px;
   color: var(--text-muted);
   line-height: 1.6;
+}
+
+/* Wrapper around the execution badge (was inline-styled). */
+.carousel-badge-wrap {
+  margin-top: var(--space-4);
+}
+
+.carousel-exec-badge {
+  font-size: 12px;
+  font-weight: 600;
+  color: #81c784;
+  background: rgba(76, 175, 80, 0.15);
+  padding: var(--space-1) var(--space-3);
+  border-radius: var(--radius-sm);
 }
 
 .carousel-demo-pane {
@@ -156,4 +195,53 @@
   color: var(--text-dim);
   text-transform: uppercase;
   letter-spacing: 0.05em;
+}
+
+/* --- Mobile compaction: shrink the carousel so cards aren't oversized on phones. --- */
+@media (max-width: 767px) {
+  .carousel-tab-btn {
+    padding: 8px 14px;
+    font-size: 13px;
+  }
+
+  .carousel-arrow-btn {
+    width: 36px;
+    height: 36px;
+    font-size: 13px;
+  }
+
+  .carousel-card-display {
+    padding: var(--space-4);
+    gap: var(--space-4);
+    min-height: 0;
+  }
+
+  .carousel-service-name {
+    font-size: 19px;
+  }
+
+  .carousel-service-desc {
+    font-size: 14px;
+  }
+
+  .carousel-demo-pane {
+    height: 150px;
+    max-width: 100%;
+  }
+
+  .carousel-demo-image {
+    font-size: 38px;
+  }
+}
+
+@media (max-width: 390px) {
+  .carousel-arrow-btn {
+    width: 32px;
+    height: 32px;
+    font-size: 12px;
+  }
+
+  .carousel-card-display {
+    padding: var(--space-3);
+  }
 }

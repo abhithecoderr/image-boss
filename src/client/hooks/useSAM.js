@@ -2,7 +2,7 @@
  * Controller hook for Segment Anything, coordinating coordinates points and worker threads.
  */
 import { useSegmentation, useWorkspace, useUI, useService } from '../store';
-import { useUnifiedProcessor as useController } from './useUnifiedProcessor';
+import { useProcessor } from './useProcessorContext';
 import { APP_CONFIG } from '../config/app';
 
 export const useSAM = () => {
@@ -14,7 +14,7 @@ export const useSAM = () => {
   const showToast = useUI((state) => state.showToast);
   const { serviceSettings } = useService();
 
-  const { execute } = useController();
+  const { execute } = useProcessor();
 
   // Appends a mouse click coordinate point to the prompt list for positive (keep) or negative (remove) filters
   const addPoint = (x, y, forcedLabel = null) => {

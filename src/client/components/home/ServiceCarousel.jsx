@@ -26,11 +26,11 @@ export default function ServiceCarousel() {
 
   return (
     <div className="home-carousel-section">
-      <div style={{ textAlign: 'center', marginBottom: 'var(--space-6)' }}>
-        <h2 style={{ fontSize: '26px', fontWeight: '700', color: 'var(--text-main)', margin: '0 0 8px 0' }}>
+      <div className="carousel-header">
+        <h2 className="carousel-heading">
           Explore AI Capabilities
         </h2>
-        <p style={{ fontSize: '14px', color: 'var(--text-muted)', margin: 0 }}>
+        <p className="carousel-subtitle">
           Switch between services to preview what you can achieve inside the workspace
         </p>
       </div>
@@ -42,7 +42,6 @@ export default function ServiceCarousel() {
             key={id}
             className={`carousel-tab-btn ${index === activeIndex ? 'active' : ''}`}
             onClick={() => setActiveIndex(index)}
-            style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}
           >
             <ServiceIcon id={id} style={{ width: '16px', height: '16px' }} /> {SERVICES[id].name}
           </button>
@@ -58,14 +57,14 @@ export default function ServiceCarousel() {
         <div className="carousel-card-display">
           {/* Info Details Panel */}
           <div className="carousel-info-pane">
-            <span className="carousel-service-name" style={{ display: 'inline-flex', alignItems: 'center', gap: '8px' }}>
+            <span className="carousel-service-name">
               <ServiceIcon id={service.id} style={{ width: '20px', height: '20px' }} /> {service.name}
             </span>
             <p className="carousel-service-desc">
               {service.description}
             </p>
-            <div style={{ marginTop: 'var(--space-4)' }}>
-              <span style={{ fontSize: '12px', fontWeight: '600', color: '#81c784', background: 'rgba(76, 175, 80, 0.15)', padding: 'var(--space-1) var(--space-3)', borderRadius: 'var(--radius-sm)' }}>
+            <div className="carousel-badge-wrap">
+              <span className="carousel-exec-badge">
                 ⚡ Browser-Side Execution
               </span>
             </div>

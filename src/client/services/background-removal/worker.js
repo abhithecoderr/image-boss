@@ -5,13 +5,13 @@ import { pipeline, env } from "@huggingface/transformers";
 import * as ort from "onnxruntime-web/webgpu";
 import { getGPUConfig, createProgressReporter, bitmapToRawImage, fetchWithProgress, imageToTensor, configureOrt } from "../../core/worker-utils.js";
 import { BACKGROUND_REMOVAL_MODELS } from "../../config/models.js";
-import { createAlphaMaskFromRawImage, createAlphaMaskFromTensors } from "./helpers.js";
+import { createAlphaMaskFromRawImage, createAlphaMaskFromTensors, releaseHelperCaches } from "./helpers.js";
 
 // Disable local model loading & set CDN WASM paths
 env.allowLocalModels = false;
 env.useWasmCache = false; // Disable buggy/redundant WASM preloader cache
 if (env.backends?.onnx) {
-  env.backends.onnx.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0-dev.20260416-b7804b056c/dist/';
+  env.backends.onnx.wasm.wasmPaths = 'https://cdn.jsdelivr.net/npm/onnxruntime-web@1.26.0/dist/';
   env.backends.onnx.wasm.numThreads = Math.min(4, self.navigator?.hardwareConcurrency || 4);
   if (!env.backends.onnx.webgpu) {
     env.backends.onnx.webgpu = {};
@@ -168,6 +168,7 @@ export function releaseOrt() {
   }
   cachedPostprocessCanvas = null;
   cachedPostprocessCtx = null;
+  releaseHelperCaches();
 }
 
 async function getSession(modelId, onProgress) {

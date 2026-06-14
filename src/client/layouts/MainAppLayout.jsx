@@ -3,8 +3,9 @@
  */
 import { Link, useParams, useLocation, useNavigate } from "react-router-dom";
 import { useService, useUI, useWorkspace, useServiceStore } from "../store";
-import { useUnifiedProcessor as useController } from "../hooks/useUnifiedProcessor";
+import { ProcessorProvider, useProcessor } from "../hooks/useProcessorContext";
 import { SERVICES } from "../config/services";
+import { processorEngine } from "../core/processor-engine";
 import React, { useEffect, useRef, useState } from "react";
 import Sidebar from "../components/navigation/Sidebar";
 import Workspace from "../components/workspace/Workspace";
@@ -16,6 +17,17 @@ import Navbar from "../components/navigation/Navbar";
 import Footer from "../components/navigation/Footer";
 
 export default function MainAppLayout() {
+  // The processor controller is instantiated exactly once here and shared via
+  // context with Workspace / ControlPanel / BatchStrip / useSAM so they don't
+  // each spin up their own (5× subscriptions + racing service-switch effects).
+  return (
+    <ProcessorProvider>
+      <MainAppLayoutContent />
+    </ProcessorProvider>
+  );
+}
+
+function MainAppLayoutContent() {
   const { serviceId } = useParams();
   const setActiveServiceId = useServiceStore((state) => state.setActiveServiceId);
 
@@ -32,13 +44,25 @@ export default function MainAppLayout() {
   const { currentService, serviceSettings } = useService();
   const toast = useUI((state) => state.toast);
   const { originalCanvas } = useWorkspace();
+  const resetImages = useWorkspace((state) => state.resetImages);
   const location = useLocation();
   const navigate = useNavigate();
 
-  const processor = useController();
+  const processor = useProcessor();
   const { execute, mode } = processor;
 
   const autoProcessedRef = useRef(false);
+
+  // Release the active AI model + workspace canvases when leaving the
+  // /services area entirely (e.g. back to Landing). Without this the worker
+  // thread, its loaded ONNX session, and all batch-item canvases persist for
+  // the app lifetime once any service runs.
+  useEffect(() => {
+    return () => {
+      resetImages();
+      processorEngine.clearActiveProcessor().catch(() => {});
+    };
+  }, [resetImages]);
 
   // Auto-close the mobile sidebar drawer whenever the active service changes.
   useEffect(() => {

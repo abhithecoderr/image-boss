@@ -78,8 +78,19 @@ export const useQueueActions = (workspace, showToast) => {
   } = workspace;
 
   const addFiles = async (files) => {
+    // Enforce the batch cap — each item holds a full-res canvas, so unbounded
+    // queues balloon RAM. Reject overflow up front before decoding anything.
+    const remaining = APP_CONFIG.maxBatchItems - items.length;
+    if (remaining <= 0) {
+      showToast(`Batch limit reached (${APP_CONFIG.maxBatchItems} images). Remove some to add more.`, "warning");
+      return;
+    }
+    const fileList = Array.from(files);
+    const overflow = fileList.length - remaining;
+    const acceptedFiles = overflow > 0 ? fileList.slice(0, remaining) : fileList;
+
     const newItems = [];
-    for (const file of files) {
+    for (const file of acceptedFiles) {
       if (!file.type.startsWith("image/")) continue;
       if (file.size > APP_CONFIG.maxFileSize) {
         showToast(`File ${file.name} is too large (max 5MB)`, "warning");
@@ -103,7 +114,11 @@ export const useQueueActions = (workspace, showToast) => {
       setActiveItemId(newItems[0].id);
       setOriginalCanvas(newItems[0].sourceCanvas);
     }
-    showToast(`Added ${newItems.length} image(s)`, "success");
+    if (overflow > 0) {
+      showToast(`Added ${newItems.length} image(s); ${overflow} skipped (batch limit ${APP_CONFIG.maxBatchItems}).`, "warning");
+    } else {
+      showToast(`Added ${newItems.length} image(s)`, "success");
+    }
   };
 
   const removeItem = (id) => {

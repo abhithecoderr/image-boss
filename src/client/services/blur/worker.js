@@ -12,7 +12,8 @@ import {
   createProgressReporter,
   fetchWithProgress,
   imageToTensor,
-  configureOrt
+  configureOrt,
+  createOrtSessionManager,
 } from "../../core/worker-utils.js";
 import { BLUR_MODELS } from '../../config/models.js';
 import { nms, applyBlur } from './helpers.js';
@@ -34,68 +35,31 @@ const PERSON_LABELS = ["person", "face", "human", "head"];
 const TARGET_LABELS = [...PERSON_LABELS];
 const CONFIDENCE_THRESHOLD = 0.4;
 
+// ORT session lifecycle is managed centrally — the manager replaces the
+// isInitializing busy-wait loop and session/variant/device module state.
 let session = null;
-let currentVariant = "nano";
-let currentDevice = "wasm";
-let isInitializing = false;
-
-
+const ortManager = createOrtSessionManager(ort, {
+  async resolveBuffer(variant, report) {
+    const modelConfig = MODEL_VARIANTS[variant] || MODEL_VARIANTS.nano;
+    const modelUrl = `https://huggingface.co/${modelConfig.model_id}/resolve/main/onnx/model.onnx`;
+    return fetchWithProgress(modelUrl, `YOLO26 ${variant} model`, report, 0.1, 0.6);
+  },
+});
 
 /**
- * Initialize the YOLO26 Pose model via ORT
+ * Initialize the YOLO26 Pose model via ORT.
  */
 async function initDetector(variant = "nano", onProgress) {
-  if (session && currentVariant === variant) return session;
-  if (isInitializing) {
-    while (isInitializing) {
-      await new Promise((resolve) => setTimeout(resolve, 100));
-    }
-    return session;
-  }
+  session = await ortManager.get(variant, onProgress);
+  return session;
+}
 
-  isInitializing = true;
-  currentVariant = variant;
-  const modelConfig = MODEL_VARIANTS[variant] || MODEL_VARIANTS.nano;
-  const modelId = modelConfig.model_id;
-
-
-  const report = createProgressReporter(onProgress);
-
-  // Construct direct download URL
-  const modelUrl = `https://huggingface.co/${modelId}/resolve/main/onnx/model.onnx`;
-
-  try {
-    const modelBuffer = await fetchWithProgress(
-      modelUrl,
-      `YOLO26 ${variant} model`,
-      report,
-      0.1,
-      0.6,
-    );
-
-    const useWebGPU = !!navigator.gpu;
-    const executionProviders = useWebGPU ? ["webgpu", "wasm"] : ["wasm"];
-    const deviceLabel = useWebGPU ? "WEBGPU" : "WASM";
-
-    const sessionOptions = {
-      executionProviders,
-      graphOptimizationLevel: "all",
-    };
-
-    report(0.7, 0.7, `Initializing YOLO26 session (${deviceLabel})...`)(0);
-
-    session = await ort.InferenceSession.create(modelBuffer, sessionOptions);
-    currentDevice = useWebGPU ? "webgpu" : "wasm";
-
-    report(0.8, 0.8, `Model ready (${currentDevice})`)(0);
-    return session;
-  } catch (error) {
-    const errorMsg = error instanceof Error ? error.message : String(error);
-    // Error is thrown below; no need to log here
-    throw new Error(`Initialization failed: ${errorMsg}`);
-  } finally {
-    isInitializing = false;
-  }
+/**
+ * Cleanup resources — releases session
+ */
+function dispose() {
+  ortManager.release();
+  session = null;
 }
 
 /**
@@ -227,19 +191,6 @@ async function detectFaces(bitmap, width, height) {
   return finalDetections;
 }
 
-/**
- * Cleanup resources — releases session
- */
-function dispose() {
-  if (session) {
-    try {
-      session.release();
-    } catch (_) {}
-    session = null;
-  }
-  currentDevice = "wasm";
-}
-
 // Message handler
 self.onmessage = async (event) => {
   const { type, payload } = event.data;
@@ -256,8 +207,8 @@ self.onmessage = async (event) => {
         self.postMessage({
           type: "complete",
           result: {
-            device: currentDevice,
-            variant: currentVariant,
+            device: ortManager.getDevice(),
+            variant,
           }
         });
         break;
@@ -265,13 +216,7 @@ self.onmessage = async (event) => {
 
       case "detect": {
         const { bitmap, width, height, variant } = payload;
-
-        if (variant && variant !== currentVariant) {
-          if (session) { try { await session.release(); } catch (_) {} session = null; }
-          await initDetector(variant, sendProgress);
-        } else {
-          await initDetector(currentVariant, sendProgress);
-        }
+        await initDetector(variant || "nano", sendProgress);
 
         const detections = await detectFaces(bitmap, width, height);
         bitmap.close();
@@ -281,7 +226,7 @@ self.onmessage = async (event) => {
           result: {
             detections,
             count: detections.length,
-            device: currentDevice,
+            device: ortManager.getDevice(),
           }
         });
         break;
@@ -299,12 +244,7 @@ self.onmessage = async (event) => {
           variant,
         } = payload;
 
-        if (variant && variant !== currentVariant) {
-          if (session) { try { await session.release(); } catch (_) {} session = null; }
-          await initDetector(variant, sendProgress);
-        } else {
-          await initDetector(currentVariant, sendProgress);
-        }
+        await initDetector(variant || "nano", sendProgress);
 
         sendProgress(0.7, "Detecting...");
         const detections = await detectFaces(bitmap, width, height);
@@ -323,7 +263,7 @@ self.onmessage = async (event) => {
                 height,
                 detections: [],
                 count: 0,
-                device: currentDevice,
+                device: ortManager.getDevice(),
               }
             },
             [resultBitmap],
@@ -355,7 +295,7 @@ self.onmessage = async (event) => {
               resultBitmap,
               detections,
               count: detections.length,
-              device: currentDevice,
+              device: ortManager.getDevice(),
             }
           },
           [resultBitmap],
@@ -396,7 +336,7 @@ self.onmessage = async (event) => {
               resultBitmap,
               detections,
               count: detections.length,
-              device: currentDevice,
+              device: ortManager.getDevice(),
             }
           },
           [resultBitmap],

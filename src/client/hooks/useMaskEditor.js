@@ -56,6 +56,18 @@ export const useMaskEditor = (resRef) => {
     }
   }, [resultCanvas]);
 
+  // Release the offscreen mask buffer when the mask editor unmounts
+  // (e.g. when the editing tool flips back to "none" or the service changes).
+  useEffect(() => {
+    return () => {
+      const canvas = maskCanvasRef.current;
+      if (canvas) {
+        try { canvas.width = 0; canvas.height = 0; } catch (_) {}
+        maskCanvasRef.current = null;
+      }
+    };
+  }, []);
+
   // Redraws the composite (Base Canvas + Mask Buffer Overlay) onto the viewport display canvas
   const updateDisplay = () => {
     if (!resRef.current || !maskCanvasRef.current || !baseCanvas) return;

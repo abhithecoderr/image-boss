@@ -2,7 +2,7 @@
  * Main workspace sidebar housing settings, models, sliders, and batch settings for the active service.
  */
 import { useService, useWorkspace, useSegmentation } from "../../store";
-import { useUnifiedProcessor as useController } from "../../hooks/useUnifiedProcessor";
+import { useProcessor as useController } from "../../hooks/useProcessorContext";
 import { useSAM } from "../../hooks/useSAM";
 import { OPERATION_MODE } from "../../config/app";
 import { CONTROLS_CONFIG } from "../../config/controls";

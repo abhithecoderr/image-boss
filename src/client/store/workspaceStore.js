@@ -4,6 +4,23 @@
 import { create } from "zustand";
 import { disposeBatchItem } from "../core/BatchItem";
 
+/**
+ * Release a result/step canvas that is about to be overwritten.
+ *
+ * Only closes objects with an explicit `.close()` (OffscreenCanvas, ImageBitmap) —
+ * these pin GPU/copied memory until closed and aren't part of the undo history
+ * stack (which only ever holds HTMLCanvasElement references). HTMLCanvasElement
+ * is left to GC to avoid use-after-dispose against the Workspace undo stack.
+ */
+function disposeCanvasIfClosable(canvas) {
+  if (!canvas || canvas === null) return;
+  // HTMLCanvasElement has no close() — skip it (undo stack may reference it).
+  if (canvas instanceof HTMLCanvasElement) return;
+  if (typeof canvas.close === 'function') {
+    try { canvas.close(); } catch (_) {}
+  }
+}
+
 export const useWorkspaceStore = create((set, get) => ({
   items: [],
   activeItemId: null,
@@ -58,6 +75,10 @@ export const useWorkspaceStore = create((set, get) => ({
 
         if (stepId) {
           const stepResults = item.stepResults || {};
+          // Release the step result we're about to overwrite (closable types only).
+          if (stepResults[stepId]?.resultCanvas) {
+            disposeCanvasIfClosable(stepResults[stepId].resultCanvas);
+          }
           return {
             ...item,
             stepResults: {
@@ -72,6 +93,8 @@ export const useWorkspaceStore = create((set, get) => ({
           };
         }
 
+        // Release the top-level result canvas we're about to overwrite (closable types only).
+        disposeCanvasIfClosable(item.resultCanvas);
         return { ...item, resultCanvas: canvas };
       }),
     }));

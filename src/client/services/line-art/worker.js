@@ -4,7 +4,7 @@
  */
 
 import * as ort from "onnxruntime-web/webgpu";
-import { getGPUConfig, createProgressReporter, fetchWithProgress, imageToTensor, configureOrt } from '../../core/worker-utils.js';
+import { getGPUConfig, createProgressReporter, fetchWithProgress, imageToTensor, configureOrt, createOrtSessionManager } from '../../core/worker-utils.js';
 
 // Configure ONNX Runtime
 configureOrt(ort);
@@ -15,53 +15,19 @@ const MODEL_URLS = LINE_ART_MODELS;
 
 const MODEL_SIZE = 768;
 
+// ORT session lifecycle is managed centrally — the manager replaces the
+// isInitializing busy-wait loop and session/variant/device module state.
 let session = null;
-let currentVariant = null;
-let currentDevice = "wasm";
-let isInitializing = false;
+const ortManager = createOrtSessionManager(ort, {
+  async resolveBuffer(variant, report) {
+    const modelConfig = MODEL_URLS[variant] || MODEL_URLS.anime;
+    return fetchWithProgress(modelConfig.url, `Line Art AI (${variant})`, report, 0.1, 0.8);
+  },
+});
 
 async function initSession(variant = "anime", onProgress) {
-  if (session && currentVariant === variant) return session;
-  if (isInitializing) {
-    while (isInitializing) await new Promise(r => setTimeout(r, 100));
-    return session;
-  }
-
-  isInitializing = true;
-  currentVariant = variant;
-  const modelConfig = MODEL_URLS[variant] || MODEL_URLS.anime;
-  const modelUrl = modelConfig.url;
-
-  const report = createProgressReporter(onProgress);
-
-  try {
-    const modelBuffer = await fetchWithProgress(modelUrl, `Line Art AI (${variant})`, report, 0.1, 0.8);
-
-    const hw = await getGPUConfig();
-    const useWebGPU = hw.supported;
-    const executionProviders = useWebGPU ? ["webgpu", "wasm"] : ["wasm"];
-    const deviceLabel = useWebGPU ? "WEBGPU" : "WASM";
-
-    const sessionOptions = {
-        executionProviders,
-        graphOptimizationLevel: "all",
-    };
-
-    report(0.85, 0.85, `Initializing session (${deviceLabel})...`)(0);
-    session = await ort.InferenceSession.create(modelBuffer, sessionOptions);
-    currentDevice = useWebGPU ? "webgpu" : "wasm";
-
-    report(0.9, 0.9, "Ready")(0);
-    return session;
-  } catch (error) {
-    console.error("[LineArt Worker] Initialization failed:", error);
-    if (session) { try { session.release(); } catch (_) {} }
-    session = null;
-    currentVariant = null;
-    throw error;
-  } finally {
-    isInitializing = false;
-  }
+  session = await ortManager.get(variant, onProgress);
+  return session;
 }
 
 async function runInference(bitmap, options, onProgress) {
@@ -145,12 +111,8 @@ self.onmessage = async (event) => {
 
       bitmap.close();
     } else if (type === "dispose") {
-      if (session) {
-        try {
-          session.release();
-        } catch (_) {}
-        session = null;
-      }
+      ortManager.release();
+      session = null;
       self.postMessage({ type: "disposed" });
     }
   } catch (error) {

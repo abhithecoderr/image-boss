@@ -282,5 +282,6 @@ self.onmessage = async ({ data }) => {
 
   if (type === "dispose") {
     releaseSession();
+    self.postMessage({ type: "disposed" });
   }
 };

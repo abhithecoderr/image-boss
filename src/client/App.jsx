@@ -1,23 +1,39 @@
 /*
  * Main client entry point. Sets up the React Router routes, public layouts, protected workspace routes, and global providers.
  */
+import React, { Suspense, lazy } from "react";
 import {
   createBrowserRouter,
   RouterProvider,
   Navigate,
   Outlet,
-  useLocation,
 } from "react-router-dom";
-import MainAppLayout from "./layouts/MainAppLayout";
+
+// Route components are code-split so the initial bundle only ships the code
+// for the route the visitor lands on. PublicLayout stays eager (it's the
+// shell for marketing pages and is tiny).
 import PublicLayout from "./layouts/PublicLayout";
-import Landing from "./pages/Landing";
-import Pricing from "./pages/Pricing";
-import Login from "./pages/Login";
-import SignUp from "./pages/Signup";
-import ProductDetail from "./pages/ProductDetail";
-import SolutionsDetail from "./pages/SolutionsDetail";
-import Profile from "./pages/Profile";
-import { useAuth } from "./store/index.jsx";
+const Landing = lazy(() => import("./pages/Landing"));
+const Pricing = lazy(() => import("./pages/Pricing"));
+const Login = lazy(() => import("./pages/Login"));
+const SignUp = lazy(() => import("./pages/Signup"));
+const ProductDetail = lazy(() => import("./pages/ProductDetail"));
+const SolutionsDetail = lazy(() => import("./pages/SolutionsDetail"));
+const Profile = lazy(() => import("./pages/Profile"));
+const MainAppLayout = lazy(() => import("./layouts/MainAppLayout"));
+
+// Lightweight fallback shown while a route chunk loads.
+function RouteFallback() {
+  return (
+    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "60vh" }}>
+      <div className="auth-spinner" aria-label="Loading" />
+    </div>
+  );
+}
+
+function withSuspense(element) {
+  return <Suspense fallback={<RouteFallback />}>{element}</Suspense>;
+}
 
 // 1. Create a Root wrapper that includes your Providers
 // This ensures that providers have access to the Router context
@@ -44,23 +60,23 @@ export const router = createBrowserRouter([
         children: [
           {
             index: true,
-            element: <Landing />,
+            element: withSuspense(<Landing />),
           },
           {
             path: "pricing",
-            element: <Pricing />,
+            element: withSuspense(<Pricing />),
           },
           {
             path: "product/:productId?",
-            element: <ProductDetail />,
+            element: withSuspense(<ProductDetail />),
           },
           {
             path: "solutions/:solutionId?",
-            element: <SolutionsDetail />,
+            element: withSuspense(<SolutionsDetail />),
           },
           {
             path: "profile",
-            element: (
+            element: withSuspense(
               <ProtectedRoute>
                 <Profile />
               </ProtectedRoute>
@@ -71,17 +87,17 @@ export const router = createBrowserRouter([
       {
         // Independent Auth Routes (stand-alone pages, no shared Navbar/Footer)
         path: "login",
-        element: <Login />,
+        element: withSuspense(<Login />),
       },
       {
         // Independent Auth Routes
         path: "signup",
-        element: <SignUp />,
+        element: withSuspense(<SignUp />),
       },
       {
         // Dashboard / Workspace Routes - Secured
         path: "services/:serviceId?",
-        element: (
+        element: withSuspense(
           <ProtectedRoute>
             <MainAppLayout />
           </ProtectedRoute>
