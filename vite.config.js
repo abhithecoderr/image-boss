@@ -41,7 +41,7 @@ export default defineConfig({
       },
     }),
     cloudflare(),
-    aiContextWatcher(),
+    // aiContextWatcher(),
     stripUnusedOrtWasm(),
   ],
   worker: {
