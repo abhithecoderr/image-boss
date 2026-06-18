@@ -1,3 +1,7 @@
+// Enforces middleware checks for session and rate limits
+// Checks user and their credits, makes the request url for modal endpoint
+// Calculates inference time and deducts credits appropriately
+
 import { Hono } from 'hono';
 import { requireAuth } from '../middleware/auth';
 import { rateLimit } from '../middleware/rateLimit';
@@ -7,7 +11,7 @@ import { checkCredits, calculateCost, deductUserCredits, MODEL_RATES } from '../
 
 export const predictRoute = new Hono();
 
-// Guard all endpoints under this sub-app with session checks and rate limiting
+// auth and rate limit enforcer middleware
 predictRoute.use('*', requireAuth);
 predictRoute.use('*', rateLimit(15, 60000)); // Limit: 15 requests per minute
 

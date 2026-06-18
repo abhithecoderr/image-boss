@@ -1,21 +1,15 @@
-/**
- * ProcessorEngine — Global singleton for loading and managing service processors.
- * Handles lazy-loading, caching, and explicit disposal of processors.
- */
-
 import { workerRegistry } from './worker-registry';
 
+/**
+ * ProcessorEngine class manages loading, activating, and processing service processors.
+ * It enforces a single active processor policy and handles proper cleanup.
+ */
 class ProcessorEngine {
   constructor() {
     this._processors = {}; // serviceId -> Processor module
     this._activeId = null; // Currently active processor id
   }
 
-  /**
-   * Load a processor for a given service
-   * @param {string} serviceId
-   * @returns {Promise<Object>}
-   */
   async load(serviceId) {
     if (this._processors[serviceId]) {
       return this._processors[serviceId];
@@ -33,11 +27,6 @@ class ProcessorEngine {
     }
   }
 
-  /**
-   * Mark a service as active and clean up the previous one.
-   * Enforces the "one active model/processor" policy.
-   * @param {string} serviceId
-   */
   async activate(serviceId) {
     if (this._activeId === serviceId && this._processors[serviceId]) {
       return this._processors[serviceId];

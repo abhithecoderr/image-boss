@@ -14,7 +14,7 @@ import {
   imageToTensor,
   configureOrt,
   createOrtSessionManager,
-} from "../../core/worker-utils.js";
+} from "../../utils/worker-utils.js";
 import { BLUR_MODELS } from '../../config/models.js';
 import { nms, applyBlur } from './helpers.js';
 

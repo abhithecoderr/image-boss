@@ -9,7 +9,7 @@ import {
   RawImage,
   env
 } from '@huggingface/transformers';
-import { getGPUConfig, createProgressReporter, bitmapToRawImage } from '../../core/worker-utils.js';
+import { getGPUConfig, createProgressReporter, bitmapToRawImage } from '../../utils/worker-utils.js';
 import { CAPTIONING_MODELS } from '../../config/models.js';
 
 

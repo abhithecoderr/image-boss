@@ -161,6 +161,11 @@ const SignUp = () => {
           </div>
 
           <footer className="auth-visual-footer">
+            <p>
+              <Link to="/privacy-policy" className="auth-footer-link">Privacy Policy</Link> •{" "}
+              <Link to="/terms-of-service" className="auth-footer-link">Terms of Service</Link> •{" "}
+              <Link to="/refund-policy" className="auth-footer-link">Refund Policy</Link>
+            </p>
             <p>© 2026 Image Boss Inc. Privacy First, Web-Local AI Toolkit.</p>
           </footer>
         </section>

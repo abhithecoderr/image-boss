@@ -2,8 +2,8 @@
  * Handles login, signup, social authentication, and logout state management.
  */
 import { create } from "zustand";
-import { signIn, signUp, signOut } from "../lib/auth-client";
-import { useUIStore } from "./uiStore";
+import { signIn, signUp, signOut } from "./client";
+import { useUIStore } from "../store/uiStore";
 
 const toast = (msg, type) => useUIStore.getState().showToast(msg, type);
 

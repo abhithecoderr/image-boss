@@ -2,9 +2,9 @@
  * Main-thread coordinator for Background Removal. Manages canvas caching, options parsing, and worker jobs.
  */
 import BackgroundRemovalWorker from "./worker.js?worker";
-import { resizeCanvas } from "../../core/canvas-utils.js";
-import { workerRegistry } from "../../core/worker-registry.js";
-import { runWorkerJob } from "../../core/worker-utils.js";
+import { resizeCanvas } from "../../utils/canvas-utils.js";
+import { workerRegistry } from "../../engine/worker-registry.js";
+import { runWorkerJob } from "../../utils/worker-utils.js";
 import { BACKGROUND_REMOVAL_MODELS, PAID_MODELS_CONFIG } from "../../config/models.js";
 import { applyMaskToCanvas } from "./helpers.js";
 import { removeBackground, loadImage } from "../../api/birefnet.js";

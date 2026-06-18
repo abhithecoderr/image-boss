@@ -4,7 +4,7 @@
  */
 
 import * as ort from "onnxruntime-web/webgpu";
-import { createProgressReporter, fetchWithProgress, configureOrt } from "../../core/worker-utils.js";
+import { createProgressReporter, fetchWithProgress, configureOrt } from "../../utils/worker-utils.js";
 import { UPSCALING_MODELS } from "../../config/models.js";
 import {
   packTilePlanar,

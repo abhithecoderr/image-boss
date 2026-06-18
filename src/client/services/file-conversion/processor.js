@@ -3,8 +3,8 @@
  * Uses native OffscreenCanvas for format conversion
  */
 
-import { canvasToBlob } from '../../core/canvas-utils.js';
-import { createProgressReporter } from '../../core/worker-utils.js';
+import { canvasToBlob } from '../../utils/canvas-utils.js';
+import { createProgressReporter } from '../../utils/worker-utils.js';
 
 /**
  * Convert image to different format

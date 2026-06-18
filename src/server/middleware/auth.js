@@ -1,8 +1,14 @@
+/* Creates auth instance and provides a requireAuth middleware that creates
+   the instance for every request to generate a session id and attach session
+   and user info to hono context
+*/
+
 import { betterAuth } from 'better-auth';
 import { drizzleAdapter } from 'better-auth/adapters/drizzle';
 import { drizzle } from 'drizzle-orm/d1';
 import * as schema from '../db/schema';
 
+//auth instance that uses cloudflare environment variables
 export const createAuth = (env) => {
   const db = drizzle(env.DB, { schema });
   return betterAuth({

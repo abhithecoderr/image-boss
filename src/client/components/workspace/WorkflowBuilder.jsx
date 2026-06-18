@@ -5,7 +5,7 @@ import { SERVICE_ORDER } from "../../config/app";
 import { SERVICES } from "../../config/services";
 import { CONTROLS_CONFIG } from "../../config/controls";
 import { BACKGROUND_REMOVAL_MODELS } from "../../config/models";
-import { downloadCanvas } from "../../core/canvas-utils";
+import { downloadCanvas } from "../../utils/canvas-utils";
 import ControlRenderer from "../controls/ControlRenderer";
 import Select from "../ui/Select";
 import Button from "../ui/Button";

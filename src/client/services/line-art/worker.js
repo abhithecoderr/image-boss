@@ -4,7 +4,7 @@
  */
 
 import * as ort from "onnxruntime-web/webgpu";
-import { getGPUConfig, createProgressReporter, fetchWithProgress, imageToTensor, configureOrt, createOrtSessionManager } from '../../core/worker-utils.js';
+import { getGPUConfig, createProgressReporter, fetchWithProgress, imageToTensor, configureOrt, createOrtSessionManager } from '../../utils/worker-utils.js';
 
 // Configure ONNX Runtime
 configureOrt(ort);

@@ -1,8 +1,8 @@
-import { createProgressReporter, runWorkerJob } from '../../core/worker-utils.js';
+import { createProgressReporter, runWorkerJob } from '../../utils/worker-utils.js';
 import { MAGIC_ERASE_MODELS } from '../../config/models.js';
 import { prepareInpaintInputs, composeInpaintOutput } from './helpers.js';
 import MagicEraseWorker from './worker.js?worker';
-import { workerRegistry } from '../../core/worker-registry.js';
+import { workerRegistry } from '../../engine/worker-registry.js';
 
 const SERVICE_ID = 'magic-erase';
 

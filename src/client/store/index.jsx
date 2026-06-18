@@ -1,15 +1,14 @@
 /*
  * Consolidates stores and exports React-friendly hook adapters with selectors.
  */
-import { useMemo } from 'react';
 import { useShallow } from 'zustand/react/shallow';
 import { useWorkspaceStore } from './workspaceStore';
 import { useServiceStore } from './serviceStore';
 import { useUIStore } from './uiStore';
 import { useSegmentationStore } from './segmentationStore';
-import { useAuthStore } from './authStore';
-import { useSession } from '../lib/auth-client';
-import { getDownloadMetadata as calculateMetadata } from '../core/canvas-utils';
+import { useAuthStore } from '../auth/store';
+import { useSession } from '../auth/client';
+import { getDownloadMetadata as calculateMetadata } from '../utils/canvas-utils';
 import { useNavigate } from 'react-router-dom';
 import { SERVICE_ORDER } from '../config/app';
 import { SERVICES } from '../config/services';
@@ -56,10 +55,10 @@ export const useAuth = () => {
 
 
 
-// Export backward compatible Zustand bridge hooks with selector optimization.
-// When called without a selector, useShallow memoizes the derived object so the
-// consumer only re-renders when one of the selected primitives actually changes
-// (not on every store tick, e.g. batch status flips on unrelated items).
+// useShallow on useWorkspace: the workspace store fires on every canvas op,
+// batch tick, and item status flip — shallow comparison prevents consumers
+// from re-rendering on unrelated store updates. React Compiler handles the
+// return object memoisation, so no useMemo needed here.
 export const useWorkspace = (selector) => {
   if (selector) {
     return useWorkspaceStore(selector);
@@ -88,21 +87,15 @@ export const useWorkspace = (selector) => {
     })),
   );
 
-  const activeItem = useMemo(
-    () => storeState.items.find((i) => i.id === storeState.activeItemId) || null,
-    [storeState.items, storeState.activeItemId],
-  );
+  const activeItem = storeState.items.find((i) => i.id === storeState.activeItemId) || null;
 
-  return useMemo(
-    () => ({
-      ...storeState,
-      activeItem,
-      originalCanvas: activeItem?.sourceCanvas || null,
-      originalFile: activeItem?.file || null,
-      resultCanvas: activeItem?.resultCanvas || null,
-    }),
-    [storeState, activeItem],
-  );
+  return {
+    ...storeState,
+    activeItem,
+    originalCanvas: activeItem?.sourceCanvas || null,
+    originalFile: activeItem?.file || null,
+    resultCanvas: activeItem?.resultCanvas || null,
+  };
 };
 
 export const useService = (selector) => {
@@ -111,15 +104,13 @@ export const useService = (selector) => {
   }
 
   const navigate = useNavigate();
-  const storeState = useServiceStore(
-    useShallow((s) => ({
-      activeServiceId: s.activeServiceId,
-      setActiveServiceId: s.setActiveServiceId,
-      serviceSettings: s.serviceSettings,
-      setServiceSettings: s.setServiceSettings,
-      updateServiceSetting: s.updateServiceSetting,
-    })),
-  );
+  const storeState = useServiceStore((s) => ({
+    activeServiceId: s.activeServiceId,
+    setActiveServiceId: s.setActiveServiceId,
+    serviceSettings: s.serviceSettings,
+    setServiceSettings: s.setServiceSettings,
+    updateServiceSetting: s.updateServiceSetting,
+  }));
 
   const activeServiceId = storeState.activeServiceId || SERVICE_ORDER[0];
   const currentService = SERVICES[activeServiceId] || SERVICES[SERVICE_ORDER[0]];
@@ -158,4 +149,4 @@ export { useWorkspaceStore } from './workspaceStore';
 export { useServiceStore } from './serviceStore';
 export { useUIStore } from './uiStore';
 export { useSegmentationStore } from './segmentationStore';
-export { useAuthStore } from './authStore';
+export { useAuthStore } from '../auth/store';

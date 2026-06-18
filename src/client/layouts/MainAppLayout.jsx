@@ -5,7 +5,7 @@ import { Link, useParams, useLocation, useNavigate } from "react-router-dom";
 import { useService, useUI, useWorkspace, useServiceStore } from "../store";
 import { ProcessorProvider, useProcessor } from "../hooks/useProcessorContext";
 import { SERVICES } from "../config/services";
-import { processorEngine } from "../core/processor-engine";
+import { processorEngine } from "../engine/processor-engine";
 import React, { useEffect, useRef, useState } from "react";
 import Sidebar from "../components/navigation/Sidebar";
 import Workspace from "../components/workspace/Workspace";

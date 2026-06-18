@@ -1,6 +1,6 @@
 import ESRGANWorker from './esrgan.worker.js?worker';
-import { workerRegistry } from '../../core/worker-registry.js';
-import { runWorkerJob } from '../../core/worker-utils.js';
+import { workerRegistry } from '../../engine/worker-registry.js';
+import { runWorkerJob } from '../../utils/worker-utils.js';
 import { PAID_MODELS_CONFIG } from '../../config/models.js';
 import { upscaleImage } from '../../api/esrgan.js';
 import { loadImage } from '../../api/birefnet.js';

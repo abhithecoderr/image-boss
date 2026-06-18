@@ -205,6 +205,10 @@ export const PAID_MODELS_CONFIG = {
     api_model_tag: "birefnet-lite",
     api_runtime: "cpu"
   },
+  "ben2": {
+    api_model_tag: "ben2",
+    api_runtime: "cpu"
+  },
   // Object Segmentation (local model IDs mapped to API tags)
   "onnx-community/sam2.1-hiera-tiny-ONNX": {
     api_model_tag: "sam-tiny",
@@ -222,6 +226,11 @@ export const PAID_MODELS_CONFIG = {
   "esrgan": {
     api_model_tag: "esrgan",
     api_runtime: "gpu"
+  },
+  // Captioning (Vision-Language Model)
+  "lfm2.5-vl": {
+    api_model_tag: "lfm2.5-vl",
+    api_runtime: "cpu"
   }
 };
 

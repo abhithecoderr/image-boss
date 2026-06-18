@@ -4,14 +4,14 @@
 import { useEffect, useRef } from "react";
 import { useWorkspace, useService, useAuth } from "../store";
 import { useUIStore } from "../store/uiStore";
-import { processorEngine } from "../core/processor-engine";
+import { processorEngine } from "../engine/processor-engine";
 import { useDownloadActions, useQueueActions } from "./useFileUpload";
 import {
   createStep,
   removeStep as utilRemoveStep,
   updateStepOptions as utilUpdateStepOptions,
   reorderSteps as utilReorderSteps,
-} from "../core/canvas-utils";
+} from "../utils/canvas-utils";
 
 export const useUnifiedProcessor = () => {
   // Stable action selectors: Zustand action references never change, so these

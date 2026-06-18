@@ -1,7 +1,7 @@
 
 import BlurWorker from './worker.js?worker';
-import { workerRegistry } from '../../core/worker-registry.js';
-import { runWorkerJob } from '../../core/worker-utils.js';
+import { workerRegistry } from '../../engine/worker-registry.js';
+import { runWorkerJob } from '../../utils/worker-utils.js';
 
 const SERVICE_ID = 'blur';
 

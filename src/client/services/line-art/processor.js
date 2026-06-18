@@ -1,7 +1,7 @@
 import Worker from './worker.js?worker';
 import { applySobelFilter } from './helpers.js';
-import { createProgressReporter, runWorkerJob } from '../../core/worker-utils.js';
-import { workerRegistry } from '../../core/worker-registry.js';
+import { createProgressReporter, runWorkerJob } from '../../utils/worker-utils.js';
+import { workerRegistry } from '../../engine/worker-registry.js';
 
 const SERVICE_ID = 'line-art';
 

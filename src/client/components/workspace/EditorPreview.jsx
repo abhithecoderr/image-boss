@@ -9,7 +9,7 @@ import React, {
 import ReactCrop, { centerCrop, makeAspectCrop } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
 import { useService, useSegmentation } from "../../store";
-import { getEditorStyles } from "../../core/editorFilters";
+import { getEditorStyles } from "../../utils/editorFilters";
 
 // ---------------------------------------------------------------------------
 // Unified Adjustable Crop Component

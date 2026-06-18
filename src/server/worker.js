@@ -1,6 +1,5 @@
-/*
- * Cloudflare Worker backend hosting user auth APIs and predict proxies.
- */
+// Cloudflare worker server providing auth and cloud inference routes
+
 import { Hono } from 'hono';
 import { authRoute } from './routes/auth';
 import { predictRoute } from './routes/predict';

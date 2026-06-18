@@ -12,7 +12,7 @@ import React, { useRef, useState } from "react";
 import Button from "../ui/Button";
 import Badge from "../ui/Badge";
 import { useProcessor } from "../../hooks/useProcessorContext";
-import { processorEngine } from "../../core/processor-engine";
+import { processorEngine } from "../../engine/processor-engine";
 
 // Premium thin-line vector status icons
 const STATUS_ICONS = {

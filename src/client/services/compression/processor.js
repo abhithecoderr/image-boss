@@ -4,8 +4,8 @@
  */
 
 import imageCompression from 'browser-image-compression';
-import { loadImage, imageToCanvas, canvasToBlob, hasAlphaTransparency } from '../../core/canvas-utils.js';
-import { createProgressReporter } from '../../core/worker-utils.js';
+import { loadImage, imageToCanvas, canvasToBlob, hasAlphaTransparency } from '../../utils/canvas-utils.js';
+import { createProgressReporter } from '../../utils/worker-utils.js';
 
 /**
  * Compress image

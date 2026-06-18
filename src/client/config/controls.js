@@ -27,7 +27,8 @@ export const CONTROLS_CONFIG = {
         if (settings.tier === 'paid') {
           return [
             { value: 'birefnet', label: 'RMBG Pro (BiRefNet)' },
-            { value: 'birefnet-lite', label: 'RMBG Lite (BiRefNet Lite)' }
+            { value: 'birefnet-lite', label: 'RMBG Lite (BiRefNet Lite)' },
+            { value: 'ben2', label: 'RMBG Ultra (BEN2)' }
           ];
         }
         return [
@@ -43,6 +44,16 @@ export const CONTROLS_CONFIG = {
     { id: 'edgeContrast', label: 'Edge Contrast', type: 'range', min: 0, max: 20, step: 1, defaultValue: 0 }
   ],
   'magic-erase': [
+    {
+      id: 'selectionMode',
+      label: 'Selection Mode',
+      type: 'select',
+      defaultValue: 'brush',
+      options: [
+        { value: 'brush', label: 'Brush' },
+        { value: 'point', label: 'Point Select (SAM Tiny)' }
+      ]
+    },
     { id: 'radius', label: 'Brush Radius', type: 'range', min: 5, max: 100, step: 5, defaultValue: 20 },
     { id: 'strength', label: 'Strength', type: 'range', min: 0.1, max: 1.0, step: 0.1, defaultValue: 1.0 }
   ],
@@ -194,6 +205,16 @@ export const CONTROLS_CONFIG = {
     }
   ],
   'captioning': [
+    {
+      id: 'tier',
+      label: 'Tier',
+      type: 'select',
+      defaultValue: 'free',
+      options: [
+        { value: 'free', label: 'Free (Local WebGPU)' },
+        { value: 'paid', label: 'Paid (Cloud API)' }
+      ]
+    },
     {
       id: 'lfmPrompt',
       label: 'Prompt',

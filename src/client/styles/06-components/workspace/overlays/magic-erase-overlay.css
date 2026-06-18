@@ -7,3 +7,59 @@
   cursor: crosshair;
   z-index: 150;
 }
+
+.magic-erase-point {
+  position: absolute;
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  border: 2px solid var(--surface-panel, #101010);
+  box-shadow: 0 0 0 1px rgba(255, 255, 255, 0.65);
+  pointer-events: none;
+  transform: translate(-50%, -50%);
+  z-index: 4;
+}
+
+.magic-erase-point.positive {
+  background: #37d67a;
+}
+
+.magic-erase-point.negative {
+  background: #ff5d5d;
+}
+
+.magic-erase-point.negative::before,
+.magic-erase-point.positive::before {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  color: #06130b;
+  font-size: 11px;
+  font-weight: 800;
+  line-height: 1;
+}
+
+.magic-erase-point.positive::before {
+  content: "+";
+}
+
+.magic-erase-point.negative::before {
+  content: "-";
+  color: #210606;
+}
+
+.magic-erase-mask-status {
+  position: absolute;
+  left: 10px;
+  bottom: 10px;
+  z-index: 5;
+  padding: 5px 9px;
+  border: 1px solid rgba(255, 255, 255, 0.16);
+  border-radius: var(--radius-sm);
+  background: rgba(8, 10, 14, 0.78);
+  color: var(--text-main);
+  font-size: 12px;
+  font-weight: 700;
+  pointer-events: none;
+}

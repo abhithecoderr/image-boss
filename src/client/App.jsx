@@ -9,10 +9,9 @@ import {
   Outlet,
 } from "react-router-dom";
 
-// Route components are code-split so the initial bundle only ships the code
-// for the route the visitor lands on. PublicLayout stays eager (it's the
-// shell for marketing pages and is tiny).
 import PublicLayout from "./layouts/PublicLayout";
+
+
 const Landing = lazy(() => import("./pages/Landing"));
 const Pricing = lazy(() => import("./pages/Pricing"));
 const Login = lazy(() => import("./pages/Login"));
@@ -20,6 +19,7 @@ const SignUp = lazy(() => import("./pages/Signup"));
 const ProductDetail = lazy(() => import("./pages/ProductDetail"));
 const SolutionsDetail = lazy(() => import("./pages/SolutionsDetail"));
 const Profile = lazy(() => import("./pages/Profile"));
+const PolicyPage = lazy(() => import("./pages/PolicyPage"));
 const MainAppLayout = lazy(() => import("./layouts/MainAppLayout"));
 
 // Lightweight fallback shown while a route chunk loads.
@@ -53,37 +53,49 @@ export const router = createBrowserRouter([
     path: "/",
     element: <Root />,
     children: [
-      {
-        // Public Layout Routes (Landing, Pricing, etc.)
-        path: "/",
-        element: <PublicLayout />,
-        children: [
-          {
-            index: true,
-            element: withSuspense(<Landing />),
-          },
-          {
-            path: "pricing",
-            element: withSuspense(<Pricing />),
-          },
-          {
-            path: "product/:productId?",
-            element: withSuspense(<ProductDetail />),
-          },
-          {
-            path: "solutions/:solutionId?",
-            element: withSuspense(<SolutionsDetail />),
-          },
-          {
-            path: "profile",
-            element: withSuspense(
-              <ProtectedRoute>
-                <Profile />
-              </ProtectedRoute>
-            ),
-          },
-        ],
-      },
+        {
+          // Public Layout Routes (Landing, Pricing, etc.)
+          path: "/",
+          element: <PublicLayout />,
+          children: [
+            {
+              index: true,
+              element: withSuspense(<Landing />),
+            },
+            {
+              path: "pricing",
+              element: withSuspense(<Pricing />),
+            },
+            {
+              path: "product/:productId?",
+              element: withSuspense(<ProductDetail />),
+            },
+            {
+              path: "solutions/:solutionId?",
+              element: withSuspense(<SolutionsDetail />),
+            },
+            {
+              path: "profile",
+              element: withSuspense(
+                <ProtectedRoute>
+                  <Profile />
+                </ProtectedRoute>
+              ),
+            },
+            {
+              path: "privacy-policy",
+              element: withSuspense(<PolicyPage type="privacy" />),
+            },
+            {
+              path: "terms-of-service",
+              element: withSuspense(<PolicyPage type="terms" />),
+            },
+            {
+              path: "refund-policy",
+              element: withSuspense(<PolicyPage type="refund" />),
+            },
+          ],
+        },
       {
         // Independent Auth Routes (stand-alone pages, no shared Navbar/Footer)
         path: "login",

@@ -1,10 +1,5 @@
 const ipRequests = new Map();
 
-/**
- * Sliding window IP-based rate limiter middleware.
- * @param {number} limit - Max requests per window
- * @param {number} windowMs - Window size in milliseconds
- */
 export function rateLimit(limit = 15, windowMs = 60000) {
   return async (c, next) => {
     const ip = c.req.header('CF-Connecting-IP') || '127.0.0.1';

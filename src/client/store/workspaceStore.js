@@ -2,7 +2,7 @@
  * Tracks batch items, active file selections, and workflow step histories.
  */
 import { create } from "zustand";
-import { disposeBatchItem } from "../core/BatchItem";
+import { disposeBatchItem } from "../engine/BatchItem";
 
 /**
  * Release a result/step canvas that is about to be overwritten.

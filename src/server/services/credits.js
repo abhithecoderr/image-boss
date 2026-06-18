@@ -1,13 +1,17 @@
+// Defines model rates and functions to calculate costs, and check/deduct credits
+
 import { eq } from 'drizzle-orm';
 import * as schema from '../db/schema';
 
 export const MODEL_RATES = {
   'birefnet-lite': { type: 'cpu', rate: 0.05 },
   'birefnet-general': { type: 'cpu', rate: 0.05 },
+  'ben2': { type: 'cpu', rate: 0.05 },
   'sam-tiny': { type: 'cpu', rate: 0.05 },
   'sam-small': { type: 'cpu', rate: 0.05 },
   'sam-large': { type: 'gpu', rate: 0.25 },
   'esrgan': { type: 'gpu', rate: 0.5 },
+  'lfm2.5-vl': { type: 'cpu', rate: 0.05 },
 };
 
 export function getModelRate(model) {
@@ -19,6 +23,7 @@ export function calculateCost(model, durationInSeconds) {
   return Math.max(1, Math.round(durationInSeconds * rate));
 }
 
+// Checks user's database for credits and returns the number of credits
 export async function checkCredits(db, userId) {
   const [dbUser] = await db.select().from(schema.user).where(eq(schema.user.id, userId)).limit(1);
   if (!dbUser) {

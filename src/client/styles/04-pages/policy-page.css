@@ -1,0 +1,226 @@
+/* Unified Policy Page Styles - Dark Minimal Aesthetic */
+
+.policy-container {
+  max-width: 760px;
+  margin: 0 auto;
+  padding: 4rem 1.5rem;
+  font-family: var(--font-sans);
+  color: var(--text-main);
+}
+
+.policy-header {
+  text-align: left;
+  margin-bottom: 3.5rem;
+  padding-bottom: 2rem;
+  border-bottom: 1px solid var(--border-medium);
+}
+
+.policy-header h1 {
+  font-size: 2.75rem;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+  color: var(--text-main);
+  margin-bottom: 0.75rem;
+}
+
+.last-updated {
+  color: var(--text-muted);
+  font-size: 0.9rem;
+  font-weight: 400;
+}
+
+.policy-content {
+  display: flex;
+  flex-direction: column;
+  gap: 3rem;
+}
+
+.policy-section {
+  display: flex;
+  flex-direction: column;
+  gap: 1.25rem;
+}
+
+.policy-section h2 {
+  font-size: 1.5rem;
+  font-weight: 600;
+  letter-spacing: -0.02em;
+  color: var(--text-main);
+  margin-top: 1rem;
+  margin-bottom: 0.25rem;
+}
+
+.subsection {
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
+}
+
+.subsection h3 {
+  font-size: 1.15rem;
+  font-weight: 500;
+  color: var(--text-main);
+  letter-spacing: -0.01em;
+  margin-top: 0.5rem;
+}
+
+.policy-section p,
+.subsection p {
+  color: var(--text-muted);
+  font-size: 0.975rem;
+  line-height: 1.75;
+  text-align: left;
+}
+
+.policy-section ul,
+.subsection ul {
+  list-style-type: none;
+  padding-left: 0;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.policy-section ul li,
+.subsection ul li {
+  position: relative;
+  padding-left: 1.5rem;
+  color: var(--text-muted);
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+.policy-section ul li::before,
+.subsection ul li::before {
+  content: "—";
+  position: absolute;
+  left: 0;
+  color: var(--accent-primary);
+  opacity: 0.8;
+}
+
+/* Highlight Box (e.g. for Refund Policy) */
+.highlight-box {
+  background: rgba(245, 166, 35, 0.03);
+  border-left: 3px solid var(--accent-primary);
+  border-radius: var(--radius-sm);
+  padding: 1.5rem;
+  margin: 0.5rem 0;
+}
+
+.highlight-box h3 {
+  font-size: 1.1rem;
+  font-weight: 600;
+  color: var(--accent-primary);
+  margin-bottom: 0.5rem;
+}
+
+.highlight-box p {
+  color: var(--text-main) !important;
+  font-size: 0.95rem;
+  line-height: 1.6;
+}
+
+/* Contact Info Card */
+.contact-info {
+  background: var(--bg-surface);
+  border: 1px solid var(--border-medium);
+  border-radius: var(--radius-md);
+  padding: 1.5rem;
+  margin-top: 0.5rem;
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+}
+
+.contact-info p {
+  margin: 0;
+}
+
+.contact-info p strong {
+  color: var(--text-main);
+}
+
+.contact-address {
+  font-family: var(--font-mono);
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--text-muted);
+  border-left: 2px solid var(--border-strong);
+  padding-left: 1rem;
+  margin-top: 0.5rem;
+}
+
+/* Footer / Navigation section */
+.policy-footer {
+  margin-top: 4rem;
+  padding-top: 2.5rem;
+  border-top: 1px solid var(--border-medium);
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 2rem;
+}
+
+.policy-footer p {
+  color: var(--text-dim);
+  font-size: 0.9rem;
+  line-height: 1.6;
+  margin: 0;
+}
+
+.policy-links {
+  display: flex;
+  gap: 1.5rem;
+}
+
+.policy-link {
+  font-size: 0.9rem;
+  color: var(--accent-primary);
+  font-weight: 500;
+  transition: opacity var(--transition-fast);
+}
+
+.policy-link:hover {
+  opacity: 0.8;
+  text-decoration: underline;
+}
+
+.back-to-home {
+  margin-top: 1rem;
+}
+
+.back-to-home a {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.5rem;
+  font-size: 0.9rem;
+  font-weight: 500;
+  color: var(--text-main);
+  transition: color var(--transition-fast);
+}
+
+.back-to-home a:hover {
+  color: var(--accent-primary);
+}
+
+/* Responsive adjustments */
+@media (max-width: 768px) {
+  .policy-container {
+    padding: 3rem 1.25rem;
+  }
+  
+  .policy-header {
+    margin-bottom: 2.5rem;
+  }
+  
+  .policy-header h1 {
+    font-size: 2.25rem;
+  }
+  
+  .policy-content {
+    gap: 2.5rem;
+  }
+}

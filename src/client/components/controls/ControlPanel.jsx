@@ -16,7 +16,7 @@ import {
   useCompressionEstimator,
   useFileConversionSync,
 } from "./useServiceEffects";
-import { formatFileSize } from "../../core/canvas-utils";
+import { formatFileSize } from "../../utils/canvas-utils";
 import BatchSettingsSelector from "./BatchSettingsSelector";
 
 // --- Sub-components for better structural design and layout separation ---
@@ -170,7 +170,7 @@ const ControlPanel = () => {
         const globalSettings = serviceSettings[currentService.id] || {};
         if (currentService.id === "background-removal") {
           const activeModel = currentOverrides.model ?? globalSettings.model;
-          if (activeModel !== "birefnet" && activeModel !== "birefnet-lite") {
+          if (activeModel !== "birefnet" && activeModel !== "birefnet-lite" && activeModel !== "ben2") {
             batch.updateItemOverride(batch.batchSettingsTarget, currentService.id, "model", "birefnet-lite");
           }
         } else if (currentService.id === "upscaling") {
@@ -193,7 +193,7 @@ const ControlPanel = () => {
     if (id === "tier" && parsedVal === "paid") {
       if (currentService.id === "background-removal") {
         const currentModel = nextSettings.model;
-        if (currentModel !== "birefnet" && currentModel !== "birefnet-lite") {
+        if (currentModel !== "birefnet" && currentModel !== "birefnet-lite" && currentModel !== "ben2") {
           updateServiceSetting(currentService.id, "model", "birefnet-lite");
           nextSettings.model = "birefnet-lite";
         }

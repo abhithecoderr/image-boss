@@ -165,6 +165,21 @@
   color: var(--text-dim);
 }
 
+.auth-visual-footer p {
+  margin-bottom: 0.5rem;
+}
+
+.auth-footer-link {
+  color: var(--text-dim);
+  text-decoration: none;
+  transition: color 0.2s ease;
+}
+
+.auth-footer-link:hover {
+  color: var(--text-main);
+  text-decoration: underline;
+}
+
 /* Right pane - Form shell */
 .auth-form-side {
   flex: 1;

@@ -3,7 +3,7 @@
  */
 import { pipeline, env } from "@huggingface/transformers";
 import * as ort from "onnxruntime-web/webgpu";
-import { getGPUConfig, createProgressReporter, bitmapToRawImage, fetchWithProgress, imageToTensor, configureOrt } from "../../core/worker-utils.js";
+import { getGPUConfig, createProgressReporter, bitmapToRawImage, fetchWithProgress, imageToTensor, configureOrt } from "../../utils/worker-utils.js";
 import { BACKGROUND_REMOVAL_MODELS } from "../../config/models.js";
 import { createAlphaMaskFromRawImage, createAlphaMaskFromTensors, releaseHelperCaches } from "./helpers.js";
 

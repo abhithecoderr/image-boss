@@ -4,7 +4,7 @@
  */
 
 import { SamModel, Sam2Model, AutoProcessor, env } from '@huggingface/transformers';
-import { getGPUConfig, createProgressReporter, bitmapToRawImage } from '../../core/worker-utils.js';
+import { getGPUConfig, createProgressReporter, bitmapToRawImage } from '../../utils/worker-utils.js';
 import { SEGMENTATION_MODELS } from '../../config/models.js';
 import { extractMaskBitmap } from './helpers.js';
 

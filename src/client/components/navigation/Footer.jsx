@@ -39,11 +39,14 @@ const Footer = () => {
           </div>
           <div className="footer-column">
             <h4 className="footer-column-title">Legal</h4>
-            <Link to="/privacy" className="footer-link">
+            <Link to="/privacy-policy" className="footer-link">
               Privacy Policy
             </Link>
-            <Link to="/terms" className="footer-link">
+            <Link to="/terms-of-service" className="footer-link">
               Terms of Service
+            </Link>
+            <Link to="/refund-policy" className="footer-link">
+              Refund Policy
             </Link>
           </div>
         </div>

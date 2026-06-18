@@ -2,9 +2,6 @@
  * WorkerRegistry - Global singleton that enforces a "one active AI model at a time" policy.
  */
 
-// How long to wait for a worker to ack `dispose` before hard-terminating it.
-// Long enough for ORT session.release() + WebGPU buffer teardown, short enough
-// that a wedged worker doesn't stall a service switch.
 const DISPOSE_TIMEOUT_MS = 1500;
 
 class WorkerRegistry {

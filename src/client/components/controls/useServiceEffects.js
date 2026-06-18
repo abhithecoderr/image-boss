@@ -3,7 +3,7 @@
  */
 import { useState, useEffect, useRef } from 'react';
 import { useWorkspace, useService } from '../../store';
-import { hasAlphaTransparency } from '../../core/canvas-utils';
+import { hasAlphaTransparency } from '../../utils/canvas-utils';
 
 /* 
  useCompressionEstimator:

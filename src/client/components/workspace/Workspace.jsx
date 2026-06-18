@@ -12,7 +12,7 @@ import MaskEditorOverlay from "./overlays/MaskEditorOverlay";
 import MagicEraseOverlay from "./overlays/MagicEraseOverlay";
 import EditorPreview from "./EditorPreview";
 import BatchStrip from "./BatchStrip";
-import { downloadCanvas } from "../../core/canvas-utils";
+import { downloadCanvas } from "../../utils/canvas-utils";
 import Progress from "../ui/Progress";
 import UploadZone from "../ui/UploadZone";
 import Button from "../ui/Button";

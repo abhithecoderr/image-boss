@@ -1,11 +1,11 @@
 import { useWorkspace, useUI } from '../store';
-import { createBatchItem, disposeBatchItem } from '../core/BatchItem';
+import { createBatchItem, disposeBatchItem } from '../engine/BatchItem';
 import {
   loadImage,
   imageToCanvas,
   downloadCanvas,
   canvasToThumbURL,
-} from '../core/canvas-utils';
+} from '../utils/canvas-utils';
 import { APP_CONFIG } from '../config/app';
 
 /* 
