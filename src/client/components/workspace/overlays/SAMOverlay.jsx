@@ -38,7 +38,7 @@ const SAMOverlay = ({ srcRef }) => {
       ro.disconnect();
       window.removeEventListener("resize", sync);
     };
-  }, [srcRef, currentService]);
+  }, [srcRef, currentService?.id]);
 
   const placePoint = (clientX, clientY, isNegative) => {
     if (currentService?.id !== "object-segmentation") return;

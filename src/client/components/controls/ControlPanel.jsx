@@ -1,8 +1,8 @@
 /*
  * Main workspace sidebar housing settings, models, sliders, and batch settings for the active service.
  */
-import { useService, useWorkspace, useSegmentation } from "../../store";
-import { useProcessor as useController } from "../../hooks/useProcessorContext";
+import { useService, useWorkspace, useSegmentation, useUI } from "../../store";
+import { useUnifiedProcessor as useController } from "../../hooks/useUnifiedProcessor";
 import { useSAM } from "../../hooks/useSAM";
 import { OPERATION_MODE } from "../../config/app";
 import { CONTROLS_CONFIG } from "../../config/controls";
@@ -139,11 +139,12 @@ const ControlPanel = () => {
   const batch = useController();
   const { execute, mode } = batch;
 
-  const currentTab = useSegmentation((state) => state.activeEditorTab);
-  const setCurrentTab = useSegmentation((state) => state.setActiveEditorTab);
+  const currentTab = useUI((state) => state.activeEditorTab);
+  const setCurrentTab = useUI((state) => state.setActiveEditorTab);
   const editing = useSegmentation((state) => state.editing);
   const setEditing = useSegmentation((state) => state.setEditing);
   const magicEraseMaskCanvas = useSegmentation((state) => state.magicEraseMaskCanvas);
+  const isGeneratingMask = useSegmentation((state) => state.isGeneratingMask);
 
   const activeMode = mode;
   const bgPostProcessDebounceRef = useRef(null);

@@ -8,6 +8,20 @@ let toastTimeout = null;
 export const useUIStore = create((set, get) => ({
   toast: null,
   progress: { percent: 0, message: "" },
+  isPageLoading: false,
+  activeEditorTab: "composition",
+  batchMode: "single",
+  batchSettingsTarget: "all",
+
+  setPageLoading: (isPageLoading) => set({ isPageLoading }),
+  setActiveEditorTab: (activeEditorTab) => set({ activeEditorTab }),
+  setBatchMode: (batchMode) => set({ batchMode }),
+  setBatchSettingsTarget: (batchSettingsTarget) => set({ batchSettingsTarget }),
+  resetUIState: () => set({
+    activeEditorTab: "composition",
+    batchMode: "single",
+    batchSettingsTarget: "all",
+  }),
 
   showToast: (message, type = "info") => {
     if (toastTimeout) {
@@ -29,3 +43,4 @@ export const useUIStore = create((set, get) => ({
     set({ progress: { percent: 0, message: "" } });
   },
 }));
+

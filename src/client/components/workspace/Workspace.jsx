@@ -3,7 +3,7 @@
  */
 import React, { useRef, useEffect, useState } from "react";
 import { useUI, useWorkspace, useService, useSegmentation } from "../../store";
-import { useProcessor } from "../../hooks/useProcessorContext";
+import { useUnifiedProcessor } from "../../hooks/useUnifiedProcessor";
 import { useFileUpload } from "../../hooks/useFileUpload";
 import SAMOverlay from "./overlays/SAMOverlay";
 import SegmentationCandidates from "./SegmentationCandidates";
@@ -32,10 +32,23 @@ function disposeCanvas(canvas) {
   }
 }
 
-/** Dispose every canvas in a history stack before it's discarded. */
-function disposeHistoryStack(stack) {
+/** Dispose every canvas in a history stack before it's discarded, unless it is still in use. */
+function disposeHistoryStack(stack, currentRes = null, currentSrc = null, itemsList = []) {
   if (!Array.isArray(stack)) return;
-  for (const canvas of stack) disposeCanvas(canvas);
+  for (const canvas of stack) {
+    if (!canvas) continue;
+    if (canvas === currentRes || canvas === currentSrc) continue;
+    if (itemsList && itemsList.length > 0) {
+      const isReferenced = itemsList.some((item) => {
+        if (item.sourceCanvas === canvas || item.resultCanvas === canvas) return true;
+        if (item.stepResults && Object.values(item.stepResults).some(res => res.resultCanvas === canvas)) return true;
+        if (item.serviceResults && Object.values(item.serviceResults).some(res => res.resultCanvas === canvas)) return true;
+        return false;
+      });
+      if (isReferenced) continue;
+    }
+    disposeCanvas(canvas);
+  }
 }
 
 const StatusBar = () => {
@@ -51,7 +64,7 @@ const StatusBar = () => {
 };
 
 const Workspace = () => {
-  const batch = useProcessor();
+  const batch = useUnifiedProcessor();
   const { currentService, getDownloadMetadata, serviceSettings } = useService();
   const { executeSmartSelect } = useSAM();
   const magicEraseMaskCanvas = useSegmentation((state) => state.magicEraseMaskCanvas);
@@ -76,6 +89,7 @@ const Workspace = () => {
   const isProcessing = useWorkspace((state) => state.isProcessing);
   const resetImages = useWorkspace((state) => state.resetImages);
   const resetSegmentationState = useSegmentation((state) => state.resetSegmentationState);
+  const isGeneratingMask = useSegmentation((state) => state.isGeneratingMask);
   const items = useWorkspace((state) => state.items);
   const activeItemId = useWorkspace((state) => state.activeItemId);
   const setResultCanvas = useWorkspace((state) => state.setResultCanvas);
@@ -90,13 +104,19 @@ const Workspace = () => {
   const [historyStack, setHistoryStack] = useState([]);
   const [historyIndex, setHistoryIndex] = useState(-1);
 
+  const latestStatesRef = useRef({ resCanvasState, srcCanvasState, items });
+  useEffect(() => {
+    latestStatesRef.current = { resCanvasState, srcCanvasState, items };
+  }, [resCanvasState, srcCanvasState, items]);
+
   // Clean up segmentation points and candidates when switching services
   useEffect(() => {
     resetSegmentationState(currentService.id === "magic-erase");
     // Reset editing state on switch
-    setEditing((prev) => ({ ...prev, activeTool: "none" }));
+    setEditing({ activeTool: "none" });
     setInitialCanvasBackup(null);
-    disposeHistoryStack(historyStack);
+    const { resCanvasState: r, srcCanvasState: s, items: i } = latestStatesRef.current;
+    disposeHistoryStack(historyStack, r, s, i);
     setHistoryStack([]);
     setHistoryIndex(-1);
   }, [currentService.id, resetSegmentationState, setEditing]);
@@ -104,7 +124,7 @@ const Workspace = () => {
   const handleReset = () => {
     resetImages();
     resetSegmentationState();
-    setEditing((prev) => ({ ...prev, activeTool: "none" }));
+    setEditing({ activeTool: "none" });
     setInitialCanvasBackup(null);
     disposeHistoryStack(historyStack);
     setHistoryStack([]);
@@ -147,7 +167,7 @@ const Workspace = () => {
     if (initialCanvasBackup) {
       setResultCanvas(initialCanvasBackup, editing.activeStepId || null);
     }
-    setEditing((prev) => ({ ...prev, activeTool: "none" }));
+    setEditing({ activeTool: "none" });
     setInitialCanvasBackup(null);
     // Note: we intentionally do NOT dispose the history stack here — its
     // entries may still be referenced by resultCanvas until GC reclaims them.
@@ -157,7 +177,7 @@ const Workspace = () => {
   };
 
   const handleSave = () => {
-    setEditing((prev) => ({ ...prev, activeTool: "none" }));
+    setEditing({ activeTool: "none" });
     setInitialCanvasBackup(null);
     setHistoryStack([]);
     setHistoryIndex(-1);
@@ -168,7 +188,7 @@ const Workspace = () => {
       setInitialCanvasBackup(resCanvasState);
       setHistoryStack([resCanvasState]);
       setHistoryIndex(0);
-      setEditing((prev) => ({ ...prev, activeTool: "erase" }));
+      setEditing({ activeTool: "erase" });
     }
   };
 
@@ -329,7 +349,7 @@ const Workspace = () => {
                     <button
                       type="button"
                       title="Erase Mode (E)"
-                      onClick={() => setEditing((prev) => ({ ...prev, activeTool: "erase" }))}
+                      onClick={() => setEditing({ activeTool: "erase" })}
                       className={`editor-tool-btn${editing.activeTool === "erase" ? " is-active" : ""}`}
                     >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -342,7 +362,7 @@ const Workspace = () => {
                     <button
                       type="button"
                       title="Restore Mode (R)"
-                      onClick={() => setEditing((prev) => ({ ...prev, activeTool: "restore" }))}
+                      onClick={() => setEditing({ activeTool: "restore" })}
                       className={`editor-tool-btn${editing.activeTool === "restore" ? " is-active" : ""}`}
                     >
                       <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
@@ -363,7 +383,7 @@ const Workspace = () => {
                         min="5"
                         max="150"
                         value={editing.brushSize}
-                        onChange={(e) => setEditing((prev) => ({ ...prev, brushSize: parseInt(e.target.value) }))}
+                        onChange={(e) => setEditing({ brushSize: parseInt(e.target.value) })}
                         className="editor-brush-range"
                       />
                       <span className="editor-brush-value">{editing.brushSize}px</span>
@@ -554,7 +574,7 @@ const Workspace = () => {
             variant="primary"
             onClick={getProcessAction()}
             style={{ padding: "6px 16px", fontSize: "13px" }}
-            disabled={isProcessing}
+            disabled={isProcessing || isGeneratingMask}
             isLoading={isProcessing}
           >
             {getProcessLabel()}

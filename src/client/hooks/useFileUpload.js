@@ -74,7 +74,11 @@ export const useQueueActions = (workspace, showToast) => {
     setOriginalCanvas,
     setResultCanvas,
     selectedIds,
-    setSelectedIds,
+    addItems,
+    removeItem: storeRemoveItem,
+    toggleItemSelection: toggleItemSelectionAction,
+    selectAllItems: storeSelectAllItems,
+    deselectAllItems: storeDeselectAllItems,
   } = workspace;
 
   const addFiles = async (files) => {
@@ -109,7 +113,7 @@ export const useQueueActions = (workspace, showToast) => {
       newItems.push(item);
     }
 
-    setItems((prev) => [...prev, ...newItems]);
+    addItems(newItems);
     if (!activeItemId && newItems.length > 0) {
       setActiveItemId(newItems[0].id);
       setOriginalCanvas(newItems[0].sourceCanvas);
@@ -121,18 +125,7 @@ export const useQueueActions = (workspace, showToast) => {
     }
   };
 
-  const removeItem = (id) => {
-    setItems((prev) => {
-      const itemToDispose = prev.find((item) => item.id === id);
-      if (itemToDispose) disposeBatchItem(itemToDispose);
-      return prev.filter((item) => item.id !== id);
-    });
-    if (activeItemId === id) {
-      setActiveItemId(null);
-      setOriginalCanvas(null);
-      setResultCanvas(null);
-    }
-  };
+
 
   const selectItem = (id) => {
     const item = items.find((entry) => entry.id === id);
@@ -141,23 +134,6 @@ export const useQueueActions = (workspace, showToast) => {
       setOriginalCanvas(item.sourceCanvas);
       setResultCanvas(item.resultCanvas);
     }
-  };
-
-  const toggleItemSelection = (id) => {
-    setSelectedIds((prev) => {
-      const next = new Set(prev);
-      if (next.has(id)) next.delete(id);
-      else next.add(id);
-      return next;
-    });
-  };
-
-  const selectAllItems = () => {
-    setSelectedIds(new Set(items.map((item) => item.id)));
-  };
-
-  const deselectAllItems = () => {
-    setSelectedIds(new Set());
   };
 
   const reorderItems = (startIndex, endIndex) => {
@@ -169,11 +145,11 @@ export const useQueueActions = (workspace, showToast) => {
 
   return {
     addFiles,
-    removeItem,
+    removeItem: storeRemoveItem,
     selectItem,
-    toggleItemSelection,
-    selectAllItems,
-    deselectAllItems,
+    toggleItemSelection: toggleItemSelectionAction,
+    selectAllItems: storeSelectAllItems,
+    deselectAllItems: storeDeselectAllItems,
     reorderItems,
     selectedIds,
   };

@@ -1,27 +1,10 @@
-/**
+/*
  * Consolidated helper utilities for the Background Removal service.
  * Handles morphological operations, main-thread canvas masking, and worker-side alpha mask creation.
  * Cross-runtime safe to run in both main and Web Worker threads.
  */
 
-// Cross-runtime canvas creation helper
-function createCanvas(w, h) {
-  if (typeof document !== 'undefined') {
-    const canvas = document.createElement('canvas');
-    canvas.width = w;
-    canvas.height = h;
-    return canvas;
-  }
-  return new OffscreenCanvas(w, h);
-}
-
-// Module-level caches to prevent GC spikes and GPU thrashing from repeated allocations
-let cachedMaskCanvas = null;
-let cachedMaskCtx = null;
-let cachedFilterCanvas = null;
-let cachedFilterCtx = null;
-let cachedAlphaCanvas = null;
-let cachedAlphaCtx = null;
+import { createCanvas, canvasCache } from "../../utils/canvas-utils.js";
 
 // Extract the alpha channel from canvas ImageData
 export function extractAlphaChannel(imageData, W, H) {
@@ -171,18 +154,8 @@ export function applyMaskToCanvas(sourceCanvas, maskResult, options = {}) {
   const maskW = resultBitmap.width;
   const maskH = resultBitmap.height;
 
-  let maskCanvas;
-  let maskCtx;
-  if (cachedMaskCanvas && cachedMaskCanvas.width === maskW && cachedMaskCanvas.height === maskH) {
-    maskCanvas = cachedMaskCanvas;
-    maskCtx = cachedMaskCtx;
-    maskCtx.clearRect(0, 0, maskW, maskH);
-  } else {
-    maskCanvas = createCanvas(maskW, maskH);
-    maskCtx = maskCanvas.getContext('2d');
-    cachedMaskCanvas = maskCanvas;
-    cachedMaskCtx = maskCtx;
-  }
+  const { canvas: maskCanvas, ctx: maskCtx } = canvasCache.get('bg_mask', maskW, maskH);
+  maskCtx.clearRect(0, 0, maskW, maskH);
 
   // 2. Apply post-processing to the mask
   if (needsPostProcess) {
@@ -205,18 +178,8 @@ export function applyMaskToCanvas(sourceCanvas, maskResult, options = {}) {
 
     // Apply Blur and Contrast using hardware-accelerated Canvas Filters
     if (edgeSmoothness > 0 || edgeContrast > 0) {
-      let filterCanvas;
-      let filterCtx;
-      if (cachedFilterCanvas && cachedFilterCanvas.width === maskW && cachedFilterCanvas.height === maskH) {
-        filterCanvas = cachedFilterCanvas;
-        filterCtx = cachedFilterCtx;
-        filterCtx.clearRect(0, 0, maskW, maskH);
-      } else {
-        filterCanvas = createCanvas(maskW, maskH);
-        filterCtx = filterCanvas.getContext('2d');
-        cachedFilterCanvas = filterCanvas;
-        cachedFilterCtx = filterCtx;
-      }
+      const { canvas: filterCanvas, ctx: filterCtx } = canvasCache.get('bg_filter', maskW, maskH);
+      filterCtx.clearRect(0, 0, maskW, maskH);
       
       const blur = edgeSmoothness > 0 ? `blur(${edgeSmoothness}px)` : '';
       const contrast = edgeContrast > 0 ? `contrast(${100 + edgeContrast * 25}%)` : '';
@@ -252,18 +215,8 @@ export async function createAlphaMaskFromRawImage(rawImage) {
   const maskData = rawImage.data;
   const channels = rawImage.channels || Math.round(maskData.length / (w * h));
 
-  let maskCanvas;
-  let maskCtx;
-  if (cachedAlphaCanvas && cachedAlphaCanvas.width === w && cachedAlphaCanvas.height === h) {
-    maskCanvas = cachedAlphaCanvas;
-    maskCtx = cachedAlphaCtx;
-    maskCtx.clearRect(0, 0, w, h);
-  } else {
-    maskCanvas = new OffscreenCanvas(w, h);
-    maskCtx = maskCanvas.getContext("2d");
-    cachedAlphaCanvas = maskCanvas;
-    cachedAlphaCtx = maskCtx;
-  }
+  const { canvas: maskCanvas, ctx: maskCtx } = canvasCache.get('bg_alpha', w, h);
+  maskCtx.clearRect(0, 0, w, h);
   const imgData = maskCtx.createImageData(w, h);
   const pixels = imgData.data;
 
@@ -354,10 +307,5 @@ export async function createAlphaMaskFromTensors(outputData, size, outputType, c
  * when the worker is being disposed. Called from the worker's `dispose` path.
  */
 export function releaseHelperCaches() {
-  cachedMaskCanvas = null;
-  cachedMaskCtx = null;
-  cachedFilterCanvas = null;
-  cachedFilterCtx = null;
-  cachedAlphaCanvas = null;
-  cachedAlphaCtx = null;
+  canvasCache.clear();
 }

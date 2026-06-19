@@ -2,12 +2,13 @@
  * Dropdown control for toggling between applying settings to a single active image or the entire batch.
  */
 import React from "react";
-import { useWorkspace, useService } from "../../store";
+import { useWorkspace, useService, useUI } from "../../store";
 import Button from "../ui/Button";
 
 const BatchSettingsSelector = () => {
   const { currentService } = useService();
-  const { items, activeItemId, setActiveItemId, batchSettingsTarget, setBatchSettingsTarget } = useWorkspace();
+  const { items, activeItemId, setActiveItemId } = useWorkspace();
+  const { batchSettingsTarget, setBatchSettingsTarget } = useUI();
 
   if (items.length <= 1) return null;
 

@@ -1,8 +1,8 @@
 /*
  * Consolidates stores and exports React-friendly hook adapters with selectors.
  */
-import { useShallow } from 'zustand/react/shallow';
 import { useWorkspaceStore } from './workspaceStore';
+import { useWorkflowStore } from './workflowStore';
 import { useServiceStore } from './serviceStore';
 import { useUIStore } from './uiStore';
 import { useSegmentationStore } from './segmentationStore';
@@ -30,6 +30,13 @@ export const useSegmentation = (selector) => {
   return useSegmentationStore();
 };
 
+export const useWorkflow = (selector) => {
+  if (selector) {
+    return useWorkflowStore(selector);
+  }
+  return useWorkflowStore();
+};
+
 export const useAuth = () => {
   const store = useAuthStore();
   const { data, isPending, refetch } = useSession();
@@ -55,38 +62,13 @@ export const useAuth = () => {
 
 
 
-// useShallow on useWorkspace: the workspace store fires on every canvas op,
-// batch tick, and item status flip — shallow comparison prevents consumers
-// from re-rendering on unrelated store updates. React Compiler handles the
-// return object memoisation, so no useMemo needed here.
+// Hook adapter for workspace store with optional selector subscription.
 export const useWorkspace = (selector) => {
   if (selector) {
     return useWorkspaceStore(selector);
   }
 
-  const storeState = useWorkspaceStore(
-    useShallow((s) => ({
-      items: s.items,
-      activeItemId: s.activeItemId,
-      setItems: s.setItems,
-      setOriginalCanvas: s.setOriginalCanvas,
-      setOriginalFile: s.setOriginalFile,
-      setResultCanvas: s.setResultCanvas,
-      resetImages: s.resetImages,
-      workflowSteps: s.workflowSteps,
-      setWorkflowSteps: s.setWorkflowSteps,
-      selectedIds: s.selectedIds,
-      setSelectedIds: s.setSelectedIds,
-      batchMode: s.batchMode,
-      setBatchMode: s.setBatchMode,
-      isProcessing: s.isProcessing,
-      setIsProcessing: s.setIsProcessing,
-      batchSettingsTarget: s.batchSettingsTarget,
-      setBatchSettingsTarget: s.setBatchSettingsTarget,
-      setActiveItemId: s.setActiveItemId,
-    })),
-  );
-
+  const storeState = useWorkspaceStore();
   const activeItem = storeState.items.find((i) => i.id === storeState.activeItemId) || null;
 
   return {
@@ -104,13 +86,7 @@ export const useService = (selector) => {
   }
 
   const navigate = useNavigate();
-  const storeState = useServiceStore((s) => ({
-    activeServiceId: s.activeServiceId,
-    setActiveServiceId: s.setActiveServiceId,
-    serviceSettings: s.serviceSettings,
-    setServiceSettings: s.setServiceSettings,
-    updateServiceSetting: s.updateServiceSetting,
-  }));
+  const storeState = useServiceStore();
 
   const activeServiceId = storeState.activeServiceId || SERVICE_ORDER[0];
   const currentService = SERVICES[activeServiceId] || SERVICES[SERVICE_ORDER[0]];
@@ -146,6 +122,7 @@ export const useService = (selector) => {
 
 // Re-export raw stores for direct access
 export { useWorkspaceStore } from './workspaceStore';
+export { useWorkflowStore } from './workflowStore';
 export { useServiceStore } from './serviceStore';
 export { useUIStore } from './uiStore';
 export { useSegmentationStore } from './segmentationStore';

@@ -1,7 +1,6 @@
 import Worker from './worker.js?worker';
 import { workerRegistry } from '../../engine/worker-registry.js';
 import { runWorkerJob } from '../../utils/worker-utils.js';
-import { PAID_MODELS_CONFIG } from '../../config/models.js';
 import { samPredict, applySamCutout, applySamOverlay } from '../../api/sam.js';
 import { loadImage } from '../../api/birefnet.js';
 
@@ -76,10 +75,6 @@ export async function process(sourceCanvas, options = {}, onProgress) {
     onProgress?.(0.1, "Converting image to payload...");
     const imageBlob = await new Promise((resolve) => sourceCanvas.toBlob(resolve, 'image/png'));
 
-    const paidModelCfg = PAID_MODELS_CONFIG[modelId];
-    const apiModelTag = paidModelCfg ? paidModelCfg.api_model_tag : "sam-tiny";
-    const apiDevice = paidModelCfg ? paidModelCfg.api_runtime : "cpu";
-
     // Denormalize points from normalized coordinates (0..1) to absolute pixels
     const apiPoints = points.map(p => [
       Math.round(p.x * sourceCanvas.width),
@@ -87,11 +82,11 @@ export async function process(sourceCanvas, options = {}, onProgress) {
     ]);
     const apiLabels = points.map(p => p.label);
 
-    onProgress?.(0.3, `Uploading to Cloud API (${apiModelTag})...`);
+    onProgress?.(0.3, `Uploading to Cloud API (${modelId})...`);
     try {
+      // Send client model ID — server resolves the API tag and runtime
       const maskBlob = await samPredict('/api', imageBlob, apiPoints, apiLabels, {
-        model: apiModelTag,
-        device: apiDevice
+        model: modelId
       });
 
       onProgress?.(0.8, "Loading response mask...");

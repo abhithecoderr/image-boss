@@ -3,7 +3,7 @@
  */
 import { Link, useParams, useLocation, useNavigate } from "react-router-dom";
 import { useService, useUI, useWorkspace, useServiceStore } from "../store";
-import { ProcessorProvider, useProcessor } from "../hooks/useProcessorContext";
+import { useUnifiedProcessor } from "../hooks/useUnifiedProcessor";
 import { SERVICES } from "../config/services";
 import { processorEngine } from "../engine/processor-engine";
 import React, { useEffect, useRef, useState } from "react";
@@ -17,14 +17,7 @@ import Navbar from "../components/navigation/Navbar";
 import Footer from "../components/navigation/Footer";
 
 export default function MainAppLayout() {
-  // The processor controller is instantiated exactly once here and shared via
-  // context with Workspace / ControlPanel / BatchStrip / useSAM so they don't
-  // each spin up their own (5× subscriptions + racing service-switch effects).
-  return (
-    <ProcessorProvider>
-      <MainAppLayoutContent />
-    </ProcessorProvider>
-  );
+  return <MainAppLayoutContent />;
 }
 
 function MainAppLayoutContent() {
@@ -48,7 +41,7 @@ function MainAppLayoutContent() {
   const location = useLocation();
   const navigate = useNavigate();
 
-  const processor = useProcessor();
+  const processor = useUnifiedProcessor();
   const { execute, mode } = processor;
 
   const autoProcessedRef = useRef(false);
@@ -59,10 +52,14 @@ function MainAppLayoutContent() {
   // the app lifetime once any service runs.
   useEffect(() => {
     return () => {
-      resetImages();
-      processorEngine.clearActiveProcessor().catch(() => {});
+      // Only reset images if the user is actually navigating away from the workspace (/services) routes
+      if (!window.location.pathname.startsWith("/services")) {
+        resetImages();
+        processorEngine.clearActiveProcessor().catch(() => {});
+      }
     };
   }, [resetImages]);
+
 
   // Auto-close the mobile sidebar drawer whenever the active service changes.
   useEffect(() => {

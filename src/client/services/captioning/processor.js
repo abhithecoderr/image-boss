@@ -1,6 +1,6 @@
 import Worker from './worker.js?worker';
 import { workerRegistry } from '../../engine/worker-registry.js';
-import { CAPTIONING_MODELS, PAID_MODELS_CONFIG } from '../../config/models.js';
+import { CAPTIONING_MODELS } from '../../config/models.js';
 import { runWorkerJob } from '../../utils/worker-utils.js';
 import { createCaptionOverlay } from './helpers.js';
 import { captionImage } from '../../api/caption.js';
@@ -19,18 +19,15 @@ export async function process(sourceCanvas, options = {}, onProgress) {
 
   if (tier === 'paid') {
     const modelId = 'lfm2.5-vl';
-    const paidModelCfg = PAID_MODELS_CONFIG[modelId];
-    const apiModelTag = paidModelCfg ? paidModelCfg.api_model_tag : modelId;
-    const apiDevice = paidModelCfg ? paidModelCfg.api_runtime : 'cpu';
 
     onProgress?.(0.1, 'Converting image to payload...');
     const imageBlob = await new Promise((resolve) => sourceCanvas.toBlob(resolve, 'image/png'));
 
-    onProgress?.(0.3, `Uploading to Cloud API (${apiModelTag})...`);
+    onProgress?.(0.3, `Uploading to Cloud API (${modelId})...`);
     try {
+      // Send client model ID — server resolves the API tag and runtime
       const caption = await captionImage('/api', imageBlob, {
-        model: apiModelTag,
-        device: apiDevice,
+        model: modelId,
         prompt: options.lfmPrompt || 'Describe this image in detail.'
       });
 

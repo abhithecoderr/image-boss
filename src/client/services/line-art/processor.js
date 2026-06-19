@@ -2,6 +2,7 @@ import Worker from './worker.js?worker';
 import { applySobelFilter } from './helpers.js';
 import { createProgressReporter, runWorkerJob } from '../../utils/worker-utils.js';
 import { workerRegistry } from '../../engine/worker-registry.js';
+import { imageToCanvas } from '../../utils/canvas-utils.js';
 
 const SERVICE_ID = 'line-art';
 
@@ -36,11 +37,7 @@ async function processSobel(sourceCanvas, options, onProgress) {
 
   report(0.2, 0.2, 'Extracting edges...')();
 
-  const resultCanvas = document.createElement('canvas');
-  resultCanvas.width = sourceCanvas.width;
-  resultCanvas.height = sourceCanvas.height;
-  const ctx = resultCanvas.getContext('2d');
-  ctx.drawImage(sourceCanvas, 0, 0);
+  const { canvas: resultCanvas } = imageToCanvas(sourceCanvas);
 
   applySobelFilter(resultCanvas, threshold);
   report(1, 1, 'Complete')();

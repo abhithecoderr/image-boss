@@ -8,7 +8,7 @@ import React, {
 } from "react";
 import ReactCrop, { centerCrop, makeAspectCrop } from "react-image-crop";
 import "react-image-crop/dist/ReactCrop.css";
-import { useService, useSegmentation } from "../../store";
+import { useService, useWorkspace, useUI } from "../../store";
 import { getEditorStyles } from "../../utils/editorFilters";
 
 // ---------------------------------------------------------------------------
@@ -145,7 +145,7 @@ const UnifiedCrop = ({
 // ---------------------------------------------------------------------------
 const EditorPreview = ({ sourceCanvas }) => {
   const { serviceSettings, updateServiceSetting } = useService();
-  const activeEditorTab = useSegmentation((state) => state.activeEditorTab);
+  const activeEditorTab = useUI((state) => state.activeEditorTab);
   const settings = serviceSettings["image-editor"] || {};
   const {
     aspectRatio = "free",

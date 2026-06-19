@@ -2,9 +2,9 @@
  * Helper utilities for the Object Segmentation service.
  * Handles high-performance boolean mask parsing and OffscreenCanvas packing.
  */
+import { canvasCache } from "../../utils/canvas-utils.js";
 
-let workerMaskCanvas = null;
-let workerMaskCtx = null;
+
 
 /**
  * Convert 1-channel boolean mask tensor data back into a transferable ImageBitmap.
@@ -16,10 +16,7 @@ let workerMaskCtx = null;
  * @returns {Promise<ImageBitmap>} Output mask bitmap ready for UI layers
  */
 export async function extractMaskBitmap(data, width, height) {
-  if (!workerMaskCanvas || workerMaskCanvas.width !== width || workerMaskCanvas.height !== height) {
-    workerMaskCanvas = new OffscreenCanvas(width, height);
-    workerMaskCtx = workerMaskCanvas.getContext('2d', { alpha: true });
-  }
+  const { canvas: workerMaskCanvas, ctx: workerMaskCtx } = canvasCache.get('mask', width, height, { alpha: true });
 
   const imageData = workerMaskCtx.createImageData(width, height);
   const data32 = new Uint32Array(imageData.data.buffer);

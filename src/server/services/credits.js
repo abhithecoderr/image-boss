@@ -1,6 +1,22 @@
 // Defines model rates and functions to calculate costs, and check/deduct credits
+// Server-side registry: maps client model IDs → { api_model_tag, api_runtime }
+// The client never sees this mapping — it only sends its own internal model ID.
+export const PAID_MODEL_REGISTRY = {
+  // Background removal
+  'birefnet':                               { api_model_tag: 'birefnet-general', api_runtime: 'cpu' },
+  'birefnet-lite':                          { api_model_tag: 'birefnet-lite',    api_runtime: 'cpu' },
+  'ben2':                                   { api_model_tag: 'ben2',             api_runtime: 'cpu' },
+  // SAM object segmentation (client sends the full ONNX model ID)
+  'onnx-community/sam2.1-hiera-tiny-ONNX':  { api_model_tag: 'sam-tiny',         api_runtime: 'cpu' },
+  'onnx-community/sam2.1-hiera-small-ONNX': { api_model_tag: 'sam-small',        api_runtime: 'cpu' },
+  'onnx-community/sam2.1-hiera-large-ONNX': { api_model_tag: 'sam-large',        api_runtime: 'gpu' },
+  // Upscaling
+  'esrgan':                                 { api_model_tag: 'esrgan',           api_runtime: 'gpu' },
+  // Captioning
+  'lfm2.5-vl':                              { api_model_tag: 'lfm2.5-vl',        api_runtime: 'cpu' },
+};
 
-import { eq } from 'drizzle-orm';
+import { eq, sql } from 'drizzle-orm';
 import * as schema from '../db/schema';
 
 export const MODEL_RATES = {
@@ -37,9 +53,10 @@ export async function checkCredits(db, userId) {
 }
 
 export async function deductUserCredits(db, userId, dbUser, cost) {
-  const newCredits = Math.max(0, dbUser.credits - cost);
-  await db.update(schema.user)
-    .set({ credits: newCredits })
-    .where(eq(schema.user.id, userId));
-  return newCredits;
+  const [updatedUser] = await db.update(schema.user)
+    .set({ credits: sql`MAX(0, credits - ${cost})` })
+    .where(eq(schema.user.id, userId))
+    .returning({ credits: schema.user.credits });
+  return updatedUser?.credits ?? 0;
 }
+

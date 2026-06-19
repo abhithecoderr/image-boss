@@ -61,5 +61,5 @@ export const useFileConversionSync = (options, onOptionChange) => {
         updateServiceSetting('file-conversion', 'inputFormat', mime);
       }
     }
-  }, [originalFile, options?.inputFormat, updateServiceSetting, onOptionChange]);
+  }, [originalFile, options?.inputFormat]); // omit onOptionChange/updateServiceSetting — they are stable setters and including them causes loop on every render
 };

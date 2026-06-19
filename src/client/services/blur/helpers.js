@@ -2,6 +2,7 @@
  * Helper utilities for the Face Blur service.
  * Handles downloader streams, NMS bounding-box suppression, and canvas ellipsoidal blurring.
  */
+import { canvasCache } from "../../utils/canvas-utils.js";
 
 
 
@@ -46,9 +47,7 @@ export function calculateIOU(box1, box2) {
   return intersection / (area1 + area2 - intersection);
 }
 
-// Module-level OffscreenCanvas caches for fast blur renderings
-let workerBlurCanvas = null;
-let workerBlurCtx = null;
+
 
 /**
  * Apply ellipses blurs over detected faces/persons on an OffscreenCanvas.
@@ -68,14 +67,7 @@ export async function applyBlur(bitmap, width, height, detections, options = {})
     shape = 1.0,
   } = options;
 
-  if (
-    !workerBlurCanvas ||
-    workerBlurCanvas.width !== width ||
-    workerBlurCanvas.height !== height
-  ) {
-    workerBlurCanvas = new OffscreenCanvas(width, height);
-    workerBlurCtx = workerBlurCanvas.getContext("2d");
-  }
+  const { canvas: workerBlurCanvas, ctx: workerBlurCtx } = canvasCache.get('blur', width, height);
 
   workerBlurCtx.clearRect(0, 0, width, height);
   workerBlurCtx.drawImage(bitmap, 0, 0);

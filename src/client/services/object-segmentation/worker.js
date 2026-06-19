@@ -4,7 +4,7 @@
  */
 
 import { SamModel, Sam2Model, AutoProcessor, env } from '@huggingface/transformers';
-import { getGPUConfig, createProgressReporter, bitmapToRawImage } from '../../utils/worker-utils.js';
+import { getGPUConfig, createProgressReporter, bitmapToRawImage, canvasCache } from '../../utils/worker-utils.js';
 import { SEGMENTATION_MODELS } from '../../config/models.js';
 import { extractMaskBitmap } from './helpers.js';
 
@@ -183,6 +183,7 @@ self.onmessage = async ({ data }) => {
     model = null;
     processor = null;
     currentModelId = null;
+    canvasCache.clear();
     self.postMessage({ type: 'disposed' });
   }
 };

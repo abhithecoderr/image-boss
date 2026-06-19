@@ -7,7 +7,7 @@
     "dev": "vite --force",
     "build": "vite build",
     "preview": "vite preview",
-    "deploy": "npm run build && wrangler deploy"
+    "deploy": "wrangler d1 migrations apply image-boss-db --remote && npm run build && wrangler deploy"
   },
   "dependencies": {
     "@huggingface/transformers": "^4.2.0",

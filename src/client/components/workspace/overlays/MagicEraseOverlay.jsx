@@ -12,14 +12,18 @@ const MagicEraseOverlay = ({ srcRef }) => {
   const updateProgress = useUI((state) => state.updateProgress);
   const showToast = useUI((state) => state.showToast);
   const setMagicEraseMaskCanvas = useSegmentation((state) => state.setMagicEraseMaskCanvas);
+  const isGeneratingMask = useSegmentation((state) => state.isGeneratingMask);
+  const setIsGeneratingMask = useSegmentation((state) => state.setIsGeneratingMask);
   
   // Refs for canvas and interaction state
   const overlayRef = useRef(null);
   const canvasRef = useRef(null);
   const isDrawingRef = useRef(false);
   const generationIdRef = useRef(0);
+  const isGeneratingRef = useRef(false);
+  const nextPointsRef = useRef(null);
+  const samPointsRef = useRef([]);
   const [samPoints, setSamPoints] = useState([]);
-  const [isGeneratingMask, setIsGeneratingMask] = useState(false);
 
   // Get magic erase settings (brush/point mode and brush size)
   const settings = serviceSettings["magic-erase"] || {};
@@ -66,12 +70,13 @@ const MagicEraseOverlay = ({ srcRef }) => {
       ro.disconnect();
       window.removeEventListener("resize", sync);
     };
-  }, [srcRef, currentService, originalCanvas]);
+  }, [srcRef, currentService?.id, originalCanvas]);
 
   // Register/unregister mask canvas when magic-erase service is active
   useEffect(() => {
     if (currentService?.id !== "magic-erase") {
       setMagicEraseMaskCanvas(null);
+      samPointsRef.current = [];
       setSamPoints([]);
       return;
     }
@@ -82,6 +87,7 @@ const MagicEraseOverlay = ({ srcRef }) => {
 
   // Clear SAM points when selection mode changes or image changes
   useEffect(() => {
+    samPointsRef.current = [];
     setSamPoints([]);
   }, [selectionMode, originalCanvas]);
 
@@ -117,7 +123,7 @@ const MagicEraseOverlay = ({ srcRef }) => {
       ctx.fill();
     };
 
-  // Paint SAM-generated mask onto canvas (convert to white on black)
+  // Paint SAM-generated mask onto canvas (convert to white on black with 100% binary strength)
   const paintSamMask = (candidate) => {
     const canvas = canvasRef.current;
     if (!canvas || !candidate?.maskBitmap) return;
@@ -131,7 +137,8 @@ const MagicEraseOverlay = ({ srcRef }) => {
     const tempData = tempCtx.getImageData(0, 0, tempCanvas.width, tempCanvas.height);
     const data = tempData.data;
     for (let i = 0; i < data.length; i += 4) {
-      const maskValue = data[i + 3];
+      // Threshold soft SAM edges to full binary (100% strength) black/white mask
+      const maskValue = data[i + 3] > 127 ? 255 : 0;
       data[i] = 255;
       data[i + 1] = 255;
       data[i + 2] = 255;
@@ -155,15 +162,20 @@ const MagicEraseOverlay = ({ srcRef }) => {
     });
   };
 
-  // Generate mask using SAM based on point selections
+  // Generate mask using SAM based on point selections (silent background execution)
   const generatePointMask = async (points) => {
     if (!originalCanvas || points.length === 0) return;
 
+    if (isGeneratingRef.current) {
+      nextPointsRef.current = points;
+      return;
+    }
+
+    isGeneratingRef.current = true;
+    setIsGeneratingMask(true);
+
     const runId = generationIdRef.current + 1;
     generationIdRef.current = runId;
-    setIsGeneratingMask(true);
-    setIsProcessing(true);
-    updateProgress(0.05, "Preparing SAM point mask...");
 
     let result = null;
     try {
@@ -175,7 +187,7 @@ const MagicEraseOverlay = ({ srcRef }) => {
           points,
           modelId: SEGMENTATION_MODELS.sam2_1_tiny.model_id,
         },
-        (prog, msg) => updateProgress(prog, msg),
+        () => {}, // Silent progress updates to prevent overriding the main loader state
       );
 
       if (generationIdRef.current !== runId) {
@@ -189,16 +201,21 @@ const MagicEraseOverlay = ({ srcRef }) => {
       }
 
       paintSamMask(candidate);
-      updateProgress(1, "Mask ready");
     } catch (err) {
       console.error("[Magic Erase] Point selection failed:", err);
       showToast(`Point selection failed: ${err.message}`, "error");
     } finally {
       disposeSamResult(result);
       if (generationIdRef.current === runId) {
-        setIsGeneratingMask(false);
-        setIsProcessing(false);
-        setTimeout(() => updateProgress(0, ""), 300);
+        if (nextPointsRef.current) {
+          const queuedPoints = nextPointsRef.current;
+          nextPointsRef.current = null;
+          isGeneratingRef.current = false;
+          generatePointMask(queuedPoints);
+        } else {
+          isGeneratingRef.current = false;
+          setIsGeneratingMask(false);
+        }
       }
     }
   };
@@ -208,20 +225,20 @@ const MagicEraseOverlay = ({ srcRef }) => {
     if (currentService?.id !== "magic-erase") return;
     if (selectionMode === "point") {
       if (e.button === 2) e.preventDefault();
-      if (isGeneratingMask) return;
 
       const coords = getCanvasCoords(e);
       if (!coords || !canvasRef.current) return;
 
       const isNegative = e.button === 2 || e.shiftKey || e.ctrlKey || e.metaKey;
       const nextPoints = [
-        ...samPoints,
+        ...samPointsRef.current,
         {
           x: coords.x / canvasRef.current.width,
           y: coords.y / canvasRef.current.height,
           label: isNegative ? 0 : 1,
         },
       ];
+      samPointsRef.current = nextPoints;
       setSamPoints(nextPoints);
       generatePointMask(nextPoints);
       return;
@@ -254,21 +271,22 @@ const MagicEraseOverlay = ({ srcRef }) => {
     if (e.touches.length === 0) return;
     e.preventDefault();
     if (selectionMode === "point") {
-      if (isGeneratingMask) return;
       const coords = getCanvasCoords(e.touches[0]);
       if (!coords || !canvasRef.current) return;
       const nextPoints = [
-        ...samPoints,
+        ...samPointsRef.current,
         {
           x: coords.x / canvasRef.current.width,
           y: coords.y / canvasRef.current.height,
           label: 1,
         },
       ];
+      samPointsRef.current = nextPoints;
       setSamPoints(nextPoints);
       generatePointMask(nextPoints);
       return;
     }
+
 
     isDrawingRef.current = true;
     const coords = getCanvasCoords(e.touches[0]);
@@ -293,7 +311,11 @@ const MagicEraseOverlay = ({ srcRef }) => {
   // Clear the mask canvas and reset SAM points
   const clearMask = () => {
     generationIdRef.current += 1;
+    samPointsRef.current = [];
     setSamPoints([]);
+    nextPointsRef.current = null;
+    isGeneratingRef.current = false;
+    setIsGeneratingMask(false);
     if (canvasRef.current) {
       const ctx = canvasRef.current.getContext("2d");
       ctx.fillStyle = "black";

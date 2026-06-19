@@ -4,6 +4,22 @@
  * for LaMa inpainting on both the main thread and background worker.
  */
 
+/**
+ * Checks if a pixel in the mask array is part of the active mask region.
+ * Returns true if the pixel is bright/colored and not fully transparent.
+ * 
+ * @param {Uint8ClampedArray|Uint8Array} mask Raw mask image data
+ * @param {number} pi Pixel data index (i * 4)
+ * @returns {boolean}
+ */
+export function isMaskPixel(mask, pi) {
+  const r = mask[pi];
+  const g = mask[pi + 1];
+  const b = mask[pi + 2];
+  const a = mask[pi + 3];
+  return (r > 10 || g > 10 || b > 10) && a > 10;
+}
+
 // ===========================================================================
 // MAIN THREAD HELPERS
 // ===========================================================================
@@ -65,7 +81,7 @@ export function prepareInpaintInputs(originalCanvas, maskCanvas) {
  * @param {Object} padParams Mapping variables
  * @returns {HTMLCanvasElement} Restored high-res canvas
  */
-export function composeInpaintOutput(outputBuffer, padParams) {
+export function composeInpaintOutput(outputBuffer, padParams, originalCanvas, maskCanvas) {
   const { padX, padY, targetW, targetH, imgW, imgH } = padParams;
   const finalImageData = new ImageData(outputBuffer, 512, 512);
   
@@ -78,8 +94,46 @@ export function composeInpaintOutput(outputBuffer, padParams) {
   finalOutCanvas.height = imgH;
   const finalCtx = finalOutCanvas.getContext('2d');
   
-  // Map inverse padding
-  finalCtx.drawImage(outTempCanvas, padX, padY, targetW, targetH, 0, 0, imgW, imgH);
+  // 1. Draw the original high-resolution image first
+  finalCtx.drawImage(originalCanvas, 0, 0);
+
+  // 2. Scale the inpainted 512x512 output back to original resolution
+  const inpaintedScaleCanvas = document.createElement('canvas');
+  inpaintedScaleCanvas.width = imgW;
+  inpaintedScaleCanvas.height = imgH;
+  const inpaintedScaleCtx = inpaintedScaleCanvas.getContext('2d');
+  inpaintedScaleCtx.drawImage(outTempCanvas, padX, padY, targetW, targetH, 0, 0, imgW, imgH);
+
+  // 3. Build a clean alpha mask: maskCanvas has black bg (alpha=255) and white mask (alpha=255).
+  //    source-in won't work correctly because black pixels aren't transparent.
+  //    Instead, we read the mask pixels and remap the red channel → alpha channel,
+  //    turning black (R=0) transparent and white (R=255) opaque.
+  const alphaMaskCanvas = document.createElement('canvas');
+  alphaMaskCanvas.width = imgW;
+  alphaMaskCanvas.height = imgH;
+  const alphaMaskCtx = alphaMaskCanvas.getContext('2d');
+  alphaMaskCtx.drawImage(maskCanvas, 0, 0, imgW, imgH);
+
+  const maskPixels = alphaMaskCtx.getImageData(0, 0, imgW, imgH);
+  const d = maskPixels.data;
+  for (let i = 0; i < d.length; i += 4) {
+    // Binarize based on pixel presence (colored/bright and not fully transparent)
+    d[i + 3] = isMaskPixel(d, i) ? 255 : 0;
+  }
+  alphaMaskCtx.putImageData(maskPixels, 0, 0);
+
+  // 4. Composite: cut out only the inpainted pixels that fall inside the mask
+  const maskedInpaintCanvas = document.createElement('canvas');
+  maskedInpaintCanvas.width = imgW;
+  maskedInpaintCanvas.height = imgH;
+  const maskedInpaintCtx = maskedInpaintCanvas.getContext('2d');
+  maskedInpaintCtx.drawImage(inpaintedScaleCanvas, 0, 0);
+  maskedInpaintCtx.globalCompositeOperation = 'destination-in';
+  maskedInpaintCtx.drawImage(alphaMaskCanvas, 0, 0);
+
+  // 5. Paint the clean masked inpaint on top of the sharp original
+  finalCtx.drawImage(maskedInpaintCanvas, 0, 0);
+  
   return finalOutCanvas;
 }
 
@@ -137,7 +191,8 @@ export function packLamaTensors(image, mask, imageTensorData, maskTensorData, is
       imageTensorData[i * 3] = image[pi] * inv255;
       imageTensorData[i * 3 + 1] = image[pi + 1] * inv255;
       imageTensorData[i * 3 + 2] = image[pi + 2] * inv255;
-      maskTensorData[i] = mask[pi] > 128 ? 1.0 : 0.0;
+      // Set to 1.0 if pixel falls inside active mask, else 0.0
+      maskTensorData[i] = isMaskPixel(mask, pi) ? 1.0 : 0.0;
     }
   } else {
     const ch2_offset = len;
@@ -147,7 +202,8 @@ export function packLamaTensors(image, mask, imageTensorData, maskTensorData, is
       imageTensorData[i] = image[pi] * inv255;
       imageTensorData[i + ch2_offset] = image[pi + 1] * inv255;
       imageTensorData[i + ch3_offset] = image[pi + 2] * inv255;
-      maskTensorData[i] = mask[pi] > 128 ? 1.0 : 0.0;
+      // Set to 1.0 if pixel falls inside active mask, else 0.0
+      maskTensorData[i] = isMaskPixel(mask, pi) ? 1.0 : 0.0;
     }
   }
 }
@@ -175,7 +231,7 @@ export function unpackLamaOutput(finalData, mask, image, strength, scaleMode, is
     if (scaleMode === 1) {
       for (let i = 0; i < len; i++) {
         const pi = i * 4;
-        if (mask[pi] <= 128) continue;
+        if (!isMaskPixel(mask, pi)) continue;
         const idx = i * 3;
         const r = (finalData[idx] + 1.0) * 127.5;
         const g = (finalData[idx + 1] + 1.0) * 127.5;
@@ -187,7 +243,7 @@ export function unpackLamaOutput(finalData, mask, image, strength, scaleMode, is
     } else if (scaleMode === 2) {
       for (let i = 0; i < len; i++) {
         const pi = i * 4;
-        if (mask[pi] <= 128) continue;
+        if (!isMaskPixel(mask, pi)) continue;
         const idx = i * 3;
         const r = finalData[idx] * 255.0;
         const g = finalData[idx + 1] * 255.0;
@@ -199,7 +255,7 @@ export function unpackLamaOutput(finalData, mask, image, strength, scaleMode, is
     } else if (scaleMode === 3) {
       for (let i = 0; i < len; i++) {
         const pi = i * 4;
-        if (mask[pi] <= 128) continue;
+        if (!isMaskPixel(mask, pi)) continue;
         const idx = i * 3;
         const r = finalData[idx];
         const g = finalData[idx + 1];
@@ -212,7 +268,7 @@ export function unpackLamaOutput(finalData, mask, image, strength, scaleMode, is
       const invRange = 1.0 / (range || 1);
       for (let i = 0; i < len; i++) {
         const pi = i * 4;
-        if (mask[pi] <= 128) continue;
+        if (!isMaskPixel(mask, pi)) continue;
         const idx = i * 3;
         const r = (finalData[idx] - min) * invRange * 255.0;
         const g = (finalData[idx + 1] - min) * invRange * 255.0;
@@ -226,7 +282,7 @@ export function unpackLamaOutput(finalData, mask, image, strength, scaleMode, is
     if (scaleMode === 1) {
       for (let i = 0; i < len; i++) {
         const pi = i * 4;
-        if (mask[pi] <= 128) continue;
+        if (!isMaskPixel(mask, pi)) continue;
         const r = (finalData[i] + 1.0) * 127.5;
         const g = (finalData[i + ch2] + 1.0) * 127.5;
         const b = (finalData[i + ch3] + 1.0) * 127.5;
@@ -237,7 +293,7 @@ export function unpackLamaOutput(finalData, mask, image, strength, scaleMode, is
     } else if (scaleMode === 2) {
       for (let i = 0; i < len; i++) {
         const pi = i * 4;
-        if (mask[pi] <= 128) continue;
+        if (!isMaskPixel(mask, pi)) continue;
         const r = finalData[i] * 255.0;
         const g = finalData[i + ch2] * 255.0;
         const b = finalData[i + ch3] * 255.0;
@@ -248,7 +304,7 @@ export function unpackLamaOutput(finalData, mask, image, strength, scaleMode, is
     } else if (scaleMode === 3) {
       for (let i = 0; i < len; i++) {
         const pi = i * 4;
-        if (mask[pi] <= 128) continue;
+        if (!isMaskPixel(mask, pi)) continue;
         const r = finalData[i];
         const g = finalData[i + ch2];
         const b = finalData[i + ch3];
@@ -260,7 +316,7 @@ export function unpackLamaOutput(finalData, mask, image, strength, scaleMode, is
       const invRange = 1.0 / (range || 1);
       for (let i = 0; i < len; i++) {
         const pi = i * 4;
-        if (mask[pi] <= 128) continue;
+        if (!isMaskPixel(mask, pi)) continue;
         const r = (finalData[i] - min) * invRange * 255.0;
         const g = (finalData[i + ch2] - min) * invRange * 255.0;
         const b = (finalData[i + ch3] - min) * invRange * 255.0;

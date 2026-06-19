@@ -86,7 +86,7 @@ async function process(originalCanvas, options, onProgress) {
   );
 
   report(0.8, 0.8, 'Compositing result...')();
-  const finalOutCanvas = composeInpaintOutput(output, padParams);
+  const finalOutCanvas = composeInpaintOutput(output, padParams, originalCanvas, maskCanvas);
   report(1, 1, 'Complete')();
   return finalOutCanvas;
 }

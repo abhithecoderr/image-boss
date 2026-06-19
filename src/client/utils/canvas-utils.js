@@ -207,3 +207,45 @@ export function reorderSteps(steps, startIndex, endIndex) {
   return result;
 }
 
+/**
+ * Cross-runtime canvas creation helper (safe in Web Workers and Main thread)
+ */
+export function createCanvas(width, height) {
+  if (typeof document !== 'undefined') {
+    const canvas = document.createElement('canvas');
+    canvas.width = width;
+    canvas.height = height;
+    return canvas;
+  }
+  return new OffscreenCanvas(width, height);
+}
+
+/**
+ * Global singleton canvas registry that manages reusable, sized canvas buffers.
+ * Solves duplicate boilerplate code and automates GPU memory cleanup.
+ */
+class CanvasCache {
+  constructor() {
+    this.cache = new Map();
+  }
+
+  get(key, width, height, ctxOptions = {}) {
+    let entry = this.cache.get(key);
+    if (!entry || entry.canvas.width !== width || entry.canvas.height !== height) {
+      const canvas = createCanvas(width, height);
+      entry = {
+        canvas,
+        ctx: canvas.getContext('2d', ctxOptions),
+      };
+      this.cache.set(key, entry);
+    }
+    return entry;
+  }
+
+  clear() {
+    this.cache.clear();
+  }
+}
+
+export const canvasCache = new CanvasCache();
+

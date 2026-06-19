@@ -37,6 +37,12 @@ export const BACKGROUND_REMOVAL_MODELS = {
     output_type: "minmax",
     device: "wasm",
   },
+  ben2: {
+    model_id: "ben2",
+    task: "background-removal",
+    method: "pipeline",
+    paid: true,
+  },
 };
 
 // --- Face/Person Blur (YOLO26) ---
@@ -73,6 +79,7 @@ export const CAPTIONING_MODELS = {
   lfm: {
     model_id: "LiquidAI/LFM2.5-VL-450M-ONNX",
     method: "custom",
+    paid: true,
     default_dtype: {
       vision_encoder: "fp16",
       embed_tokens: "fp16",
@@ -120,6 +127,7 @@ export const SEGMENTATION_MODELS = {
     model_id: "onnx-community/sam2.1-hiera-large-ONNX",
     method: "custom",
     default_dtype: "fp16",
+    paid: true,
   },
 };
 
@@ -193,44 +201,5 @@ export const UPSCALING_MODELS = {
     inputLayout: "NCHW",
     outputLayout: "NCHW",
   },
-};
-
-export const PAID_MODELS_CONFIG = {
-  // Background Removal
-  "birefnet": {
-    api_model_tag: "birefnet-general",
-    api_runtime: "cpu"
-  },
-  "birefnet-lite": {
-    api_model_tag: "birefnet-lite",
-    api_runtime: "cpu"
-  },
-  "ben2": {
-    api_model_tag: "ben2",
-    api_runtime: "cpu"
-  },
-  // Object Segmentation (local model IDs mapped to API tags)
-  "onnx-community/sam2.1-hiera-tiny-ONNX": {
-    api_model_tag: "sam-tiny",
-    api_runtime: "cpu"
-  },
-  "onnx-community/sam2.1-hiera-small-ONNX": {
-    api_model_tag: "sam-small",
-    api_runtime: "cpu"
-  },
-  "onnx-community/sam2.1-hiera-large-ONNX": {
-    api_model_tag: "sam-large",
-    api_runtime: "gpu"
-  },
-  // Upscaling
-  "esrgan": {
-    api_model_tag: "esrgan",
-    api_runtime: "gpu"
-  },
-  // Captioning (Vision-Language Model)
-  "lfm2.5-vl": {
-    api_model_tag: "lfm2.5-vl",
-    api_runtime: "cpu"
-  }
 };
 

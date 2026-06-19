@@ -23,11 +23,7 @@ export const useServiceStore = create((set) => ({
   activeServiceId: null,
   setActiveServiceId: (id) => set({ activeServiceId: id }),
 
-  setServiceSettings: (updater) =>
-    set((state) => ({
-      serviceSettings:
-        typeof updater === "function" ? updater(state.serviceSettings) : updater,
-    })),
+  setServiceSettings: (serviceSettings) => set({ serviceSettings }),
 
   updateServiceSetting: (sId, settingId, value) =>
     set((state) => ({

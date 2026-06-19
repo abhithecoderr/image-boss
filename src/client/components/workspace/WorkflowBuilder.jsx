@@ -1,5 +1,5 @@
 import React from "react";
-import { useWorkspace, useUI, useService, useSegmentation } from "../../store";
+import { useWorkspace, useUI, useService, useSegmentation, useWorkflow } from "../../store";
 import Slider from "../ui/Slider";
 import { SERVICE_ORDER } from "../../config/app";
 import { SERVICES } from "../../config/services";
@@ -12,7 +12,8 @@ import Button from "../ui/Button";
 import BatchSettingsSelector from "../controls/BatchSettingsSelector";
 
 const WorkflowBuilder = ({ workflow, onProcess }) => {
-  const { originalCanvas, items, activeItemId, setResultCanvas, workflowSteps } = useWorkspace();
+  const { originalCanvas, items, activeItemId, setResultCanvas } = useWorkspace();
+  const { workflowSteps } = useWorkflow();
   const { showToast } = useUI();
   const { getDownloadMetadata } = useService();
   const editing = useSegmentation((state) => state.editing);
@@ -252,7 +253,7 @@ const WorkflowBuilder = ({ workflow, onProcess }) => {
                           variant={editing.activeTool === "none" || editing.activeStepId !== step.id ? "primary" : "secondary"}
                           className={editing.activeTool === "none" || editing.activeStepId !== step.id ? "active" : ""}
                           onClick={() =>
-                            setEditing((prev) => ({ ...prev, activeTool: "none", activeStepId: null }))
+                            setEditing({ activeTool: "none", activeStepId: null })
                           }
                         >
                           Move
@@ -262,7 +263,7 @@ const WorkflowBuilder = ({ workflow, onProcess }) => {
                           className={editing.activeTool === "erase" && editing.activeStepId === step.id ? "active" : ""}
                           onClick={() => {
                             previewStep(step.id);
-                            setEditing((prev) => ({ ...prev, activeTool: "erase", activeStepId: step.id }));
+                            setEditing({ activeTool: "erase", activeStepId: step.id });
                           }}
                         >
                           Erase
@@ -272,7 +273,7 @@ const WorkflowBuilder = ({ workflow, onProcess }) => {
                           className={editing.activeTool === "restore" && editing.activeStepId === step.id ? "active" : ""}
                           onClick={() => {
                             previewStep(step.id);
-                            setEditing((prev) => ({ ...prev, activeTool: "restore", activeStepId: step.id }));
+                            setEditing({ activeTool: "restore", activeStepId: step.id });
                           }}
                         >
                           Restore
@@ -288,10 +289,9 @@ const WorkflowBuilder = ({ workflow, onProcess }) => {
                           value={editing.brushSize}
                           unit="px"
                           onChange={(val) =>
-                            setEditing((prev) => ({
-                              ...prev,
+                            setEditing({
                               brushSize: val,
-                            }))
+                            })
                           }
                         />
                       )}

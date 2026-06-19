@@ -1,7 +1,4 @@
-/*
- * Main client entry point. Sets up the React Router routes, public layouts, protected workspace routes, and global providers.
- */
-import React, { Suspense, lazy } from "react";
+import React, { useEffect, useState, Suspense } from "react";
 import {
   createBrowserRouter,
   RouterProvider,
@@ -9,37 +6,105 @@ import {
   Outlet,
 } from "react-router-dom";
 
+import { useUIStore } from "./store/uiStore";
+
 import PublicLayout from "./layouts/PublicLayout";
+import MainAppLayout from "./layouts/MainAppLayout";
 
+// Lazy-load page components to enable Suspense-based page loading detection
+const Landing = React.lazy(() => import("./pages/Landing"));
+const Pricing = React.lazy(() => import("./pages/Pricing"));
+const Login = React.lazy(() => import("./pages/Login"));
+const SignUp = React.lazy(() => import("./pages/Signup"));
+const ProductDetail = React.lazy(() => import("./pages/ProductDetail"));
+const SolutionsDetail = React.lazy(() => import("./pages/SolutionsDetail"));
+const Profile = React.lazy(() => import("./pages/Profile"));
+const PolicyPage = React.lazy(() => import("./pages/PolicyPage"));
 
-const Landing = lazy(() => import("./pages/Landing"));
-const Pricing = lazy(() => import("./pages/Pricing"));
-const Login = lazy(() => import("./pages/Login"));
-const SignUp = lazy(() => import("./pages/Signup"));
-const ProductDetail = lazy(() => import("./pages/ProductDetail"));
-const SolutionsDetail = lazy(() => import("./pages/SolutionsDetail"));
-const Profile = lazy(() => import("./pages/Profile"));
-const PolicyPage = lazy(() => import("./pages/PolicyPage"));
-const MainAppLayout = lazy(() => import("./layouts/MainAppLayout"));
-
-// Lightweight fallback shown while a route chunk loads.
-function RouteFallback() {
-  return (
-    <div style={{ display: "flex", justifyContent: "center", alignItems: "center", minHeight: "60vh" }}>
-      <div className="auth-spinner" aria-label="Loading" />
-    </div>
-  );
+// Notifies TopProgressBar when a lazy-loaded route is mounting
+function SuspenseLoader() {
+  const setPageLoading = useUIStore((state) => state.setPageLoading);
+  useEffect(() => {
+    setPageLoading(true);
+    return () => setPageLoading(false);
+  }, [setPageLoading]);
+  return null;
 }
 
-function withSuspense(element) {
-  return <Suspense fallback={<RouteFallback />}>{element}</Suspense>;
+// Top Progress Bar for page loads. Only appears if the page load exceeds 2 seconds.
+function TopProgressBar() {
+  const isPageLoading = useUIStore((state) => state.isPageLoading);
+  const [progress, setProgress] = useState(0);
+  const [visible, setVisible] = useState(false);
+
+  useEffect(() => {
+    let delayTimer;
+    let timer1, timer2, timer3;
+
+    if (isPageLoading) {
+      setProgress(0);
+      setVisible(false);
+
+      // Start 2-second timer. Only show progress bar if loading exceeds 2s.
+      delayTimer = setTimeout(() => {
+        setVisible(true);
+        setProgress(20);
+
+        timer1 = setTimeout(() => setProgress(45), 200);
+        timer2 = setTimeout(() => setProgress(75), 600);
+      }, 2000);
+    } else {
+      if (visible) {
+        setProgress(100);
+        timer3 = setTimeout(() => {
+          setVisible(false);
+          setProgress(0);
+        }, 300);
+      }
+    }
+
+    return () => {
+      if (delayTimer) clearTimeout(delayTimer);
+      if (timer1) clearTimeout(timer1);
+      if (timer2) clearTimeout(timer2);
+      if (timer3) clearTimeout(timer3);
+    };
+  }, [isPageLoading, visible]);
+
+  if (!visible) return null;
+
+  return (
+    <div
+      style={{
+        position: "fixed",
+        top: 0,
+        left: 0,
+        height: "3px",
+        backgroundColor: "var(--accent-primary, #f5a623)",
+        width: `${progress}%`,
+        transition: "width 0.25s cubic-bezier(0.4, 0, 0.2, 1), opacity 0.2s ease-out",
+        opacity: progress === 100 ? 0 : 1,
+        zIndex: 99999,
+        pointerEvents: "none",
+        boxShadow: "0 0 8px var(--accent-primary, #f5a623)",
+      }}
+    />
+  );
 }
 
 // 1. Create a Root wrapper that includes your Providers
 // This ensures that providers have access to the Router context
 function Root() {
-  return <Outlet />;
+  return (
+    <>
+      <TopProgressBar />
+      <Suspense fallback={<SuspenseLoader />}>
+        <Outlet />
+      </Suspense>
+    </>
+  );
 }
+
 
 // 2. Create a secure ProtectedRoute component
 function ProtectedRoute({ children }) {
@@ -53,63 +118,63 @@ export const router = createBrowserRouter([
     path: "/",
     element: <Root />,
     children: [
-        {
-          // Public Layout Routes (Landing, Pricing, etc.)
-          path: "/",
-          element: <PublicLayout />,
-          children: [
-            {
-              index: true,
-              element: withSuspense(<Landing />),
-            },
-            {
-              path: "pricing",
-              element: withSuspense(<Pricing />),
-            },
-            {
-              path: "product/:productId?",
-              element: withSuspense(<ProductDetail />),
-            },
-            {
-              path: "solutions/:solutionId?",
-              element: withSuspense(<SolutionsDetail />),
-            },
-            {
-              path: "profile",
-              element: withSuspense(
-                <ProtectedRoute>
-                  <Profile />
-                </ProtectedRoute>
-              ),
-            },
-            {
-              path: "privacy-policy",
-              element: withSuspense(<PolicyPage type="privacy" />),
-            },
-            {
-              path: "terms-of-service",
-              element: withSuspense(<PolicyPage type="terms" />),
-            },
-            {
-              path: "refund-policy",
-              element: withSuspense(<PolicyPage type="refund" />),
-            },
-          ],
-        },
+      {
+        // Public Layout Routes (Landing, Pricing, etc.)
+        path: "/",
+        element: <PublicLayout />,
+        children: [
+          {
+            index: true,
+            element: <Landing />,
+          },
+          {
+            path: "pricing",
+            element: <Pricing />,
+          },
+          {
+            path: "product/:productId?",
+            element: <ProductDetail />,
+          },
+          {
+            path: "solutions/:solutionId?",
+            element: <SolutionsDetail />,
+          },
+          {
+            path: "profile",
+            element: (
+              <ProtectedRoute>
+                <Profile />
+              </ProtectedRoute>
+            ),
+          },
+          {
+            path: "privacy-policy",
+            element: <PolicyPage type="privacy" />,
+          },
+          {
+            path: "terms-of-service",
+            element: <PolicyPage type="terms" />,
+          },
+          {
+            path: "refund-policy",
+            element: <PolicyPage type="refund" />,
+          },
+        ],
+      },
       {
         // Independent Auth Routes (stand-alone pages, no shared Navbar/Footer)
         path: "login",
-        element: withSuspense(<Login />),
+        element: <Login />,
       },
       {
         // Independent Auth Routes
         path: "signup",
-        element: withSuspense(<SignUp />),
+        element: <SignUp />,
       },
       {
         // Dashboard / Workspace Routes - Secured
         path: "services/:serviceId?",
-        element: withSuspense(
+        element: (
           <ProtectedRoute>
             <MainAppLayout />
           </ProtectedRoute>

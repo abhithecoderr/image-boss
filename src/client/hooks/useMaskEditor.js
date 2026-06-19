@@ -2,17 +2,17 @@
  * Direct canvas overlay brush tool. Enables users to paint directly on the result mask canvas to erase or restore mask segments manually.
  */
 import { useRef, useEffect } from 'react';
-import { useWorkspace, useSegmentation } from '../store';
+import { useWorkspace, useSegmentation, useWorkflow } from '../store';
 
 export const useMaskEditor = (resRef) => {
   const {
     originalCanvas,
     resultCanvas,
     setResultCanvas,
-    workflowSteps,
     items,
     activeItemId
   } = useWorkspace();
+  const { workflowSteps } = useWorkflow();
   const editing = useSegmentation((state) => state.editing);
   const setEditing = useSegmentation((state) => state.setEditing);
 
@@ -148,7 +148,7 @@ export const useMaskEditor = (resRef) => {
 
   // Drawing event wrappers supporting mouse drag painting loops
   const startDrawing = (e) => {
-    setEditing(prev => ({ ...prev, isDrawing: true }));
+    setEditing({ isDrawing: true });
     const { x, y } = getCoords(e);
     drawAt(x, y);
   };
@@ -161,7 +161,7 @@ export const useMaskEditor = (resRef) => {
   };
 
   const endDrawing = () => {
-    setEditing(prev => ({ ...prev, isDrawing: false }));
+    setEditing({ isDrawing: false });
     if (maskCanvasRef.current) {
       bakeMask();
     }

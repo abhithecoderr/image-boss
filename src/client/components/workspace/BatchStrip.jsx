@@ -11,7 +11,7 @@
 import React, { useRef, useState } from "react";
 import Button from "../ui/Button";
 import Badge from "../ui/Badge";
-import { useProcessor } from "../../hooks/useProcessorContext";
+import { useUnifiedProcessor } from "../../hooks/useUnifiedProcessor";
 import { processorEngine } from "../../engine/processor-engine";
 
 // Premium thin-line vector status icons
@@ -36,7 +36,7 @@ const STATUS_ICONS = {
 };
 
 const BatchStrip = () => {
-  const batch = useProcessor();
+  const batch = useUnifiedProcessor();
   const {
     items,
     activeItemId,

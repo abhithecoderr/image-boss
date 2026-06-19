@@ -2,10 +2,10 @@
  * Main-thread coordinator for Background Removal. Manages canvas caching, options parsing, and worker jobs.
  */
 import BackgroundRemovalWorker from "./worker.js?worker";
-import { resizeCanvas } from "../../utils/canvas-utils.js";
+import { resizeCanvas, imageToCanvas } from "../../utils/canvas-utils.js";
 import { workerRegistry } from "../../engine/worker-registry.js";
 import { runWorkerJob } from "../../utils/worker-utils.js";
-import { BACKGROUND_REMOVAL_MODELS, PAID_MODELS_CONFIG } from "../../config/models.js";
+import { BACKGROUND_REMOVAL_MODELS } from "../../config/models.js";
 import { applyMaskToCanvas } from "./helpers.js";
 import { removeBackground, loadImage } from "../../api/birefnet.js";
 
@@ -41,23 +41,16 @@ export async function process(sourceCanvas, options = {}, onProgress) {
     onProgress?.(0.1, "Converting image to payload...");
     const imageBlob = await new Promise((resolve) => sourceCanvas.toBlob(resolve, "image/png"));
 
-    const paidModelCfg = PAID_MODELS_CONFIG[modelId];
-    const apiModelTag = paidModelCfg ? paidModelCfg.api_model_tag : "birefnet-lite";
-
-    onProgress?.(0.3, `Processing on Cloud API (${apiModelTag})...`);
+    onProgress?.(0.3, `Processing on Cloud API (${modelId})...`);
     try {
-      // Call the SDK's removeBackground helper (returns a transparent PNG cutout blob)
-      const cutoutBlob = await removeBackground("/api", imageBlob, { model: apiModelTag, device: "cpu" });
+      // Send client model ID — server resolves the API tag and runtime
+      const cutoutBlob = await removeBackground("/api", imageBlob, { model: modelId });
 
       onProgress?.(0.8, "Loading result image...");
       const resultImg = await loadImage(cutoutBlob);
 
       // Draw the cutout into a temporary canvas so we can extract the alpha mask as a bitmap
-      const cutoutCanvas = document.createElement("canvas");
-      cutoutCanvas.width = resultImg.naturalWidth || resultImg.width;
-      cutoutCanvas.height = resultImg.naturalHeight || resultImg.height;
-      const cutoutCtx = cutoutCanvas.getContext("2d");
-      cutoutCtx.drawImage(resultImg, 0, 0);
+      const { canvas: cutoutCanvas } = imageToCanvas(resultImg);
 
       if (resultImg.src.startsWith('blob:')) {
         URL.revokeObjectURL(resultImg.src);

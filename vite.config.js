@@ -1,6 +1,4 @@
 import { defineConfig } from 'vite';
-// Force config reload to pick up plugin changes
-import aiContextWatcher from './vite-plugin-ai-context.js';
 import react from '@vitejs/plugin-react';
 import { cloudflare } from '@cloudflare/vite-plugin';
 import { readdir, unlink } from 'fs/promises';
@@ -52,6 +50,7 @@ export default defineConfig({
       output: {
         // Split stable vendor libs into their own cacheable chunks so app-code
         // changes don't invalidate the browser cache for react/router/zustand.
+        // vendor-react: react core + router | vendor-state: zustand | editor-crop: react-image-crop
         manualChunks(id) {
           if (!id.includes('node_modules')) return;
           // React core + router — shared by every route, cache aggressively.
@@ -61,7 +60,7 @@ export default defineConfig({
             return 'vendor-react';
           }
           if (id.includes('node_modules/zustand')) {
-            return 'vendor-react';
+            return 'vendor-state';
           }
           // Heavy image-crop lib only used inside the workspace editor.
           if (id.includes('node_modules/react-image-crop')) {
@@ -81,14 +80,6 @@ export default defineConfig({
   },
   server: {
     port: 3000,
-    historyApiFallback: {
-      rewrites: [
-        {
-          from: /^\/api\/auth\/.*/,
-          to: (context) => context.parsedUrl.pathname,
-        },
-      ],
-    },
     headers: {
       'Cross-Origin-Opener-Policy': 'same-origin',
       'Cross-Origin-Embedder-Policy': 'require-corp',

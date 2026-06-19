@@ -14,6 +14,7 @@ import {
   imageToTensor,
   configureOrt,
   createOrtSessionManager,
+  canvasCache,
 } from "../../utils/worker-utils.js";
 import { BLUR_MODELS } from '../../config/models.js';
 import { nms, applyBlur } from './helpers.js';
@@ -60,6 +61,7 @@ async function initDetector(variant = "nano", onProgress) {
 function dispose() {
   ortManager.release();
   session = null;
+  canvasCache.clear();
 }
 
 /**

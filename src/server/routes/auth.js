@@ -2,8 +2,13 @@
 
 import { Hono } from 'hono';
 import { createAuth } from '../middleware/auth';
+import { rateLimit } from '../middleware/rateLimit';
 
 export const authRoute = new Hono();
+
+// Gate all auth endpoints (sign-in, sign-up, etc.) behind the edge rate limit
+// to stop brute-forcing bots before Better-Auth/D1 run.
+authRoute.use('/*', rateLimit());
 
 // Handles all auth requests under /api/auth.
 authRoute.on(['POST', 'GET'], '/*', async (c) => {

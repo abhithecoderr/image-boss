@@ -1,4 +1,5 @@
 import { RawImage } from "@huggingface/transformers";
+export { createCanvas, canvasCache } from "./canvas-utils.js";
 
 /**
  * Detect WebGPU and fp16 support

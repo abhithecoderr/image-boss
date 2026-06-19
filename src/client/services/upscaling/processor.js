@@ -1,7 +1,7 @@
-import ESRGANWorker from './esrgan.worker.js?worker';
+import ESRGANWorker from './worker.js?worker';
 import { workerRegistry } from '../../engine/worker-registry.js';
 import { runWorkerJob } from '../../utils/worker-utils.js';
-import { PAID_MODELS_CONFIG } from '../../config/models.js';
+import { imageToCanvas } from '../../utils/canvas-utils.js';
 import { upscaleImage } from '../../api/esrgan.js';
 import { loadImage } from '../../api/birefnet.js';
 
@@ -19,25 +19,17 @@ export async function process(sourceCanvas, options = {}, onProgress) {
     onProgress?.(0.1, "Converting image to payload...");
     const imageBlob = await new Promise((resolve) => sourceCanvas.toBlob(resolve, 'image/png'));
 
-    const paidModelCfg = PAID_MODELS_CONFIG[modelId];
-    const apiModelTag = paidModelCfg ? paidModelCfg.api_model_tag : "esrgan";
-    const apiDevice = paidModelCfg ? paidModelCfg.api_runtime : "gpu";
-
-    onProgress?.(0.3, `Uploading to Cloud API (${apiModelTag})...`);
+    onProgress?.(0.3, `Uploading to Cloud API (${modelId})...`);
     try {
+      // Send client model ID — server resolves the API tag and runtime
       const upscaledBlob = await upscaleImage('/api', imageBlob, {
-        model: apiModelTag,
-        device: apiDevice
+        model: modelId
       });
 
       onProgress?.(0.8, "Loading upscaled result...");
       const upscaledImg = await loadImage(upscaledBlob);
 
-      const resultCanvas = document.createElement('canvas');
-      resultCanvas.width = upscaledImg.naturalWidth || upscaledImg.width;
-      resultCanvas.height = upscaledImg.naturalHeight || upscaledImg.height;
-      const ctx = resultCanvas.getContext('2d');
-      ctx.drawImage(upscaledImg, 0, 0);
+      const { canvas: resultCanvas } = imageToCanvas(upscaledImg);
 
       if (upscaledImg.src.startsWith('blob:')) {
         URL.revokeObjectURL(upscaledImg.src);
@@ -60,11 +52,7 @@ export async function process(sourceCanvas, options = {}, onProgress) {
     const result = await runWorkerJob(w, 'upscale', { bitmap, modelId, ...options }, [bitmap], onProgress);
 
     // Convert result ImageBitmap back to Canvas
-    const resultCanvas = document.createElement('canvas');
-    resultCanvas.width = result.width;
-    resultCanvas.height = result.height;
-    const ctx = resultCanvas.getContext('2d');
-    ctx.drawImage(result, 0, 0);
+    const { canvas: resultCanvas } = imageToCanvas(result);
     result.close(); // Clean up transferable
 
     onProgress?.(1, `Upscaled to ${resultCanvas.width}x${resultCanvas.height}`);

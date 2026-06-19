@@ -11,32 +11,15 @@ const initialEditingState = {
   activeStepId: null,
 };
 
-/**
- * Release the ImageBitmaps held by a segmentation result's candidate options.
- * Each MaskCandidate stores a full-res `maskBitmap` that pins graphics memory
- * until explicitly closed — simply dropping the JS reference is not enough.
- */
-function disposeSegmentationResult(result) {
-  if (!result?.options) return;
-  for (const opt of result.options) {
-    if (opt.maskBitmap && typeof opt.maskBitmap.close === 'function') {
-      try { opt.maskBitmap.close(); } catch (_) {}
-    }
-  }
-}
-
 export const useSegmentationStore = create((set, get) => ({
   samPoints: [],
   samPointLabel: 1,
   segmentationResult: null,
   editing: { ...initialEditingState },
-  activeEditorTab: "composition",
   magicEraseMaskCanvas: null,
+  isGeneratingMask: false,
 
-  setSamPoints: (updater) =>
-    set((state) => ({
-      samPoints: typeof updater === "function" ? updater(state.samPoints) : updater,
-    })),
+  setSamPoints: (samPoints) => set({ samPoints }),
 
   setSamPointLabel: (label) => set({ samPointLabel: label }),
   setSegmentationResult: (result) => {
@@ -44,13 +27,16 @@ export const useSegmentationStore = create((set, get) => ({
     set({ segmentationResult: result });
   },
 
-  setEditing: (updater) =>
+  setEditing: (update) =>
     set((state) => ({
-      editing: typeof updater === "function" ? updater(state.editing) : updater,
+      editing: {
+        ...state.editing,
+        ...update,
+      },
     })),
 
-  setActiveEditorTab: (tab) => set({ activeEditorTab: tab }),
   setMagicEraseMaskCanvas: (canvas) => set({ magicEraseMaskCanvas: canvas }),
+  setIsGeneratingMask: (loading) => set({ isGeneratingMask: loading }),
 
   resetSegmentationState: (excludeMagicErase = false) => {
     disposeSegmentationResult(get().segmentationResult);
@@ -59,8 +45,17 @@ export const useSegmentationStore = create((set, get) => ({
       samPointLabel: 1,
       segmentationResult: null,
       editing: { ...initialEditingState },
-      activeEditorTab: "composition",
       magicEraseMaskCanvas: excludeMagicErase ? state.magicEraseMaskCanvas : null,
+      isGeneratingMask: false,
     }));
   },
 }));
+
+function disposeSegmentationResult(result) {
+  if (!result?.options) return;
+  for (const opt of result.options) {
+    if (opt.maskBitmap && typeof opt.maskBitmap.close === 'function') {
+      try { opt.maskBitmap.close(); } catch (_) {}
+    }
+  }
+}

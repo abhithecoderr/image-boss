@@ -19,9 +19,10 @@ export default function HomeSandbox() {
   const showToast = useUI((state) => state.showToast);
   const { 
     items, 
-    activeItemId,
-    batchMode
+    activeItemId
   } = useWorkspace();
+
+  const { batchMode } = useUI();
 
   const { 
     currentService, 
