@@ -72,7 +72,7 @@ const Navbar = ({ minimal = false, onToggleSidebar }) => {
           </button>
         )}
 
-        <Logo />
+        <Logo to={isAuthenticated ? "/services" : "/"} />
 
         {/* Marketing nav links — hidden on phones (mobile decision: keep only auth actions). */}
         {!minimal && !isAuthenticated && !isMobile && (
@@ -99,9 +99,6 @@ const Navbar = ({ minimal = false, onToggleSidebar }) => {
 
             <Link to="/pricing" className="navbar-link">
               Pricing
-            </Link>
-            <Link to="/about" className="navbar-link">
-              About
             </Link>
           </div>
         )}

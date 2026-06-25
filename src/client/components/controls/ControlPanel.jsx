@@ -1,12 +1,13 @@
 /*
  * Main workspace sidebar housing settings, models, sliders, and batch settings for the active service.
  */
-import { useService, useWorkspace, useSegmentation, useUI } from "../../store";
+import { useService, useWorkspace, useSegmentation, useUI, useAuth } from "../../store";
 import { useUnifiedProcessor as useController } from "../../hooks/useUnifiedProcessor";
+
 import { useSAM } from "../../hooks/useSAM";
 import { OPERATION_MODE } from "../../config/app";
 import { CONTROLS_CONFIG } from "../../config/controls";
-import { BACKGROUND_REMOVAL_MODELS } from "../../config/models";
+import { BACKGROUND_REMOVAL_MODELS, SEGMENTATION_MODELS, CAPTIONING_MODELS, UPSCALING_MODELS } from "../../config/models";
 import React, { useEffect, useRef, useState } from "react";
 import ControlRenderer from "./ControlRenderer";
 import Select from "../ui/Select";
@@ -134,8 +135,24 @@ const BatchActionsPanel = ({ batch, serviceSettings, currentServiceId }) => {
 const ControlPanel = () => {
   const { currentService, serviceSettings, updateServiceSetting } = useService();
   const { originalCanvas, resultCanvas, originalFile, isProcessing } = useWorkspace();
+  const { user, hasPaidAccess } = useAuth();
+
+  // Force tier back to free if an unauthorized user has it set to paid
+  useEffect(() => {
+    if (!hasPaidAccess && serviceSettings[currentService.id]?.tier === "paid") {
+      updateServiceSetting(currentService.id, "tier", "free");
+      if (currentService.id === "background-removal") {
+        updateServiceSetting(currentService.id, "model", "birefnet-lite");
+      } else if (currentService.id === "upscaling") {
+        updateServiceSetting(currentService.id, "modelId", "esrgan");
+      } else if (currentService.id === "object-segmentation") {
+        updateServiceSetting(currentService.id, "modelId", "onnx-community/sam2.1-hiera-tiny-ONNX");
+      }
+    }
+  }, [hasPaidAccess, currentService.id, serviceSettings, updateServiceSetting]);
 
   const { executeSmartSelect, clearPoints } = useSAM();
+
   const batch = useController();
   const { execute, mode } = batch;
 
@@ -145,6 +162,20 @@ const ControlPanel = () => {
   const setEditing = useSegmentation((state) => state.setEditing);
   const magicEraseMaskCanvas = useSegmentation((state) => state.magicEraseMaskCanvas);
   const isGeneratingMask = useSegmentation((state) => state.isGeneratingMask);
+
+  // --- Image Editor Settings History (Undo/Redo) ---
+  const [editorHistory, setEditorHistory] = useState([]);
+  const [editorHistoryIndex, setEditorHistoryIndex] = useState(-1);
+  const isUndoRedoingRef = useRef(false);
+
+  // Initialize history when image-editor mounts or settings load
+  useEffect(() => {
+    if (currentService.id === "image-editor" && serviceSettings["image-editor"]) {
+      const currentSettingsStr = JSON.stringify(serviceSettings["image-editor"]);
+      setEditorHistory([currentSettingsStr]);
+      setEditorHistoryIndex(0);
+    }
+  }, [currentService.id]);
 
   const activeMode = mode;
   const bgPostProcessDebounceRef = useRef(null);
@@ -191,6 +222,17 @@ const ControlPanel = () => {
 
     updateServiceSetting(currentService.id, id, parsedVal);
 
+    // Track history for image editor
+    if (currentService.id === "image-editor" && !isUndoRedoingRef.current) {
+      const updatedHistory = editorHistory.slice(0, editorHistoryIndex + 1);
+      const settingsStr = JSON.stringify(nextSettings);
+      if (updatedHistory[updatedHistory.length - 1] !== settingsStr) {
+        updatedHistory.push(settingsStr);
+        setEditorHistory(updatedHistory);
+        setEditorHistoryIndex(updatedHistory.length - 1);
+      }
+    }
+
     if (id === "tier" && parsedVal === "paid") {
       if (currentService.id === "background-removal") {
         const currentModel = nextSettings.model;
@@ -228,6 +270,52 @@ const ControlPanel = () => {
     }
   };
 
+  const handleEditorUndo = () => {
+    if (editorHistoryIndex > 0) {
+      isUndoRedoingRef.current = true;
+      const prevIdx = editorHistoryIndex - 1;
+      setEditorHistoryIndex(prevIdx);
+      const targetSettings = JSON.parse(editorHistory[prevIdx]);
+      Object.keys(targetSettings).forEach((key) => {
+        updateServiceSetting("image-editor", key, targetSettings[key]);
+      });
+      setTimeout(() => {
+        isUndoRedoingRef.current = false;
+      }, 50);
+    }
+  };
+
+  const handleEditorRedo = () => {
+    if (editorHistoryIndex < editorHistory.length - 1) {
+      isUndoRedoingRef.current = true;
+      const nextIdx = editorHistoryIndex + 1;
+      setEditorHistoryIndex(nextIdx);
+      const targetSettings = JSON.parse(editorHistory[nextIdx]);
+      Object.keys(targetSettings).forEach((key) => {
+        updateServiceSetting("image-editor", key, targetSettings[key]);
+      });
+      setTimeout(() => {
+        isUndoRedoingRef.current = false;
+      }, 50);
+    }
+  };
+
+  const handleEditorReset = () => {
+    const defaults = {};
+    CONTROLS_CONFIG["image-editor"].forEach((control) => {
+      if (control.defaultValue !== undefined) {
+        defaults[control.id] = control.defaultValue;
+        updateServiceSetting("image-editor", control.id, control.defaultValue);
+      }
+    });
+
+    const settingsStr = JSON.stringify(defaults);
+    const updatedHistory = editorHistory.slice(0, editorHistoryIndex + 1);
+    updatedHistory.push(settingsStr);
+    setEditorHistory(updatedHistory);
+    setEditorHistoryIndex(updatedHistory.length - 1);
+  };
+
   useEffect(() => {
     return () => clearTimeout(bgPostProcessDebounceRef.current);
   }, []);
@@ -238,7 +326,10 @@ const ControlPanel = () => {
   );
 
   // Derive configurations dynamically
-  const configs = CONTROLS_CONFIG[currentService.id] || [];
+  const configs = (CONTROLS_CONFIG[currentService.id] || []).filter((c) => {
+    if (c.id === "tier" && !hasPaidAccess) return false;
+    return true;
+  });
   
   const categories = [...new Set(configs.filter((c) => c.category).map((c) => c.category))];
 
@@ -283,7 +374,9 @@ const ControlPanel = () => {
 
     if (batch.batchSettingsTarget && batch.batchSettingsTarget !== "all") {
       const idx = batch.items.findIndex(i => i.id === batch.batchSettingsTarget);
-      return `Process Image ${idx + 1}`;
+      const targetItem = batch.items[idx];
+      const prefix = (targetItem?.status === "done" || targetItem?.resultCanvas) ? "Process again" : "Process Image";
+      return `${prefix} ${idx + 1}`;
     }
 
     if (activeMode === OPERATION_MODE.BATCH) {
@@ -293,7 +386,7 @@ const ControlPanel = () => {
       if (pending > 0) {
         return `Process All (${pending} image${pending !== 1 ? "s" : ""})`;
       } else if (batch.items.length > 0) {
-        return `Rerun All (${batch.items.length} images)`;
+        return `Process again (${batch.items.length} images)`;
       }
     }
     return "Process Image";
@@ -312,18 +405,16 @@ const ControlPanel = () => {
           zIndex: 10
         }}>
           <Button
-            variant="primary"
-            onClick={getProcessAction()}
+            variant={isProcessing ? "secondary" : "primary"}
+            onClick={isProcessing ? batch.cancel : getProcessAction()}
             style={{ padding: "6px 16px", fontSize: "13px" }}
-            disabled={isProcessing}
-            isLoading={isProcessing}
           >
-            {getProcessLabel()}
+            {isProcessing ? "Pause" : getProcessLabel()}
           </Button>
         </div>
       )}
 
-      <div className="controls">
+      <div className={`controls ${originalCanvas ? "has-image" : ""}`}>
         {activeMode === OPERATION_MODE.BATCH && <BatchSettingsSelector />}
         <div className="controls-grid">
           {batch.batchAvailable && (
@@ -341,7 +432,7 @@ const ControlPanel = () => {
           <div className="full-width-control">
             {/* Category Tabs (if applicable) */}
             {hasCategories && (
-              <div className="full-width-control editor-categories-box">
+              <div className="full-width-control editor-categories-box" style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
                 <div className="tab-group control-tabs">
                   {categories.map((cat) => (
                     <Button
@@ -354,6 +445,86 @@ const ControlPanel = () => {
                     </Button>
                   ))}
                 </div>
+
+                {currentService.id === "image-editor" && (
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '0 4px', borderTop: '1px solid rgba(255, 255, 255, 0.05)', paddingTop: '6px' }}>
+                    <div style={{ display: 'flex', gap: '6px' }}>
+                      <button
+                        type="button"
+                        title="Undo"
+                        onClick={handleEditorUndo}
+                        disabled={editorHistoryIndex <= 0}
+                        style={{
+                          background: 'transparent',
+                          border: '1px solid rgba(255, 255, 255, 0.08)',
+                          color: editorHistoryIndex <= 0 ? 'var(--text-dim)' : 'var(--text-muted)',
+                          borderRadius: 'var(--radius-sm)',
+                          width: '24px',
+                          height: '24px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: editorHistoryIndex <= 0 ? 'not-allowed' : 'pointer'
+                        }}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M3 7v6h6"/>
+                          <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>
+                        </svg>
+                      </button>
+                      <button
+                        type="button"
+                        title="Redo"
+                        onClick={handleEditorRedo}
+                        disabled={editorHistoryIndex >= editorHistory.length - 1}
+                        style={{
+                          background: 'transparent',
+                          border: '1px solid rgba(255, 255, 255, 0.08)',
+                          color: editorHistoryIndex >= editorHistory.length - 1 ? 'var(--text-dim)' : 'var(--text-muted)',
+                          borderRadius: 'var(--radius-sm)',
+                          width: '24px',
+                          height: '24px',
+                          display: 'flex',
+                          alignItems: 'center',
+                          justifyContent: 'center',
+                          cursor: editorHistoryIndex >= editorHistory.length - 1 ? 'not-allowed' : 'pointer'
+                        }}
+                      >
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 7v6h-6"/>
+                          <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/>
+                        </svg>
+                      </button>
+                    </div>
+
+                    <button
+                      type="button"
+                      onClick={handleEditorReset}
+                      style={{
+                        background: 'transparent',
+                        color: 'var(--text-muted)',
+                        fontSize: '10.5px',
+                        fontWeight: '600',
+                        textTransform: 'uppercase',
+                        letterSpacing: '0.05em',
+                        cursor: 'pointer',
+                        padding: '2px 6px',
+                        border: '1px solid transparent',
+                        borderRadius: 'var(--radius-sm)'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.color = 'var(--text-main)';
+                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.color = 'var(--text-muted)';
+                        e.currentTarget.style.borderColor = 'transparent';
+                      }}
+                    >
+                      Reset adjustments
+                    </button>
+                  </div>
+                )}
               </div>
             )}
 
@@ -380,6 +551,21 @@ const ControlPanel = () => {
                     resolvedControl = {
                       ...config,
                       options: config.options(currentSettings),
+                    };
+                  }
+
+                  // Dynamically strip paid options for non-developers / non-credited users
+                  if (resolvedControl.options && Array.isArray(resolvedControl.options) && !hasPaidAccess) {
+                    resolvedControl = {
+                      ...resolvedControl,
+                      options: resolvedControl.options.filter(opt => {
+                        if (BACKGROUND_REMOVAL_MODELS[opt.value]?.paid) return false;
+                        const segModel = Object.values(SEGMENTATION_MODELS).find(m => m.model_id === opt.value);
+                        if (segModel?.paid) return false;
+                        if (CAPTIONING_MODELS[opt.value]?.paid) return false;
+                        if (UPSCALING_MODELS[opt.value]?.paid) return false;
+                        return true;
+                      })
                     };
                   }
 

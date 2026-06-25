@@ -233,13 +233,18 @@ async function getSession(modelId, onProgress) {
       report(0.75, 0.75, "WebGPU failed. Retrying on CPU (WASM)...")(0);
       
       const fallbackUrl = modelConfig.model_url || `https://huggingface.co/${modelConfig.model_id}/resolve/main/onnx/model_quantized.onnx`;
-      let fallbackBuffer = await fetchWithProgress(
-        fallbackUrl,
-        modelConfig.model_url ? `${modelId} (custom)` : `${modelConfig.model_id} (quantized)`,
-        report,
-        0.75,
-        0.9,
-      );
+      let fallbackBuffer;
+      if (fallbackUrl === modelUrl && modelBuffer) {
+        fallbackBuffer = modelBuffer;
+      } else {
+        fallbackBuffer = await fetchWithProgress(
+          fallbackUrl,
+          modelConfig.model_url ? `${modelId} (custom)` : `${modelConfig.model_id} (quantized)`,
+          report,
+          0.75,
+          0.9,
+        );
+      }
 
       sessionOptions.executionProviders = ["wasm"];
       ortSession = await ort.InferenceSession.create(fallbackBuffer, sessionOptions);
@@ -266,20 +271,36 @@ async function runOrt(payload, onProgress) {
 
   report(0.93, 0.93, "Pre-processing input image...")(0);
 
+  const mean = modelConfig.mean || [0.485, 0.456, 0.406];
+  const std = modelConfig.std || [0.229, 0.224, 0.225];
+  const scale = typeof modelConfig.scale === 'number' ? modelConfig.scale : (1.0 / 255.0);
+
   const tensorData = await imageToTensor(bitmap, size, {
-    mean: [0.485, 0.456, 0.406],
-    std: [0.229, 0.224, 0.225],
+    mean,
+    std,
     layout: 'NCHW',
-    scale: 1.0 / 255.0
+    scale
   });
 
   report(0.95, 0.95, `Running inference (${ortDevice.toUpperCase()})...`)(0);
 
   // Create input tensor
-  const tensor = new ort.Tensor("float32", tensorData, [1, 3, size, size]);
-  const results = await sess.run({ [sess.inputNames[0]]: tensor });
-  const outputTensor = results[sess.outputNames[0]];
-  const outputData = outputTensor.data;
+  let tensor = null;
+  let results = null;
+  let outputData;
+  try {
+    tensor = new ort.Tensor("float32", tensorData, [1, 3, size, size]);
+    results = await sess.run({ [sess.inputNames[0]]: tensor });
+    const outputTensor = results[sess.outputNames[0]];
+    outputData = outputTensor.data;
+  } finally {
+    tensor?.dispose?.();
+    if (results) {
+      for (const key in results) {
+        results[key]?.dispose?.();
+      }
+    }
+  }
 
   report(0.98, 0.98, "Post-processing mask...")(0);
 
@@ -319,11 +340,11 @@ self.onmessage = async ({ data }) => {
   const { type, payload } = data;
 
   if (type === "process") {
+    const { bitmap, model: modelId } = payload;
     try {
       const onProgress = (prog, msg) =>
         self.postMessage({ type: "progress", progress: prog, message: msg });
 
-      const { bitmap, model: modelId } = payload;
       const modelConfig = BACKGROUND_REMOVAL_MODELS[modelId] || BACKGROUND_REMOVAL_MODELS["birefnet-lite"];
       
       let method = payload.method || "custom";
@@ -346,9 +367,6 @@ self.onmessage = async ({ data }) => {
         result = await runOrt(payload, onProgress);
       }
 
-      // Clean up input bitmap to avoid leak in main thread / worker
-      bitmap.close();
-
       self.postMessage(
         {
           type: "complete",
@@ -370,6 +388,9 @@ self.onmessage = async ({ data }) => {
         type: "error",
         error: err.message || "Background removal execution failed",
       });
+    } finally {
+      // Clean up input bitmap to avoid leak in main thread / worker
+      bitmap?.close();
     }
   }
 

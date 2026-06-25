@@ -1,5 +1,5 @@
 import * as ort from 'onnxruntime-web/webgpu';
-import { createProgressReporter, fetchWithProgress, configureOrt } from '../../utils/worker-utils.js';
+import { createProgressReporter, fetchWithProgress, configureOrt, getGPUConfig } from '../../utils/worker-utils.js';
 import {
     getMeta,
     getDims,
@@ -24,17 +24,15 @@ function wlog(...args) {
     console.log(`[MagicErase Worker ${ts}]`, ...args);
 }
 
-
-
 function buildSessionOptions(executionProviders) {
     return {
         executionProviders,
-        graphOptimizationLevel: 'basic'
+        graphOptimizationLevel: 'all'
     };
 }
 
 async function initSession(url) {
-    if (session && modelURL === url) return;
+    if (session && modelURL === url) return (session.handler?.deviceType || 'wasm');
 
     if (session) {
         try {
@@ -46,9 +44,9 @@ async function initSession(url) {
 
     modelURL = url;
     
-    // Forced 'wasm' for LaMa due to WebGPU broadcast mismatches in FFC layers
-    const providers = ['wasm'];
-    const primaryProvider = 'wasm';
+    const hw = await getGPUConfig();
+    const providers = hw.supported ? ['webgpu', 'wasm'] : ['wasm'];
+    const primaryProvider = providers[0];
 
     try {
         const onProgress = (prog, msg) => self.postMessage({ type: 'init-status', provider: primaryProvider, payload: { message: msg, progress: prog } });
@@ -66,10 +64,24 @@ async function initSession(url) {
             'lama-model-cache-v1'
         );
 
-        report(0.8, 0.8, 'Compiling ONNX WebAssembly Graph...')();
-        session = await ort.InferenceSession.create(modelBuffer, lastSessionOptions);
+        const deviceLabel = primaryProvider.toUpperCase();
+        report(0.8, 0.8, `Initializing ONNX ${deviceLabel} Graph...`)();
+        
+        try {
+            session = await ort.InferenceSession.create(modelBuffer, lastSessionOptions);
+        } catch (gpuErr) {
+            if (primaryProvider === 'webgpu') {
+                console.warn("LaMa WebGPU load failed, falling back to WASM (CPU)...", gpuErr);
+                report(0.85, 0.85, `WebGPU failed. Retrying on CPU (WASM)...`)();
+                const fallbackOptions = buildSessionOptions(['wasm']);
+                session = await ort.InferenceSession.create(modelBuffer, fallbackOptions);
+            } else {
+                throw gpuErr;
+            }
+        }
         
         wlog("Session loaded");
+        return session.handler?.deviceType || primaryProvider;
     } catch (e) {
         console.error("Worker failed to initial load model:", e);
         throw e;
@@ -131,21 +143,37 @@ self.onmessage = async (e) => {
 
             packLamaTensors(image, mask, imageTensorData, maskTensorData, isNHWC);
 
-            const imageTensor = new ort.Tensor('float32', imageTensorData, imgShape);
-            const maskTensor = new ort.Tensor('float32', maskTensorData, maskShape);
+            let imageTensor = null;
+            let maskTensor = null;
+            let results = null;
+            let finalData;
+            let outShape;
+            let outputLayout;
+            let isOutNHWC;
+            try {
+                imageTensor = new ort.Tensor('float32', imageTensorData, imgShape);
+                maskTensor = new ort.Tensor('float32', maskTensorData, maskShape);
 
-            const feeds = {};
-            feeds[imageKey] = imageTensor;
-            feeds[maskKey] = maskTensor;
+                const feeds = {};
+                feeds[imageKey] = imageTensor;
+                feeds[maskKey] = maskTensor;
 
-            const results = await session.run(feeds);
-            const outputName = session.outputNames[0];
-            const outputTensor = results[outputName];
-            const outShape = outputTensor.dims;
-            const outputLayout = detectLayout(outShape);
-            const isOutNHWC = outputLayout === 'NHWC';
-
-            const finalData = outputTensor.data;
+                results = await session.run(feeds);
+                const outputName = session.outputNames[0];
+                const outputTensor = results[outputName];
+                outShape = outputTensor.dims;
+                outputLayout = detectLayout(outShape);
+                isOutNHWC = outputLayout === 'NHWC';
+                finalData = outputTensor.data;
+            } finally {
+                imageTensor?.dispose?.();
+                maskTensor?.dispose?.();
+                if (results) {
+                    for (const key in results) {
+                        results[key]?.dispose?.();
+                    }
+                }
+            }
 
             let min = finalData[0];
             let max = finalData[0];

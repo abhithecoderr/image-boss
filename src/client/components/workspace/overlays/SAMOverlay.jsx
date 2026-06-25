@@ -1,11 +1,12 @@
 import React, { useRef, useEffect, useState } from "react";
-import { useService } from "../../../store";
+import { useService, useWorkspace } from "../../../store";
 import { useSAM } from "../../../hooks/useSAM";
 import { useMediaQuery } from "../../../hooks/useMediaQuery";
 
 const SAMOverlay = ({ srcRef }) => {
   const { currentService } = useService();
   const { samPoints, addPoint } = useSAM();
+  const isProcessing = useWorkspace((state) => state.isProcessing);
   const overlayRef = useRef(null);
 
   // On touch devices there's no right-click / shift / ctrl. A small floating
@@ -31,14 +32,19 @@ const SAMOverlay = ({ srcRef }) => {
     sync();
 
     const ro = new ResizeObserver(sync);
-    if (srcRef.current) ro.observe(srcRef.current);
+    if (srcRef.current) {
+      ro.observe(srcRef.current);
+      if (srcRef.current.parentElement) {
+        ro.observe(srcRef.current.parentElement);
+      }
+    }
     window.addEventListener("resize", sync);
 
     return () => {
       ro.disconnect();
       window.removeEventListener("resize", sync);
     };
-  }, [srcRef, currentService?.id]);
+  }, [srcRef, currentService?.id, isProcessing]);
 
   const placePoint = (clientX, clientY, isNegative) => {
     if (currentService?.id !== "object-segmentation") return;

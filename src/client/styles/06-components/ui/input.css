@@ -30,6 +30,7 @@
 .control-input:focus {
   border-color: var(--highlight);
   background: var(--bg-surface);
+  box-shadow: 0 0 0 2px rgba(245, 166, 35, 0.15);
 }
 
 .control-input::placeholder {

@@ -84,10 +84,12 @@ function MainAppLayoutContent() {
         <Sidebar isOpen={sidebarOpen} onClose={() => setSidebarOpen(false)} />
 
         <main id="main">
-          <div className="service-info">
-            <h1>{currentService.name}</h1>
-            <p>{currentService.description}</p>
-          </div>
+          {!originalCanvas && (
+            <div className="service-info">
+              <h1>{currentService.name}</h1>
+              <p>{currentService.description}</p>
+            </div>
+          )}
 
           <>
             <ErrorBoundary>

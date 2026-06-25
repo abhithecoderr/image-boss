@@ -186,6 +186,7 @@ const BatchStrip = () => {
                 }
                 pill
                 className="batch-status"
+                title={item.status === "error" ? `Error: ${item.error}` : undefined}
                 icon={
                   item.status === "processing" ? (
                     <span className="batch-spinner" />

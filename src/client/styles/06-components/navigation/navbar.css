@@ -117,10 +117,10 @@
   font-size: 12px;
   font-weight: 600;
   color: var(--accent-primary);
-  background: rgba(245, 166, 35, 0.08);
+  background: rgba(2, 132, 199, 0.08);
   padding: 4px 10px;
   border-radius: 20px;
-  border: 1px solid rgba(245, 166, 35, 0.2);
+  border: 1px solid rgba(2, 132, 199, 0.2);
   user-select: none;
   white-space: nowrap;
 }
@@ -151,7 +151,7 @@
   cursor: pointer;
   padding: 0;
   user-select: none;
-  box-shadow: 0 0 0 2px rgba(245, 166, 35, 0.2);
+  box-shadow: 0 0 0 2px rgba(2, 132, 199, 0.2);
   flex-shrink: 0;
 }
 
@@ -175,7 +175,7 @@
   top: 40px;
   right: 0;
   width: 240px;
-  background: rgba(20, 20, 25, 0.95);
+  background: rgba(10, 10, 10, 0.95);
   backdrop-filter: blur(12px);
   border: 1px solid var(--border-subtle);
   border-radius: var(--radius-md);

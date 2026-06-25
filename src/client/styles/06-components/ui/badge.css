@@ -53,9 +53,9 @@
 }
 
 .badge-primary {
-  background-color: rgba(245, 166, 35, 0.15);
-  border-color: rgba(245, 166, 35, 0.3);
-  color: var(--text-main);
+  background-color: rgba(2, 132, 199, 0.12);
+  border-color: rgba(2, 132, 199, 0.25);
+  color: #38bdf8;
 }
 
 .badge-secondary {

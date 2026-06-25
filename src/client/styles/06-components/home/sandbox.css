@@ -3,87 +3,74 @@
    ============================================ */
 
 .home-sandbox-container {
-  max-width: 840px;
+  max-width: 880px;
   width: 100%;
-  margin: var(--space-8) auto;
-  background: rgba(24, 24, 27, 0.4);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
-  border: 1px solid rgba(255, 255, 255, 0.05);
-  padding: var(--space-6);
-  border-radius: var(--radius-lg);
-  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5), 0 0 80px rgba(245, 166, 35, 0.02);
-  transition: all var(--transition-normal);
+  margin: -32px auto var(--space-6) auto;
+  background: transparent;
+  border: none;
+  padding: 0;
+  box-shadow: none;
 }
 
-.home-sandbox-container:hover {
-  border-color: rgba(245, 166, 35, 0.15);
-  box-shadow: 0 24px 48px rgba(0, 0, 0, 0.6), 0 0 100px rgba(245, 166, 35, 0.04);
-}
-
+/* Make the internal upload box the main visual card */
 .sandbox-upload-box {
+  max-width: 640px;
   width: 100%;
-  height: 220px;
+  height: 280px;
+  margin: 0 auto var(--space-3) auto;
   position: relative;
   overflow: hidden;
-  /* Premium Dark Tech Grid Background */
-  background-image: 
-    radial-gradient(circle at center, rgba(245, 166, 35, 0.02) 0%, transparent 70%),
-    linear-gradient(rgba(255, 255, 255, 0.01) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.01) 1px, transparent 1px);
-  background-size: 100% 100%, 24px 24px, 24px 24px;
-  background-position: center;
-  border: 2px dashed rgba(255, 255, 255, 0.08);
+  background: rgba(24, 24, 27, 0.4);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px dashed rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-lg);
   display: flex;
   align-items: center;
   justify-content: center;
   cursor: pointer;
-  transition: all var(--transition-expo);
-  margin-bottom: var(--space-6);
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
+  box-shadow: 
+    0 30px 60px rgba(0, 0, 0, 0.6), 
+    0 0 100px rgba(2, 132, 199, 0.01),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
   text-align: center;
 }
 
 .sandbox-upload-box:hover {
-  border-color: rgba(255, 255, 255, 0.2);
-  background-image: 
-    radial-gradient(circle at center, rgba(255, 255, 255, 0.02) 0%, transparent 70%),
-    linear-gradient(rgba(255, 255, 255, 0.01) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(255, 255, 255, 0.01) 1px, transparent 1px);
-  background-size: 100% 100%, 24px 24px, 24px 24px;
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6), inset 0 0 20px rgba(255, 255, 255, 0.01);
+  border-color: rgba(2, 132, 199, 0.35);
+  border-style: dashed;
+  box-shadow: 
+    0 30px 70px rgba(0, 0, 0, 0.7), 
+    0 0 120px rgba(2, 132, 199, 0.06),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transform: translateY(-2px) scale(1.01);
 }
 
 .sandbox-upload-box.upload-area--drag-active {
   border-color: var(--success);
-  background-image: 
-    radial-gradient(circle at center, rgba(16, 185, 129, 0.1) 0%, transparent 70%),
-    linear-gradient(rgba(16, 185, 129, 0.04) 1px, transparent 1px),
-    linear-gradient(90deg, rgba(16, 185, 129, 0.04) 1px, transparent 1px);
-  background-size: 100% 100%, 24px 24px, 24px 24px;
-  box-shadow: 0 0 30px rgba(16, 185, 129, 0.15);
+  box-shadow: 0 0 40px rgba(16, 185, 129, 0.2);
 }
 
 .sandbox-upload-box.upload-area--has-file {
   border-style: solid;
-  border-color: rgba(255, 255, 255, 0.15);
-  background-image: radial-gradient(circle at center, rgba(24, 24, 27, 0.7) 0%, rgba(9, 9, 11, 0.95) 100%);
-  box-shadow: inset 0 0 40px rgba(0, 0, 0, 0.6);
+  border-color: rgba(255, 255, 255, 0.12);
+  background-image: radial-gradient(circle at center, rgba(24, 24, 27, 0.6) 0%, rgba(9, 9, 11, 0.95) 100%);
+  box-shadow: inset 0 0 50px rgba(0, 0, 0, 0.8), 0 20px 50px rgba(0, 0, 0, 0.5);
 }
 
 .sandbox-upload-box .upload-icon-wrapper {
   background: rgba(255, 255, 255, 0.02);
   border: 1px solid rgba(255, 255, 255, 0.06);
-  width: 68px;
-  height: 68px;
+  width: 56px;
+  height: 56px;
   border-radius: 50%;
   display: inline-flex;
   align-items: center;
   justify-content: center;
-  margin-bottom: var(--space-4);
+  margin-bottom: var(--space-3);
   transition: all var(--transition-fast);
   color: var(--text-muted);
-  box-shadow: inset 0 2px 4px rgba(255, 255, 255, 0.01);
 }
 
 .sandbox-upload-box:hover .upload-icon-wrapper {
@@ -93,59 +80,58 @@
 }
 
 .sandbox-upload-box .upload-preview-thumb {
+  max-width: 500px;
+  max-height: 200px;
+  width: auto;
+  height: auto;
+  object-fit: contain;
   border-radius: var(--radius-md);
-  border: 2px solid rgba(255, 255, 255, 0.1);
-  box-shadow: 0 10px 30px rgba(0, 0, 0, 0.6);
-  max-height: 150px;
+  border: 2px solid rgba(255, 255, 255, 0.15);
+  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.6);
   transition: all var(--transition-fast);
   background: var(--bg-deep);
 }
 
-.sandbox-upload-box:hover .upload-preview-thumb {
-  border-color: rgba(255, 255, 255, 0.25);
-  box-shadow: 0 12px 36px rgba(0, 0, 0, 0.8);
-}
-
-.sandbox-file-info {
-  font-size: 14px;
-  color: var(--text-main);
-  font-weight: 500;
-}
-
-.sandbox-file-size {
-  font-size: 12px;
-  color: var(--text-muted);
-}
-
+/* Controls row (selects and process button aligned horizontally) */
 .sandbox-controls-bar {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  display: flex;
+  align-items: flex-end;
+  justify-content: center;
   gap: var(--space-4);
-  margin-bottom: var(--space-6);
+  max-width: 880px;
+  margin: 0 auto;
 }
 
 .sandbox-control-item {
   display: flex;
   flex-direction: column;
   gap: var(--space-2);
+  flex: 1;
+  min-width: 140px;
+}
+
+.sandbox-control-item.sandbox-button-item {
+  flex: 0 0 auto;
+  min-width: 140px;
 }
 
 .sandbox-control-label {
-  font-size: 12px;
-  font-weight: 600;
+  font-size: 11px;
+  font-weight: 700;
   text-transform: uppercase;
   letter-spacing: 0.05em;
-  color: var(--text-muted);
+  color: var(--text-dim);
 }
 
 .sandbox-select {
   width: 100%;
-  background: var(--bg-elevated);
+  background: var(--bg-secondary);
   border: 1px solid var(--border-medium);
   border-radius: var(--radius-sm);
   color: var(--text-main);
-  padding: var(--space-2) var(--space-3);
-  font-size: 14px;
+  padding: 0 var(--space-3);
+  height: 38px;
+  font-size: 13.5px;
   font-weight: 500;
   outline: none;
   cursor: pointer;
@@ -156,95 +142,31 @@
   border-color: var(--border-strong);
 }
 
-/* Collapsible Settings Drawer */
-.sandbox-settings-drawer {
-  background: var(--bg-surface);
-  border: 1px solid var(--border);
-  border-radius: var(--radius-md);
-  margin-top: var(--space-4);
-  margin-bottom: var(--space-6);
-  overflow: hidden;
-  transition: max-height var(--transition-normal) ease-in-out;
-}
-
-.sandbox-drawer-header {
-  padding: var(--space-3) var(--space-4);
-  background: rgba(255, 255, 255, 0.02);
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
-  user-select: none;
-  border-bottom: 1px solid var(--border);
-}
-
-.sandbox-drawer-title {
-  font-size: 13px;
-  font-weight: 600;
-  color: var(--text-main);
-  text-transform: uppercase;
-  letter-spacing: 0.05em;
-  display: flex;
-  align-items: center;
-  gap: var(--space-2);
-}
-
-.sandbox-drawer-toggle-icon {
-  font-size: 11px;
-  color: var(--text-dim);
-  transition: transform var(--transition-fast);
-  display: flex;
-  align-items: center;
-}
-
-.sandbox-drawer-toggle-icon.open {
-  transform: rotate(180deg);
-}
-
-.sandbox-drawer-content {
-  padding: var(--space-4);
-  display: flex;
-  flex-direction: column;
-  gap: var(--space-4);
-}
-
-.sandbox-drawer-empty {
-  font-size: 13px;
-  color: var(--text-dim);
-  text-align: center;
-  padding: var(--space-2) 0;
-}
-
-.sandbox-action-row {
-  display: flex;
-  justify-content: flex-end;
-  margin-top: var(--space-4);
-}
-
+/* Process Button alignment and size */
 .sandbox-process-btn {
+  height: 38px;
+  width: 100%;
+  font-size: 13.5px;
+  font-weight: 600;
+  border-radius: var(--radius-sm);
   background: linear-gradient(135deg, var(--accent-primary) 0%, var(--accent-hover) 100%);
   color: var(--text-inverse);
-  font-weight: 600;
-  font-size: 15px;
-  padding: var(--space-3) var(--space-8);
-  border-radius: var(--radius-md);
+  box-shadow: 0 4px 12px rgba(2, 132, 199, 0.2);
   border: none;
   cursor: pointer;
-  box-shadow: 0 4px 20px rgba(245, 166, 35, 0.25), inset 0 1px 0 rgba(255, 255, 255, 0.3);
   transition: all var(--transition-expo);
-  display: flex;
+  display: inline-flex;
   align-items: center;
-  gap: var(--space-2);
+  justify-content: center;
+  white-space: nowrap;
 }
 
 .sandbox-process-btn:hover:not(:disabled) {
-  transform: translateY(-3px) scale(1.02);
-  box-shadow: 0 8px 30px rgba(245, 166, 35, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.4);
+  box-shadow: 0 6px 18px rgba(2, 132, 199, 0.35);
 }
 
 .sandbox-process-btn:active:not(:disabled) {
-  transform: translateY(-1px) scale(0.99);
-  box-shadow: 0 4px 15px rgba(245, 166, 35, 0.3);
+  transform: translateY(0);
 }
 
 .sandbox-process-btn:disabled {
@@ -255,4 +177,15 @@
   cursor: not-allowed;
   transform: none;
   box-shadow: none;
+}
+
+@media (max-width: 768px) {
+  .sandbox-controls-bar {
+    flex-direction: column;
+    align-items: stretch;
+    gap: var(--space-3);
+  }
+  .sandbox-control-item.sandbox-button-item label {
+    display: none;
+  }
 }

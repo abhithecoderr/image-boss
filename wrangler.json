@@ -1,6 +1,7 @@
 {
 	"$schema": "node_modules/wrangler/config-schema.json",
 	"name": "image-boss",
+	"account_id": "4d6f4810db896e95b43306e9e30b5c24",
 	"compatibility_date": "2026-05-28",
 	"compatibility_flags": ["nodejs_compat"],
 	"main": "src/server/worker.js",

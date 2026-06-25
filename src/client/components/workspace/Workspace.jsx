@@ -59,6 +59,7 @@ const StatusBar = () => {
     <Progress
       percent={progress.percent}
       message={progress.message || "Processing..."}
+      stage={progress.stage}
     />
   );
 };
@@ -83,6 +84,9 @@ const Workspace = () => {
 
   const getProcessLabel = () => {
     if (currentService.id === "object-segmentation") return "Segment Selected Points";
+    if (activeItem?.status === "done" || resCanvasState) {
+      return "Process again";
+    }
     return "Process Image";
   };
   
@@ -216,7 +220,7 @@ const Workspace = () => {
       srcRef.current.height = srcCanvas.height;
       ctx.drawImage(srcCanvas, 0, 0);
     }
-  }, [srcCanvas]);
+  }, [srcCanvas, currentService.id, resCanvasState]);
 
   useEffect(() => {
     if (!resRef.current) return;
@@ -238,7 +242,7 @@ const Workspace = () => {
       // Clear canvas if no result
       ctx.clearRect(0, 0, resRef.current.width, resRef.current.height);
     }
-  }, [resCanvas]);
+  }, [resCanvas, currentService.id, resCanvasState]);
 
   const onDrop = (files) => {
     if (isBatchView) {
@@ -269,315 +273,570 @@ const Workspace = () => {
     <div className="workspace">
       <StatusBar />
 
+      {activeItem?.status === "error" && (
+        <div className="workspace-error-banner" style={{
+          background: "rgba(239, 68, 68, 0.08)",
+          border: "1px solid rgba(239, 68, 68, 0.2)",
+          color: "#fca5a5",
+          padding: "12px 16px",
+          borderRadius: "var(--radius-md)",
+          marginBottom: "16px",
+          display: "flex",
+          alignItems: "center",
+          gap: "10px",
+          fontSize: "13px",
+          animation: "fadeIn 0.2s ease-in-out"
+        }}>
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" style={{ flexShrink: 0, color: "#ef4444" }}>
+            <circle cx="12" cy="12" r="10" />
+            <line x1="12" y1="8" x2="12" y2="12" />
+            <line x1="12" y1="16" x2="12.01" y2="16" />
+          </svg>
+          <div style={{ flex: 1 }}>
+            <strong style={{ color: "#ef4444", marginRight: "8px" }}>Processing Failed:</strong>
+            {activeItem.error || "An unknown error occurred during execution."}
+          </div>
+        </div>
+      )}
+
       {isBatchView && batch.items.length > 0 && (
         <BatchStrip />
       )}
 
       <div className="preview-container">
-        <div className="preview-panel">
-          <div className="preview-label preview-header">
-            <span>Original</span>
-          </div>
-
-          <div
-            className="preview-image-wrapper"
-            onDragOver={(e) => e.preventDefault()}
-            onDrop={(e) => {
-              e.preventDefault();
-              if (e.dataTransfer.files.length > 0) {
-                onDrop(e.dataTransfer.files);
-              }
-            }}
-          >
-            <SAMOverlay srcRef={srcRef} />
-            <MagicEraseOverlay srcRef={srcRef} />
-            <canvas ref={srcRef}></canvas>
-          </div>
-        </div>
-
-        {currentService.id === "image-editor" ? (
-          <div className="preview-panel">
-            <div className="preview-label preview-header">
-              <span>Live Result</span>
-            </div>
-            <div className="preview-image-wrapper">
-              <EditorPreview sourceCanvas={srcCanvasState} />
-            </div>
-          </div>
-        ) : currentService.id === "upscaling" && resCanvasState ? (
-          <div className="preview-panel">
-            <div className="preview-label preview-header">
-              <span>Comparison</span>
-              <Button
-                variant="secondary"
-                size="tiny"
-                onClick={() => {
-                  const { filename, mimeType } = getDownloadMetadata(
-                    null,
-                    null,
-                    resCanvasState,
-                  );
-                  downloadCanvas(resCanvasState, filename, mimeType);
-                }}
-                icon={
-                  <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="7 10 12 15 17 10" />
-                    <line x1="12" y1="15" x2="12" y2="3" />
-                  </svg>
-                }
-              >
-                Download
-              </Button>
-            </div>
-            <div className="preview-image-wrapper">
-              <ComparisonSlider />
-            </div>
-          </div>
-        ) : (
-          <div className="preview-panel">
-            <div className="preview-label preview-header" style={{ position: 'relative', minHeight: '38px', display: 'flex', alignItems: 'center' }}>
-              {editing.activeTool !== "none" ? (
-                /* Editing Mode Toolbar */
-                <div className="editor-toolbar">
-                  {/* Left Side: Tools & Brush Size */}
-                  <div className="editor-toolbar-group">
-                    {/* Glowing indicator */}
-                    <div className="editor-active-indicator" title="Edit Mode Active" />
-
-                    {/* Erase Tool */}
+        {/* Render single viewport/layout if it's one of the reduced/single services */}
+        {["background-removal", "upscaling", "blur", "line-art"].includes(currentService.id) ? (
+          resCanvasState ? (
+            /* Comparison Slider Panel */
+            <div className="preview-panel">
+              <div className="preview-label preview-header">
+                <span>Comparison</span>
+                <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  {resCanvasState && currentService.id === "background-removal" && editing.activeTool === "none" && (
                     <button
                       type="button"
-                      title="Erase Mode (E)"
-                      onClick={() => setEditing({ activeTool: "erase" })}
-                      className={`editor-tool-btn${editing.activeTool === "erase" ? " is-active" : ""}`}
+                      title="Touch up result manually"
+                      onClick={startTouchupMode}
+                      style={{
+                        background: 'transparent',
+                        border: '1px solid rgba(255, 255, 255, 0.08)',
+                        color: 'var(--text-muted)',
+                        borderRadius: 'var(--radius-sm)',
+                        padding: '4px 8px',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '6px',
+                        fontSize: '12px',
+                        fontWeight: '600',
+                        transition: 'all var(--transition-fast)'
+                      }}
+                      onMouseEnter={(e) => {
+                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                        e.currentTarget.style.color = 'var(--text-main)';
+                        e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)';
+                      }}
+                      onMouseLeave={(e) => {
+                        e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                        e.currentTarget.style.color = 'var(--text-muted)';
+                        e.currentTarget.style.background = 'transparent';
+                      }}
                     >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="m14 3-4.9 4.9"/>
-                        <path d="m8.5 8.5-5 5A2 2 0 0 0 5 17h10l5-5a2 2 0 0 0 0-2.8l-6-6Z"/>
+                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                        <path d="M12 20h9"/>
+                        <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
                       </svg>
+                      Touchup
                     </button>
-
-                    {/* Restore Tool */}
-                    <button
-                      type="button"
-                      title="Restore Mode (R)"
-                      onClick={() => setEditing({ activeTool: "restore" })}
-                      className={`editor-tool-btn${editing.activeTool === "restore" ? " is-active" : ""}`}
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="m12 22 .7-2.7a2 2 0 0 0-.5-1.7l-8.2-8.2A2 2 0 0 1 6.8 6.6l8.2 8.2a2 2 0 0 0 1.7.5L19.4 16A1 1 0 0 0 21 15.3l.5-4.5a3 3 0 0 0-.8-2.3L12 1.3A3 3 0 0 0 9.7.5L5.2 1a1 1 0 0 0-.7 1.5Z"/>
-                      </svg>
-                    </button>
-
-                    <div className="editor-toolbar-divider" />
-
-                    {/* Brush Size Slider */}
-                    <div className="editor-brush-control">
-                      <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" title="Brush Size">
-                        <circle cx="12" cy="12" r="8"/>
-                        <circle cx="12" cy="12" r="3" fill="currentColor"/>
-                      </svg>
-                      <input
-                        type="range"
-                        min="5"
-                        max="150"
-                        value={editing.brushSize}
-                        onChange={(e) => setEditing({ brushSize: parseInt(e.target.value) })}
-                        className="editor-brush-range"
-                      />
-                      <span className="editor-brush-value">{editing.brushSize}px</span>
+                  )}
+                  {editing.activeTool !== "none" && (
+                    /* Touchup Active Toolbar */
+                    <div className="editor-toolbar">
+                      <div className="editor-toolbar-group">
+                        <button
+                          type="button"
+                          title="Erase Mode (E)"
+                          onClick={() => setEditing({ activeTool: "erase" })}
+                          className={`editor-tool-btn${editing.activeTool === "erase" ? " is-active" : ""}`}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="m14 3-4.9 4.9"/>
+                            <path d="m8.5 8.5-5 5A2 2 0 0 0 5 17h10l5-5a2 2 0 0 0 0-2.8l-6-6Z"/>
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          title="Restore Mode (R)"
+                          onClick={() => setEditing({ activeTool: "restore" })}
+                          className={`editor-tool-btn${editing.activeTool === "restore" ? " is-active" : ""}`}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="m12 22 .7-2.7a2 2 0 0 0-.5-1.7l-8.2-8.2A2 2 0 0 1 6.8 6.6l8.2 8.2a2 2 0 0 0 1.7.5L19.4 16A1 1 0 0 0 21 15.3l.5-4.5a3 3 0 0 0-.8-2.3L12 1.3A3 3 0 0 0 9.7.5L5.2 1a1 1 0 0 0-.7 1.5Z"/>
+                          </svg>
+                        </button>
+                        <div className="editor-toolbar-divider" />
+                        <div className="editor-brush-control">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" title="Brush Size">
+                            <circle cx="12" cy="12" r="8"/>
+                            <circle cx="12" cy="12" r="3" fill="currentColor"/>
+                          </svg>
+                          <input
+                            type="range"
+                            min="5"
+                            max="150"
+                            value={editing.brushSize}
+                            onChange={(e) => setEditing({ brushSize: parseInt(e.target.value) })}
+                            className="editor-brush-range"
+                          />
+                          <span className="editor-brush-value">{editing.brushSize}px</span>
+                        </div>
+                      </div>
+                      <div className="editor-toolbar-group">
+                        <button
+                          type="button"
+                          title="Undo stroke"
+                          onClick={handleUndo}
+                          disabled={historyIndex < 0}
+                          className="editor-tool-btn"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M3 7v6h6"/>
+                            <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          title="Redo stroke"
+                          onClick={handleRedo}
+                          disabled={historyIndex >= historyStack.length - 1}
+                          className="editor-tool-btn"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 7v6h-6"/>
+                            <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/>
+                          </svg>
+                        </button>
+                        <div className="editor-toolbar-divider" />
+                        <button
+                          type="button"
+                          title="Cancel changes"
+                          onClick={handleCancel}
+                          className="editor-tool-btn editor-tool-btn--danger"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                          </svg>
+                        </button>
+                        <button
+                          type="button"
+                          title="Save changes"
+                          onClick={handleSave}
+                          className="editor-tool-btn editor-tool-btn--success"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12"/>
+                          </svg>
+                        </button>
+                      </div>
                     </div>
-                  </div>
-
-                  {/* Right Side: Undo, Redo, Cancel, Save */}
-                  <div className="editor-toolbar-group">
-                    {/* Undo Button */}
-                    <button
-                      type="button"
-                      title="Undo stroke"
-                      onClick={handleUndo}
-                      disabled={historyIndex < 0}
-                      className="editor-tool-btn"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M3 7v6h6"/>
-                        <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>
-                      </svg>
-                    </button>
-
-                    {/* Redo Button */}
-                    <button
-                      type="button"
-                      title="Redo stroke"
-                      onClick={handleRedo}
-                      disabled={historyIndex >= historyStack.length - 1}
-                      className="editor-tool-btn"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                        <path d="M21 7v6h-6"/>
-                        <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/>
-                      </svg>
-                    </button>
-
-                    <div className="editor-toolbar-divider" />
-
-                    {/* Cancel Button */}
-                    <button
-                      type="button"
-                      title="Cancel changes"
-                      onClick={handleCancel}
-                      className="editor-tool-btn editor-tool-btn--danger"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <line x1="18" y1="6" x2="6" y2="18"/>
-                        <line x1="6" y1="6" x2="18" y2="18"/>
-                      </svg>
-                    </button>
-
-                    {/* Save Button */}
-                    <button
-                      type="button"
-                      title="Save changes"
-                      onClick={handleSave}
-                      className="editor-tool-btn editor-tool-btn--success"
-                    >
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                        <polyline points="20 6 9 17 4 12"/>
-                      </svg>
-                    </button>
-                  </div>
-                </div>
-              ) : (
-                /* Standard Mode Header */
-                <>
-                  <span>Result</span>
-                  <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                    {resCanvasState && ["background-removal", "object-segmentation"].includes(currentService.id) && (
-                      <button
-                        type="button"
-                        title="Touch up result manually"
-                        onClick={startTouchupMode}
-                        style={{
-                          background: 'transparent',
-                          border: '1px solid rgba(255, 255, 255, 0.08)',
-                          color: 'var(--text-muted)',
-                          borderRadius: 'var(--radius-sm)',
-                          padding: '4px 8px',
-                          cursor: 'pointer',
-                          display: 'inline-flex',
-                          alignItems: 'center',
-                          gap: '6px',
-                          fontSize: '12px',
-                          fontWeight: '600',
-                          transition: 'all var(--transition-fast)'
-                        }}
-                        onMouseEnter={(e) => {
-                          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
-                          e.currentTarget.style.color = 'var(--text-main)';
-                          e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)';
-                        }}
-                        onMouseLeave={(e) => {
-                          e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
-                          e.currentTarget.style.color = 'var(--text-muted)';
-                          e.currentTarget.style.background = 'transparent';
-                        }}
-                      >
-                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                          <path d="M12 20h9"/>
-                          <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+                  )}
+                  {editing.activeTool === "none" && (
+                    <Button
+                      variant="secondary"
+                      size="tiny"
+                      onClick={() => {
+                        const { filename, mimeType } = getDownloadMetadata(
+                          null,
+                          null,
+                          resCanvasState,
+                        );
+                        downloadCanvas(resCanvasState, filename, mimeType);
+                      }}
+                      icon={
+                        <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" y1="15" x2="12" y2="3" />
                         </svg>
-                        Touchup
-                      </button>
-                    )}
-                  </div>
-                </>
-              )}
+                      }
+                    >
+                      Download
+                    </Button>
+                  )}
+                </div>
+              </div>
+              <div className="preview-image-wrapper">
+                {editing.activeTool !== "none" ? (
+                  <>
+                    <MaskEditorOverlay resRef={resRef} />
+                    <canvas ref={resRef}></canvas>
+                  </>
+                ) : (
+                  <ComparisonSlider />
+                )}
+              </div>
             </div>
-            <div className="preview-image-wrapper">
-              {currentService.id !== "captioning" && <MaskEditorOverlay resRef={resRef} />}
-              {!resCanvas && !isProcessing && (
-                <div className="result-placeholder">
-                  Waiting for processing...
-                </div>
-              )}
-              {currentService.id === "captioning" && resCanvas && (
-                <div className="caption-result-container">
-                  <textarea
-                    className="caption-textarea"
-                    value={resCanvas.dataset?.caption || ""}
-                    readOnly
-                  />
-                  <button
-                    type="button"
-                    className="btn-copy-caption"
-                    onClick={(e) => {
-                      navigator.clipboard.writeText(resCanvas.dataset?.caption || "");
-                      const btn = e.currentTarget;
-                      btn.classList.add("copied");
-                      const originalHTML = btn.innerHTML;
-                      btn.textContent = "Copied!";
-                      setTimeout(() => {
-                        btn.classList.remove("copied");
-                        btn.innerHTML = originalHTML;
-                      }, 2000);
-                    }}
-                  >
-                    <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
-                      <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
-                      <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
-                    </svg>
-                    Copy Caption
-                  </button>
-                </div>
-              )}
-              <canvas
-                ref={resRef}
-                className={(!resCanvas || currentService.id === "captioning") ? "hidden" : ""}
-              ></canvas>
-
-              {resCanvasState && !isProcessing && (
-                <button
-                  type="button"
-                  title="Download Result"
-                  className="result-download-fab"
+          ) : (
+            /* Original Image Panel before processing */
+            <div className="preview-panel">
+              <div className="preview-label preview-header">
+                <span>Original</span>
+              </div>
+              <div
+                className="preview-image-wrapper"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (e.dataTransfer.files.length > 0) {
+                    onDrop(e.dataTransfer.files);
+                  }
+                }}
+              >
+                <canvas ref={srcRef}></canvas>
+              </div>
+            </div>
+          )
+        ) : ["compression", "file-conversion"].includes(currentService.id) ? (
+          resCanvasState ? (
+            /* Result Panel for Single-canvas (Compress/Convert) */
+            <div className="preview-panel">
+              <div className="preview-label preview-header">
+                <span>Result</span>
+                <Button
+                  variant="secondary"
+                  size="tiny"
                   onClick={() => {
                     const { filename, mimeType } = getDownloadMetadata(
                       null,
-                      currentService.id,
+                      null,
                       resCanvasState,
                     );
                     downloadCanvas(resCanvasState, filename, mimeType);
                   }}
+                  icon={
+                    <svg width="10" height="10" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                      <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                      <polyline points="7 10 12 15 17 10" />
+                      <line x1="12" y1="15" x2="12" y2="3" />
+                    </svg>
+                  }
                 >
-                  <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
-                    <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
-                    <polyline points="7 10 12 15 17 10" />
-                    <line x1="12" y1="15" x2="12" y2="3" />
-                  </svg>
-                </button>
-              )}
+                  Download
+                </Button>
+              </div>
+              <div className="preview-image-wrapper">
+                <canvas ref={resRef}></canvas>
+              </div>
             </div>
-          </div>
+          ) : (
+            /* Original Panel for Single-canvas before processing */
+            <div className="preview-panel">
+              <div className="preview-label preview-header">
+                <span>Original</span>
+              </div>
+              <div
+                className="preview-image-wrapper"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (e.dataTransfer.files.length > 0) {
+                    onDrop(e.dataTransfer.files);
+                  }
+                }}
+              >
+                <canvas ref={srcRef}></canvas>
+              </div>
+            </div>
+          )
+        ) : (
+          /* Side-by-Side View for other services */
+          <>
+            <div className="preview-panel">
+              <div className="preview-label preview-header">
+                <span>Original</span>
+              </div>
+
+              <div
+                className="preview-image-wrapper"
+                onDragOver={(e) => e.preventDefault()}
+                onDrop={(e) => {
+                  e.preventDefault();
+                  if (e.dataTransfer.files.length > 0) {
+                    onDrop(e.dataTransfer.files);
+                  }
+                }}
+              >
+                <SAMOverlay srcRef={srcRef} />
+                <MagicEraseOverlay srcRef={srcRef} />
+                <canvas ref={srcRef}></canvas>
+              </div>
+            </div>
+
+            {currentService.id === "image-editor" ? (
+              <div className="preview-panel">
+                <div className="preview-label preview-header">
+                  <span>Live Result</span>
+                </div>
+                <div className="preview-image-wrapper">
+                  <EditorPreview sourceCanvas={srcCanvasState} />
+                </div>
+              </div>
+            ) : (
+              <div className="preview-panel">
+                <div className="preview-label preview-header" style={{ position: 'relative', minHeight: '38px', display: 'flex', alignItems: 'center' }}>
+                  {editing.activeTool !== "none" ? (
+                    /* Editing Mode Toolbar */
+                    <div className="editor-toolbar">
+                      {/* Left Side: Tools & Brush Size */}
+                      <div className="editor-toolbar-group">
+                        {/* Erase Tool */}
+                        <button
+                          type="button"
+                          title="Erase Mode (E)"
+                          onClick={() => setEditing({ activeTool: "erase" })}
+                          className={`editor-tool-btn${editing.activeTool === "erase" ? " is-active" : ""}`}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="m14 3-4.9 4.9"/>
+                            <path d="m8.5 8.5-5 5A2 2 0 0 0 5 17h10l5-5a2 2 0 0 0 0-2.8l-6-6Z"/>
+                          </svg>
+                        </button>
+
+                        {/* Restore Tool */}
+                        <button
+                          type="button"
+                          title="Restore Mode (R)"
+                          onClick={() => setEditing({ activeTool: "restore" })}
+                          className={`editor-tool-btn${editing.activeTool === "restore" ? " is-active" : ""}`}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="m12 22 .7-2.7a2 2 0 0 0-.5-1.7l-8.2-8.2A2 2 0 0 1 6.8 6.6l8.2 8.2a2 2 0 0 0 1.7.5L19.4 16A1 1 0 0 0 21 15.3l.5-4.5a3 3 0 0 0-.8-2.3L12 1.3A3 3 0 0 0 9.7.5L5.2 1a1 1 0 0 0-.7 1.5Z"/>
+                          </svg>
+                        </button>
+
+                        <div className="editor-toolbar-divider" />
+
+                        {/* Brush Size Slider */}
+                        <div className="editor-brush-control">
+                          <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round" title="Brush Size">
+                            <circle cx="12" cy="12" r="8"/>
+                            <circle cx="12" cy="12" r="3" fill="currentColor"/>
+                          </svg>
+                          <input
+                            type="range"
+                            min="5"
+                            max="150"
+                            value={editing.brushSize}
+                            onChange={(e) => setEditing({ brushSize: parseInt(e.target.value) })}
+                            className="editor-brush-range"
+                          />
+                          <span className="editor-brush-value">{editing.brushSize}px</span>
+                        </div>
+                      </div>
+
+                      {/* Right Side: Undo, Redo, Cancel, Save */}
+                      <div className="editor-toolbar-group">
+                        {/* Undo Button */}
+                        <button
+                          type="button"
+                          title="Undo stroke"
+                          onClick={handleUndo}
+                          disabled={historyIndex < 0}
+                          className="editor-tool-btn"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M3 7v6h6"/>
+                            <path d="M21 17a9 9 0 0 0-9-9 9 9 0 0 0-6 2.3L3 13"/>
+                          </svg>
+                        </button>
+
+                        {/* Redo Button */}
+                        <button
+                          type="button"
+                          title="Redo stroke"
+                          onClick={handleRedo}
+                          disabled={historyIndex >= historyStack.length - 1}
+                          className="editor-tool-btn"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <path d="M21 7v6h-6"/>
+                            <path d="M3 17a9 9 0 0 1 9-9 9 9 0 0 1 6 2.3l3 2.7"/>
+                          </svg>
+                        </button>
+
+                        <div className="editor-toolbar-divider" />
+
+                        {/* Cancel Button */}
+                        <button
+                          type="button"
+                          title="Cancel changes"
+                          onClick={handleCancel}
+                          className="editor-tool-btn editor-tool-btn--danger"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <line x1="18" y1="6" x2="6" y2="18"/>
+                            <line x1="6" y1="6" x2="18" y2="18"/>
+                          </svg>
+                        </button>
+
+                        {/* Save Button */}
+                        <button
+                          type="button"
+                          title="Save changes"
+                          onClick={handleSave}
+                          className="editor-tool-btn editor-tool-btn--success"
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                            <polyline points="20 6 9 17 4 12"/>
+                          </svg>
+                        </button>
+                      </div>
+                    </div>
+                  ) : (
+                    /* Standard Mode Header */
+                    <>
+                      <span>Result</span>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {resCanvasState && ["background-removal", "object-segmentation"].includes(currentService.id) && (
+                          <button
+                            type="button"
+                            title="Touch up result manually"
+                            onClick={startTouchupMode}
+                            style={{
+                              background: 'transparent',
+                              border: '1px solid rgba(255, 255, 255, 0.08)',
+                              color: 'var(--text-muted)',
+                              borderRadius: 'var(--radius-sm)',
+                              padding: '4px 8px',
+                              cursor: 'pointer',
+                              display: 'inline-flex',
+                              alignItems: 'center',
+                              gap: '6px',
+                              fontSize: '12px',
+                              fontWeight: '600',
+                              transition: 'all var(--transition-fast)'
+                            }}
+                            onMouseEnter={(e) => {
+                              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.2)';
+                              e.currentTarget.style.color = 'var(--text-main)';
+                              e.currentTarget.style.background = 'rgba(255, 255, 255, 0.02)';
+                            }}
+                            onMouseLeave={(e) => {
+                              e.currentTarget.style.borderColor = 'rgba(255, 255, 255, 0.08)';
+                              e.currentTarget.style.color = 'var(--text-muted)';
+                              e.currentTarget.style.background = 'transparent';
+                            }}
+                          >
+                            <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                              <path d="M12 20h9"/>
+                              <path d="M16.5 3.5a2.12 2.12 0 0 1 3 3L7 19l-4 1 1-4Z"/>
+                            </svg>
+                            Touchup
+                          </button>
+                        )}
+                      </div>
+                    </>
+                  )}
+                </div>
+                <div className="preview-image-wrapper">
+                  {currentService.id !== "captioning" && <MaskEditorOverlay resRef={resRef} />}
+                  {!resCanvas && !isProcessing && (
+                    <div className="result-placeholder">
+                      Waiting for processing...
+                    </div>
+                  )}
+                  <>
+                    {currentService.id === "captioning" && resCanvas && (
+                      <div className="caption-result-container">
+                        <textarea
+                          className="caption-textarea"
+                          value={resCanvas.dataset?.caption || ""}
+                          readOnly
+                        />
+                        <button
+                          type="button"
+                          className="btn-copy-caption"
+                          onClick={(e) => {
+                            navigator.clipboard.writeText(resCanvas.dataset?.caption || "");
+                            const btn = e.currentTarget;
+                            btn.classList.add("copied");
+                            const originalHTML = btn.innerHTML;
+                            btn.textContent = "Copied!";
+                            setTimeout(() => {
+                              btn.classList.remove("copied");
+                              btn.innerHTML = originalHTML;
+                            }, 2000);
+                          }}
+                        >
+                          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2" strokeLinecap="round" strokeLinejoin="round">
+                            <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                            <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                          </svg>
+                          Copy Caption
+                        </button>
+                      </div>
+                    )}
+                    <canvas
+                      ref={resRef}
+                      className={(!resCanvas || currentService.id === "captioning") ? "hidden" : ""}
+                    ></canvas>
+                  </>
+                </div>
+                {resCanvasState && !isProcessing && (
+                  <div className="preview-panel-footer" style={{ display: 'flex', justifyContent: 'flex-end', padding: '8px 12px', borderTop: '1px solid rgba(255, 255, 255, 0.04)', background: 'rgba(0, 0, 0, 0.15)' }}>
+                    <Button
+                      variant="primary"
+                      size="tiny"
+                      onClick={() => {
+                        const { filename, mimeType } = getDownloadMetadata(
+                          null,
+                          currentService.id,
+                          resCanvasState,
+                        );
+                        downloadCanvas(resCanvasState, filename, mimeType);
+                      }}
+                      icon={
+                        <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                          <path d="M21 15v4a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2v-4" />
+                          <polyline points="7 10 12 15 17 10" />
+                          <line x1="12" y1="15" x2="12" y2="3" />
+                        </svg>
+                      }
+                    >
+                      Download Image
+                    </Button>
+                  </div>
+                )}
+              </div>
+            )}
+          </>
         )}
       </div>
 
       {currentService.id === "object-segmentation" && <SegmentationCandidates />}
 
-      {!isMultiMode && srcCanvas && (
-        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '28px 0', width: '100%' }}>
+      {!isMultiMode && srcCanvas && currentService.id !== "image-editor" && (
+        <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', margin: '12px 0', width: '100%' }}>
           <Button variant="secondary" onClick={handleReset} style={{ padding: "6px 16px", fontSize: "13px" }}>
             New Image
           </Button>
 
           <Button
-            variant="primary"
-            onClick={getProcessAction()}
+            variant={isProcessing ? "secondary" : "primary"}
+            onClick={isProcessing ? batch.cancel : getProcessAction()}
             style={{ padding: "6px 16px", fontSize: "13px" }}
-            disabled={isProcessing || isGeneratingMask}
-            isLoading={isProcessing}
+            disabled={isGeneratingMask}
           >
-            {getProcessLabel()}
+            {isProcessing ? "Pause" : getProcessLabel()}
+          </Button>
+        </div>
+      )}
+
+      {!isMultiMode && srcCanvas && currentService.id === "image-editor" && (
+        <div style={{ display: 'flex', justifyContent: 'flex-start', margin: '12px 0', width: '100%' }}>
+          <Button variant="secondary" onClick={handleReset} style={{ padding: "6px 16px", fontSize: "13px" }}>
+            New Image
           </Button>
         </div>
       )}

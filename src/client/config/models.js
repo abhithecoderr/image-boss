@@ -11,21 +11,28 @@ export const BACKGROUND_REMOVAL_MODELS = {
     task: "image-segmentation",
     size: 512,
     default_dtype: "fp16",
-    method: "pipeline",
+    method: "custom",
+    output_type: "logit",
   },
   "birefnet-lite": {
     model_id: "studioludens/birefnet-lite-512",
     task: "image-segmentation",
     size: 512,
     default_dtype: "fp16",
-    method: "pipeline",
+    method: "custom",
+    output_type: "logit",
   },
   isnet: {
-    model_id: "onnx-community/ISNet-ONNX",
+    model_id: "imgly/isnet-general-onnx",
     task: "background-removal",
     size: 1024,
-    default_dtype: "fp32",
-    method: "pipeline",
+    default_dtype: "fp16",
+    method: "custom",
+    model_url: "https://huggingface.co/imgly/isnet-general-onnx/resolve/main/onnx/model_fp16.onnx",
+    mean: [128, 128, 128],
+    std: [256, 256, 256],
+    scale: 1.0,
+    output_type: "minmax",
   },
   u2net: {
     model_id: "Heliosoph/u2net-onnx",
@@ -202,4 +209,3 @@ export const UPSCALING_MODELS = {
     outputLayout: "NCHW",
   },
 };
-

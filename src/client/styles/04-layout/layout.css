@@ -13,10 +13,33 @@
 
 .public-layout {
   padding-top: 72px;
+  position: relative;
+  background-color: var(--bg-deep);
+  background-image: radial-gradient(rgba(255, 255, 255, 0.025) 1px, transparent 1.5px);
+  background-size: 28px 28px;
+  background-position: center top;
+  overflow-x: hidden;
+}
+
+.public-layout::before {
+  content: "";
+  position: absolute;
+  top: 0;
+  left: 50%;
+  transform: translateX(-50%);
+  width: 100%;
+  max-width: 1200px;
+  height: 550px;
+  background: 
+    radial-gradient(circle at 15% 10%, rgba(245, 166, 35, 0.05) 0%, transparent 60%);
+  pointer-events: none;
+  z-index: 0;
 }
 
 .section-padding {
   padding: var(--space-12) 0;
+  position: relative;
+  z-index: 1;
 }
 
 /* --- Navigation & Sidebar --- */
@@ -197,6 +220,7 @@ html {
   border-radius: var(--radius-md);
   overflow: hidden;
   height: 100%;
+  max-height: 520px; /* Constrain vertical height for taller images to preserve layout proportions */
 }
 
 .preview-label {

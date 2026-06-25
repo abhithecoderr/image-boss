@@ -1,10 +1,10 @@
 import React from "react";
-import { useWorkspace, useUI, useService, useSegmentation, useWorkflow } from "../../store";
+import { useWorkspace, useUI, useService, useSegmentation, useWorkflow, useAuth } from "../../store";
 import Slider from "../ui/Slider";
 import { SERVICE_ORDER } from "../../config/app";
 import { SERVICES } from "../../config/services";
 import { CONTROLS_CONFIG } from "../../config/controls";
-import { BACKGROUND_REMOVAL_MODELS } from "../../config/models";
+import { BACKGROUND_REMOVAL_MODELS, SEGMENTATION_MODELS, CAPTIONING_MODELS, UPSCALING_MODELS } from "../../config/models";
 import { downloadCanvas } from "../../utils/canvas-utils";
 import ControlRenderer from "../controls/ControlRenderer";
 import Select from "../ui/Select";
@@ -12,18 +12,24 @@ import Button from "../ui/Button";
 import BatchSettingsSelector from "../controls/BatchSettingsSelector";
 
 const WorkflowBuilder = ({ workflow, onProcess }) => {
-  const { originalCanvas, items, activeItemId, setResultCanvas } = useWorkspace();
+  const { originalCanvas, items, activeItemId, setResultCanvas, isProcessing, activePreviewStepId, setActivePreviewStepId } = useWorkspace();
   const { workflowSteps } = useWorkflow();
   const { showToast } = useUI();
   const { getDownloadMetadata } = useService();
   const editing = useSegmentation((state) => state.editing);
   const setEditing = useSegmentation((state) => state.setEditing);
+  const { hasPaidAccess } = useAuth();
   const {
     addStep,
     removeStep,
-    updateStepOptions,
+    updateStep: updateStepOptions,
     reorderSteps,
   } = workflow;
+
+  const bgPostProcessDebounceRef = React.useRef(null);
+  React.useEffect(() => {
+    return () => clearTimeout(bgPostProcessDebounceRef.current);
+  }, []);
 
   const previewStep = (stepId) => {
     const activeItem = items.find(i => i.id === activeItemId);
@@ -32,6 +38,7 @@ const WorkflowBuilder = ({ workflow, onProcess }) => {
     const stepResult = activeItem.stepResults?.[stepId]?.resultCanvas;
     if (stepResult) {
       setResultCanvas(stepResult);
+      setActivePreviewStepId(stepId);
       showToast('Previewing step result', 'info');
     } else {
       showToast('Step result not available yet. Please run the workflow.', 'warning');
@@ -184,17 +191,20 @@ const WorkflowBuilder = ({ workflow, onProcess }) => {
                 </div>
 
                 <div className="service-control-grid">
-                  {(CONTROLS_CONFIG[step.serviceId] || []).map((config) => {
+                  {(CONTROLS_CONFIG[step.serviceId] || []).filter(c => {
+                    if (c.id === "tier" && !hasPaidAccess) return false;
+                    return true;
+                  }).map((config) => {
                     const globalVal = step.options[config.id] ?? config.defaultValue;
                     const activeVal =
-                      workflow.batchSettingsTarget !== "all"
+                      workflow.batchSettingsTarget && workflow.batchSettingsTarget !== "all"
                         ? (workflow.items.find((i) => i.id === workflow.batchSettingsTarget)?.settingsOverrides?.[step.id]?.[config.id] ?? globalVal)
                         : globalVal;
 
                     // Resolve options if it is a function
                     let resolvedControl = config;
                     if (typeof config.options === "function") {
-                      const currentSettings = (workflow.batchSettingsTarget !== "all"
+                      const currentSettings = (workflow.batchSettingsTarget && workflow.batchSettingsTarget !== "all"
                         ? {
                             ...step.options,
                             ...(workflow.items.find((i) => i.id === workflow.batchSettingsTarget)?.settingsOverrides?.[step.id] || {})
@@ -206,6 +216,21 @@ const WorkflowBuilder = ({ workflow, onProcess }) => {
                       };
                     }
 
+                    // Dynamically strip paid options for non-authorized users
+                    if (resolvedControl.options && Array.isArray(resolvedControl.options) && !hasPaidAccess) {
+                      resolvedControl = {
+                        ...resolvedControl,
+                        options: resolvedControl.options.filter(opt => {
+                          if (BACKGROUND_REMOVAL_MODELS[opt.value]?.paid) return false;
+                          const segModel = Object.values(SEGMENTATION_MODELS).find(m => m.model_id === opt.value);
+                          if (segModel?.paid) return false;
+                          if (CAPTIONING_MODELS[opt.value]?.paid) return false;
+                          if (UPSCALING_MODELS[opt.value]?.paid) return false;
+                          return true;
+                        })
+                      };
+                    }
+
                     return (
                       (!config.visibleIf || config.visibleIf(step.options)) && (
                         <ControlRenderer
@@ -214,26 +239,70 @@ const WorkflowBuilder = ({ workflow, onProcess }) => {
                           value={activeVal}
                           onChange={(id, val, parse) => {
                             const parsedVal = parse ? parse(val) : val;
-                            if (workflow.batchSettingsTarget !== "all") {
+                            const isBgRemovalPostProcessControl =
+                              step.serviceId === "background-removal" &&
+                              ["edgeShift", "edgeSmoothness", "edgeContrast"].includes(id);
+
+                            if (workflow.batchSettingsTarget && workflow.batchSettingsTarget !== "all") {
                               workflow.updateItemOverride(workflow.batchSettingsTarget, step.id, id, parsedVal);
-                              if (step.serviceId === "background-removal" && id === "model") {
-                                const modelCfg = BACKGROUND_REMOVAL_MODELS[parsedVal];
-                                if (modelCfg && modelCfg.method !== "hybrid") {
-                                  workflow.updateItemOverride(workflow.batchSettingsTarget, step.id, "method", modelCfg.method);
+                              if (step.serviceId === "background-removal") {
+                                if (id === "model") {
+                                  const modelCfg = BACKGROUND_REMOVAL_MODELS[parsedVal];
+                                  if (modelCfg && modelCfg.method !== "hybrid") {
+                                    workflow.updateItemOverride(workflow.batchSettingsTarget, step.id, "method", modelCfg.method);
+                                  }
+                                } else if (id === "tier" && parsedVal === "paid") {
+                                  const currentOverrides = workflow.items.find((i) => i.id === workflow.batchSettingsTarget)?.settingsOverrides?.[step.id] || {};
+                                  const activeModel = currentOverrides.model ?? step.options.model;
+                                  if (activeModel !== "birefnet" && activeModel !== "birefnet-lite" && activeModel !== "ben2") {
+                                    workflow.updateItemOverride(workflow.batchSettingsTarget, step.id, "model", "birefnet-lite");
+                                  }
                                 }
+                              } else if (step.serviceId === "upscaling" && id === "tier" && parsedVal === "paid") {
+                                const currentOverrides = workflow.items.find((i) => i.id === workflow.batchSettingsTarget)?.settingsOverrides?.[step.id] || {};
+                                const activeModelId = currentOverrides.modelId ?? step.options.modelId;
+                                if (activeModelId !== "esrgan") {
+                                  workflow.updateItemOverride(workflow.batchSettingsTarget, step.id, "modelId", "esrgan");
+                                }
+                              }
+
+                              if (isBgRemovalPostProcessControl) {
+                                clearTimeout(bgPostProcessDebounceRef.current);
+                                bgPostProcessDebounceRef.current = setTimeout(() => {
+                                  workflow.executeSingleItemInWorkflow();
+                                }, 80);
                               }
                             } else {
                               const nextOptions = {
                                 ...step.options,
                                 [id]: parsedVal,
                               };
-                              if (step.serviceId === "background-removal" && id === "model") {
-                                const modelCfg = BACKGROUND_REMOVAL_MODELS[parsedVal];
-                                if (modelCfg && modelCfg.method !== "hybrid") {
-                                  nextOptions.method = modelCfg.method;
+                              if (step.serviceId === "background-removal") {
+                                if (id === "model") {
+                                  const modelCfg = BACKGROUND_REMOVAL_MODELS[parsedVal];
+                                  if (modelCfg && modelCfg.method !== "hybrid") {
+                                    nextOptions.method = modelCfg.method;
+                                  }
+                                } else if (id === "tier" && parsedVal === "paid") {
+                                  const currentModel = nextOptions.model;
+                                  if (currentModel !== "birefnet" && currentModel !== "birefnet-lite" && currentModel !== "ben2") {
+                                    nextOptions.model = "birefnet-lite";
+                                  }
+                                }
+                              } else if (step.serviceId === "upscaling" && id === "tier" && parsedVal === "paid") {
+                                const currentModelId = nextOptions.modelId;
+                                if (currentModelId !== "esrgan") {
+                                  nextOptions.modelId = "esrgan";
                                 }
                               }
                               updateStepOptions(step.id, nextOptions);
+
+                              if (isBgRemovalPostProcessControl) {
+                                clearTimeout(bgPostProcessDebounceRef.current);
+                                bgPostProcessDebounceRef.current = setTimeout(() => {
+                                  onProcess({}, { forceReset: false });
+                                }, 80);
+                              }
                             }
                           }}
                         />
@@ -310,8 +379,9 @@ const WorkflowBuilder = ({ workflow, onProcess }) => {
           <Button
             variant="primary"
             size="large"
+            isLoading={isProcessing}
             onClick={() => {
-              if (workflow.batchSettingsTarget !== "all") {
+              if (workflow.batchSettingsTarget && workflow.batchSettingsTarget !== "all") {
                 workflow.executeSingleItemInWorkflow();
               } else {
                 const allDone =
@@ -322,7 +392,7 @@ const WorkflowBuilder = ({ workflow, onProcess }) => {
             }}
             disabled={workflowSteps.length === 0 || workflow.items.length === 0}
           >
-            {workflow.batchSettingsTarget !== "all"
+            {workflow.batchSettingsTarget && workflow.batchSettingsTarget !== "all"
               ? `Process Image ${workflow.items.findIndex(i => i.id === workflow.batchSettingsTarget) + 1}`
               : (workflow.items.length > 0 && workflow.items.every((i) => i.status === "done"))
                 ? "Rerun Workflow Pipeline"
@@ -337,6 +407,7 @@ const WorkflowBuilder = ({ workflow, onProcess }) => {
               <Button
                 variant="secondary"
                 size="large"
+                isLoading={isProcessing}
                 onClick={() => onProcess({}, { forceReset: true })}
                 disabled={workflowSteps.length === 0}
               >

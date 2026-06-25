@@ -42,7 +42,7 @@ let session = null;
 const ortManager = createOrtSessionManager(ort, {
   async resolveBuffer(variant, report) {
     const modelConfig = MODEL_VARIANTS[variant] || MODEL_VARIANTS.nano;
-    const modelUrl = `https://huggingface.co/${modelConfig.model_id}/resolve/main/onnx/model.onnx`;
+    const modelUrl = modelConfig.model_url || `https://huggingface.co/${modelConfig.model_id}/resolve/main/onnx/model.onnx`;
     return fetchWithProgress(modelUrl, `YOLO26 ${variant} model`, report, 0.1, 0.6);
   },
 });
@@ -79,22 +79,34 @@ async function detectFaces(bitmap, width, height) {
     scale: 1.0 / 255.0
   });
 
-  const tensor = new ort.Tensor("float32", tensorData, [
-    1,
-    3,
-    inputSize,
-    inputSize,
-  ]);
+  let tensor = null;
+  let outputs = null;
+  let data;
+  let dims;
+  try {
+    tensor = new ort.Tensor("float32", tensorData, [
+      1,
+      3,
+      inputSize,
+      inputSize,
+    ]);
 
-  // 3. Inference via ORT
-  const inputs = {};
-  inputs[session.inputNames[0]] = tensor;
-  const outputs = await session.run(inputs);
-  const output0 = outputs[session.outputNames[0]];
+    // 3. Inference via ORT
+    const inputs = {};
+    inputs[session.inputNames[0]] = tensor;
+    outputs = await session.run(inputs);
+    const output0 = outputs[session.outputNames[0]];
+    data = output0.data;
+    dims = output0.dims;
+  } finally {
+    tensor?.dispose?.();
+    if (outputs) {
+      for (const key in outputs) {
+        outputs[key]?.dispose?.();
+      }
+    }
+  }
 
-  // 4. Robust Tensor Parser (SHARED for both ORT and Transformers modes)
-  const data = output0.data;
-  const dims = output0.dims;
   const d1 = dims[1];
   const d2 = dims[2];
 

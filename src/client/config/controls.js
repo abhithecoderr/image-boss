@@ -55,6 +55,7 @@ export const CONTROLS_CONFIG = {
       ]
     },
     { id: 'radius', label: 'Brush Radius', type: 'range', min: 5, max: 100, step: 5, defaultValue: 20 },
+    { id: 'maskExpansion', label: 'Mask Padding', type: 'range', min: 0, max: 30, step: 1, defaultValue: 5 },
     { id: 'strength', label: 'Strength', type: 'range', min: 0.1, max: 1.0, step: 0.1, defaultValue: 1.0 }
   ],
   'object-segmentation': [
@@ -124,6 +125,17 @@ export const CONTROLS_CONFIG = {
           { value: 'real_esr_anime_x4', label: 'Real-ESRGAN (Anime 4x)' }
         ];
       }
+    },
+    {
+      id: 'outputType',
+      label: 'Output Type',
+      type: 'select',
+      defaultValue: 'original',
+      options: [
+        { value: 'original', label: 'Original Format' },
+        { value: 'png', label: 'PNG' },
+        { value: 'webp', label: 'WebP' }
+      ]
     }
   ],
   'blur': [
@@ -225,16 +237,6 @@ export const CONTROLS_CONFIG = {
   ],
   'line-art': [
     {
-      id: 'method',
-      label: 'Method',
-      type: 'select',
-      defaultValue: 'sobel',
-      options: [
-        { value: 'sobel', label: 'Classic (Sobel)' },
-        { value: 'ai', label: 'AI Model (Informative)' }
-      ]
-    },
-    {
       id: 'aiVariant',
       label: 'Model Variant',
       type: 'select',
@@ -242,8 +244,7 @@ export const CONTROLS_CONFIG = {
       options: [
         { value: 'anime', label: 'Anime' },
         { value: 'contour', label: 'Contour' }
-      ],
-      visibleIf: (settings) => settings.method === 'ai'
+      ]
     },
     {
       id: 'details',
@@ -261,8 +262,7 @@ export const CONTROLS_CONFIG = {
       options: [
         { value: 'natural', label: 'Natural (Grayscale)' },
         { value: 'clean', label: 'Clean (B&W)' }
-      ],
-      visibleIf: (settings) => settings.method === 'ai'
+      ]
     }
   ],
   'workflows': [], // Workflows handles its own custom control panel in the WorkflowBuilder

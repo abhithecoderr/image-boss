@@ -67,14 +67,29 @@ async function loadLFM(modelId, hw) {
   const dtypeLabel = hw.supported ? 'fp16+q4' : 'fp32';
 
 
-  model = await AutoModelForImageTextToText.from_pretrained(modelId, {
-    device,
-    dtype,
-    progress_callback: report(0.2, 0.5, "Downloading LFM 2.5 VL model..."),
-  });
-
-  currentModelId = modelId;
-  report(0.5, 0.5, `Model loaded (${dtypeLabel}, ${device})`)(0);
+  try {
+    model = await AutoModelForImageTextToText.from_pretrained(modelId, {
+      device,
+      dtype,
+      progress_callback: report(0.2, 0.5, "Downloading LFM 2.5 VL model..."),
+    });
+    currentModelId = modelId;
+    report(0.5, 0.5, `Model loaded (${dtypeLabel}, ${device})`)(0);
+  } catch (err) {
+    if (device === 'webgpu') {
+      console.warn("LFM WebGPU load failed, falling back to WASM (CPU)...", err);
+      report(0.2, 0.2, "WebGPU failed. Retrying on CPU (WASM)...")(0);
+      model = await AutoModelForImageTextToText.from_pretrained(modelId, {
+        device: 'wasm',
+        dtype: 'fp32',
+        progress_callback: report(0.2, 0.5, "Downloading LFM 2.5 VL model (CPU)..."),
+      });
+      currentModelId = modelId;
+      report(0.5, 0.5, `Model loaded (fp32, WASM)`)(0);
+    } else {
+      throw err;
+    }
+  }
 }
 
 
@@ -115,13 +130,12 @@ self.onmessage = async ({ data }) => {
   }
 
   if (type === 'process') {
+    const {
+      bitmap,
+      modelId,
+      lfmPrompt = ''
+    } = payload;
     try {
-      const {
-        bitmap,
-        modelId,
-        lfmPrompt = ''
-      } = payload;
-
       // 1. (Re)initialize model if needed
       if (!model || modelId !== currentModelId) {
         // Switching models — tear down the old one first
@@ -148,10 +162,6 @@ self.onmessage = async ({ data }) => {
       const result = await runLFM(image, lfmPrompt);
 
       self.postMessage({ type: 'complete', result });
-
-      // Cleanup
-      bitmap.close();
-
     } catch (error) {
       console.error('[Worker] Captioning Critical Error:', error);
       const errMsg = error.message || error;
@@ -172,6 +182,8 @@ self.onmessage = async ({ data }) => {
       }
 
       self.postMessage({ type: 'error', error: finalMsg });
+    } finally {
+      bitmap?.close();
     }
   }
 };

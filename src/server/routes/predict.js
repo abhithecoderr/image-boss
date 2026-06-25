@@ -15,6 +15,17 @@ export const predictRoute = new Hono();
 predictRoute.use('*', requireAuth);
 predictRoute.use('*', rateLimit()); 
 
+predictRoute.get('/permissions', async (c) => {
+  const user = c.get('user');
+  const allowedPaidEmailsStr = c.env.ALLOWED_PAID_EMAILS || '';
+  const allowedPaidEmails = allowedPaidEmailsStr.split(',').map(e => e.trim().toLowerCase());
+  const hasPaidAccess = user && user.email && (
+    user.email.toLowerCase() === "abhicooltripathi1@gmail.com" ||
+    allowedPaidEmails.includes(user.email.toLowerCase())
+  );
+  return c.json({ hasPaidAccess: !!hasPaidAccess });
+});
+
 predictRoute.post('/', async (c) => {
   // 1. Validate payload size (limit: 10MB)
   const contentLength = parseInt(c.req.header('Content-Length') || '0', 10);
@@ -27,9 +38,18 @@ predictRoute.post('/', async (c) => {
   const clientModelId = c.req.query('model') || '';
   const user = c.get('user');
 
+  // Security Guard: Limit access to paid cloud models during development/testing phase
+  const allowedPaidEmailsStr = c.env.ALLOWED_PAID_EMAILS || '';
+  const allowedPaidEmails = allowedPaidEmailsStr.split(',').map(e => e.trim().toLowerCase());
+  if (!user || !user.email || !allowedPaidEmails.includes(user.email.toLowerCase())) {
+    console.warn(`[PROXY] Unauthorized access attempt to paid model '${clientModelId}' by user ${user?.email || 'unknown'}`);
+    return c.json({ error: "Access denied. Paid cloud models are currently restricted to authorized testers." }, 403);
+  }
+
   // 2. Resolve client model ID → API tag + runtime via server-side registry
   const registryEntry = PAID_MODEL_REGISTRY[clientModelId];
   if (!registryEntry) {
+
     console.error(`[PROXY] Unknown or non-paid model requested: ${clientModelId}`);
     return c.json({ error: `Unknown model: ${clientModelId}` }, 400);
   }
@@ -55,15 +75,19 @@ predictRoute.post('/', async (c) => {
 
   const { credits, dbUser } = creditInfo;
 
-  // Enforce a model-specific minimum credit threshold (5 for GPU models, 1 for CPU models)
-  const minRequiredCredits = rateConfig.type === 'gpu' ? 5 : 1;
+  // Enforce a model-specific minimum credit threshold (5 for GPU models, 1 for CPU models).
+  // Models priced at rate 0 (e.g. free Workers AI partner models) bypass this entirely.
+  const minRequiredCredits = rateConfig.rate === 0 ? 0
+    : rateConfig.type === 'gpu' ? 5 : 1;
   if (credits < minRequiredCredits) {
-    return c.json({ 
-      error: `Insufficient credits. Operating ${model} requires a minimum balance of ${minRequiredCredits} credits. Current balance: ${credits}.` 
+    return c.json({
+      error: `Insufficient credits. Operating ${model} requires a minimum balance of ${minRequiredCredits} credits. Current balance: ${credits}.`
     }, 402);
   }
 
-  // 5. Determine the runtime API URL based on resolved runtime (not client-supplied)
+  // 5. Branch on runtime: cf-ai runs in-process via the Workers AI binding,
+  //    everything else (cpu/gpu) is proxied to the Modal inference endpoint.
+  // Determine the runtime API URL based on resolved runtime (not client-supplied)
   let targetBaseUrl = device === 'cpu' ? c.env.MODAL_CPU_API_URL : c.env.MODAL_GPU_API_URL;
 
   if (!targetBaseUrl) {
@@ -72,12 +96,38 @@ predictRoute.post('/', async (c) => {
   }
 
   try {
-    const url = `${targetBaseUrl.replace(/\/$/, '')}/predict?model=${model}&device=${device}&t=${Date.now()}`;
-    console.log(`[PROXY] Forwarding request for ${clientModelId} → ${model} (${device}) to: ${url}`);
+    // Parse incoming multipart body on the server
+    const parsedBody = await c.req.parseBody();
+    const file = parsedBody.file;
 
-    const headers = {
-      'Content-Type': c.req.header('Content-Type') || 'multipart/form-data'
-    };
+    if (!file) {
+      return c.json({ error: "Missing file payload in request" }, 400);
+    }
+
+    let url = `${targetBaseUrl.replace(/\/$/, '')}/predict?model=${model}&device=${device}&t=${Date.now()}`;
+    
+    // Append SAM coordinate prompts to the query parameters since the Modal FastAPI server expects them there
+    if (parsedBody.point_coords) {
+      url += `&point_coords=${encodeURIComponent(parsedBody.point_coords)}`;
+    }
+    if (parsedBody.point_labels) {
+      url += `&point_labels=${encodeURIComponent(parsedBody.point_labels)}`;
+    }
+
+    console.log(`[PROXY] Forwarding request for ${clientModelId} → ${model} (${device}) to: ${url}`);
+    // Reconstruct clean FormData payload
+
+    const formData = new FormData();
+    formData.append('file', file);
+    
+    // Forward optional parameters if present (model, device, points, labels)
+    if (parsedBody.model) formData.append('model', parsedBody.model);
+    if (parsedBody.device) formData.append('device', parsedBody.device);
+    if (parsedBody.output_type) formData.append('output_type', parsedBody.output_type);
+    if (parsedBody.point_coords) formData.append('point_coords', parsedBody.point_coords);
+    if (parsedBody.point_labels) formData.append('point_labels', parsedBody.point_labels);
+
+    const headers = {};
     if (c.env.VERIFY_MODAL_REQUEST_KEY) {
       headers['Authorization'] = `Bearer ${c.env.VERIFY_MODAL_REQUEST_KEY}`;
     }
@@ -85,7 +135,7 @@ predictRoute.post('/', async (c) => {
     const startTime = Date.now();
     const response = await fetch(url, {
       method: 'POST',
-      body: c.req.raw.body,
+      body: formData,
       headers
     });
 

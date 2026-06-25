@@ -38,7 +38,12 @@ export default defineConfig({
         plugins: [['babel-plugin-react-compiler', {}]],
       },
     }),
-    cloudflare(),
+    cloudflare({
+      // The Workers AI binding only runs on Cloudflare's GPU network, so in local
+      // dev we proxy bindings to the remote account instead of the local workerd
+      // shim (which returns "2021: Invalid User Credentials" for AI calls).
+      remoteBindings: true,
+    }),
     // aiContextWatcher(),
     stripUnusedOrtWasm(),
   ],
@@ -71,12 +76,13 @@ export default defineConfig({
     },
   },
   optimizeDeps: {
-    include: [
+    include: [],
+    exclude: [
+      'better-auth',
       '@huggingface/transformers',
-      'onnxruntime-web/webgpu',
+      'onnxruntime-web',
       'browser-image-compression'
-    ],
-    exclude: ['better-auth']
+    ]
   },
   server: {
     port: 3000,

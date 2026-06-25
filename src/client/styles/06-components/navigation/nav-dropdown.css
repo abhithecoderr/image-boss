@@ -26,12 +26,12 @@
   color: var(--text-dim);
 }
 
-.nav-dropdown-wrapper:hover .dropdown-caret {
+.nav-dropdown-wrapper.is-open .dropdown-caret {
   transform: rotate(180deg);
   color: var(--accent-primary);
 }
 
-.nav-dropdown-wrapper:hover .dropdown-trigger {
+.nav-dropdown-wrapper.is-open .dropdown-trigger {
   color: var(--text-main);
 }
 
@@ -69,11 +69,11 @@
   pointer-events: none;
 }
 
-.nav-dropdown-wrapper:hover::after {
+.nav-dropdown-wrapper.is-open::after {
   pointer-events: auto;
 }
 
-.nav-dropdown-wrapper:hover .nav-dropdown-menu {
+.nav-dropdown-wrapper.is-open .nav-dropdown-menu {
   opacity: 1;
   visibility: visible;
   pointer-events: auto;

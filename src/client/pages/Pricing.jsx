@@ -39,48 +39,44 @@ const Pricing = () => {
       period: 'forever',
       description: 'Perfect for trying out Image Boss',
       features: [
-        '10 image processes per day',
+        'Unlimited local processing',
+        '30 batch mode requests / day',
+        '10 workflows / day',
         'Standard processing speed',
-        'Watermarked outputs',
-        'Basic support',
-        'Access to all services'
+        'Basic support'
       ],
       cta: 'Get Started',
       popular: false
     },
     {
-      name: 'Pro',
-      price: '$19',
+      name: 'Lite',
+      price: '$9',
       period: '/month',
-      description: 'For power users and professionals',
+      description: 'Great for casual creators',
       features: [
-        'Unlimited image processing',
-        'Priority processing speed',
-        'No watermarks',
-        'Priority email support',
-        'Batch processing',
-        'Advanced model access',
-        'Export in multiple formats'
+        'Unlimited local processing',
+        '5,000 credits / month',
+        'Unlimited batch processing',
+        'Unlimited workflows',
+        'Priority email support'
       ],
-      cta: 'Start Pro Trial',
+      cta: 'Start Lite Trial',
       popular: true
     },
     {
-      name: 'Enterprise',
-      price: 'Custom',
-      period: '',
-      description: 'For teams and businesses',
+      name: 'Pro',
+      price: '$18',
+      period: '/month',
+      description: 'For power users and professionals',
       features: [
-        'Unlimited everything',
-        'Dedicated server',
-        'API access',
-        'Custom model training',
-        '24/7 phone support',
-        'SLA guarantee',
-        'Team management',
-        'White-label options'
+        'Unlimited local processing',
+        '10,000 credits / month',
+        'Unlimited batch processing',
+        'Unlimited workflows',
+        'Priority email support',
+        'Advanced model access'
       ],
-      cta: 'Contact Sales',
+      cta: 'Start Pro Trial',
       popular: false
     }
   ];
@@ -110,18 +106,28 @@ const Pricing = () => {
                   </li>
                 ))}
               </ul>
-              {isAuthenticated && plan.name === 'Free' ? (
+              {plan.name === 'Free' ? (
+                isAuthenticated ? (
+                  <button
+                    type="button"
+                    className="btn btn-secondary btn-large pricing-current-plan"
+                    disabled
+                  >
+                    Current Plan
+                  </button>
+                ) : (
+                  <Link to="/services" className="btn btn-secondary btn-large">
+                    {plan.cta}
+                  </Link>
+                )
+              ) : (
                 <button
                   type="button"
-                  className="btn btn-secondary btn-large pricing-current-plan"
+                  className={`btn ${plan.popular ? 'btn-primary' : 'btn-secondary'} btn-large`}
                   disabled
                 >
-                  Current Plan
+                  Coming Soon
                 </button>
-              ) : (
-                <Link to="/services" className={`btn ${plan.popular ? 'btn-primary' : 'btn-secondary'} btn-large`}>
-                  {isAuthenticated && plan.name === 'Pro' ? 'Upgrade to Pro' : plan.cta}
-                </Link>
               )}
             </div>
           ))}
@@ -134,8 +140,12 @@ const Pricing = () => {
           {faqs.map((faq, index) => {
             const isExpanded = expandedIdx === index;
             return (
-              <div key={index} className={`faq-accordion-item ${isExpanded ? 'is-expanded' : ''}`}>
-                <div className="faq-accordion-header" onClick={() => toggleFaq(index)}>
+              <div
+                key={index}
+                className={`faq-accordion-item ${isExpanded ? 'is-expanded' : ''}`}
+                onClick={() => toggleFaq(index)}
+              >
+                <div className="faq-accordion-header">
                   <span>{faq.q}</span>
                   <span className="faq-accordion-icon">▼</span>
                 </div>

@@ -12,17 +12,19 @@ export const useWorkspaceStore = create((set, get) => ({
   isProcessing: false,
   runToken: 0, // Execution/cancellation tracking token
   lastRunSteps: null, // Serialization cache to detect workflow configuration changes
+  activePreviewStepId: null, // Tracks which workflow step is currently being previewed
 
-  // Simplified basic setters (direct value only)
   setItems: (items) => set({ items }),
   setActiveItemId: (id) => set({ activeItemId: id }),
   setSelectedIds: (selectedIds) => set({ selectedIds }),
   setIsProcessing: (processing) => set({ isProcessing: processing }),
   incrementRunToken: () => set((state) => ({ runToken: state.runToken + 1 })), // Cancels ongoing async tasks
   setLastRunSteps: (steps) => set({ lastRunSteps: steps }), // Cache step configurations
+  setActivePreviewStepId: (id) => set({ activePreviewStepId: id }),
 
   // Semantic mutating actions for items
   addItems: (newItems) => set((state) => ({ items: [...state.items, ...newItems] })),
+
   removeItem: (id) => set((state) => {
     const itemToDispose = state.items.find((item) => item.id === id);
     if (itemToDispose) disposeBatchItem(itemToDispose);
@@ -34,11 +36,13 @@ export const useWorkspaceStore = create((set, get) => ({
     }
     return updates;
   }),
+
   updateActiveItem: (fields) => set((state) => ({
     items: state.items.map((item) =>
       item.id === state.activeItemId ? { ...item, ...fields } : item
     )
   })),
+
   updateItemOverride: (itemId, serviceOrStepId, key, value) => set((state) => ({
     items: state.items.map((item) => {
       if (item.id !== itemId) return item;
@@ -56,6 +60,7 @@ export const useWorkspaceStore = create((set, get) => ({
       };
     })
   })),
+
   resetItemsStatus: () => set((state) => ({ items: resetItemsList(state.items) })),
   syncServiceChange: (oldServiceId, newServiceId) => set((state) => ({
     items: state.items.map((item) => {
@@ -85,7 +90,6 @@ export const useWorkspaceStore = create((set, get) => ({
       };
     })
   })),
-
 
 
   // Semantic mutating actions for selections
@@ -154,6 +158,7 @@ export const useWorkspaceStore = create((set, get) => ({
       activeItemId: null,
       selectedIds: new Set(),
       isProcessing: false,
+      activePreviewStepId: null,
     });
   },
 }));
@@ -170,20 +175,7 @@ function disposeCanvasIfClosable(canvas) {
 
 function resetItemsList(itemsList) {
   return itemsList.map((item) => {
-    // Clear background removal and blur caches to prevent blank images or stale cache bugs on rerun
-    if (item.sourceCanvas) {
-      const bgCache = item.sourceCanvas._bgRemovalCache;
-      if (bgCache && bgCache.maskBitmap) {
-        try { bgCache.maskBitmap.close(); } catch (_) {}
-      }
-      delete item.sourceCanvas._bgRemovalCache;
-
-      const blurCache = item.sourceCanvas._blurCache;
-      if (blurCache && blurCache.lastSourceBitmap) {
-        try { blurCache.lastSourceBitmap.close(); } catch (_) {}
-      }
-      delete item.sourceCanvas._blurCache;
-    }
+    // Dispose any intermediate canvas results in the step results list
 
     // Dispose any intermediate canvas results in the step results list
     if (item.stepResults) {

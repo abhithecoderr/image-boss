@@ -39,6 +39,7 @@ export const useUnifiedProcessor = () => {
     incrementRunToken,
     lastRunSteps,
     setLastRunSteps,
+    activePreviewStepId,
   } = workspaceContext;
 
   // Destructure Workflow store values
@@ -70,7 +71,7 @@ export const useUnifiedProcessor = () => {
     const token = runToken;
 
     // Mark target item as processing
-    const workingItems = [...items];
+    const workingItems = [...useWorkspaceStore.getState().items];
     const itemIdx = workingItems.findIndex(
       (ni) => ni.id === batchSettingsTarget,
     );
@@ -82,7 +83,7 @@ export const useUnifiedProcessor = () => {
     try {
       await runners.executeSingleItemInBatch({
         itemId: batchSettingsTarget,
-        items,
+        items: useWorkspaceStore.getState().items,
         setItems,
         activeItemId,
         setResultCanvas,
@@ -110,7 +111,7 @@ export const useUnifiedProcessor = () => {
     const token = runToken;
 
     // Mark target item as processing
-    const workingItems = [...items];
+    const workingItems = [...useWorkspaceStore.getState().items];
     const itemIdx = workingItems.findIndex(
       (ni) => ni.id === batchSettingsTarget,
     );
@@ -122,7 +123,7 @@ export const useUnifiedProcessor = () => {
     try {
       await runners.executeSingleItemInWorkflow({
         itemId: batchSettingsTarget,
-        items,
+        items: useWorkspaceStore.getState().items,
         setItems,
         activeItemId,
         setResultCanvas,
@@ -130,6 +131,7 @@ export const useUnifiedProcessor = () => {
         processorEngine,
         onProgress: updateProgress,
         isCancelled: getIsCancelled(token),
+        activePreviewStepId,
       });
       if (useWorkspaceStore.getState().runToken === token) {
         showToast("Selected image workflow complete", "success");
@@ -177,10 +179,10 @@ export const useUnifiedProcessor = () => {
   const executeBatch = async (serviceId, options, runOptions = {}) => {
     const { forceReset = false } = runOptions;
 
-    let currentItems = [...items];
+    let currentItems = [...useWorkspaceStore.getState().items];
     if (forceReset) {
       resetItemsStatus(); // Use store action
-      currentItems = items.map((item) => ({
+      currentItems = useWorkspaceStore.getState().items.map((item) => ({
         ...item,
         status: "pending",
         error: null,
@@ -189,6 +191,7 @@ export const useUnifiedProcessor = () => {
         stepResults: {},
         serviceResults: {},
       }));
+      setItems(currentItems);
     }
 
     const pendingItems = currentItems.filter((i) => i.status !== "done");
@@ -242,10 +245,10 @@ export const useUnifiedProcessor = () => {
 
     const shouldReset = forceReset || stepsChanged;
 
-    let currentItems = [...items];
+    let currentItems = [...useWorkspaceStore.getState().items];
     if (shouldReset) {
       resetItemsStatus(); // Use store action
-      currentItems = items.map((item) => ({
+      currentItems = useWorkspaceStore.getState().items.map((item) => ({
         ...item,
         status: "pending",
         error: null,
@@ -254,11 +257,12 @@ export const useUnifiedProcessor = () => {
         stepResults: {},
         serviceResults: {},
       }));
+      setItems(currentItems);
     }
 
     const pendingItems = currentItems.filter((i) => i.status !== "done");
     if (pendingItems.length === 0) {
-      if (items.length === 0) return showToast("No images uploaded", "info");
+      if (useWorkspaceStore.getState().items.length === 0) return showToast("No images uploaded", "info");
       return showToast("All images already processed", "info");
     }
 
@@ -275,6 +279,7 @@ export const useUnifiedProcessor = () => {
         processorEngine,
         onProgress: updateProgress,
         isCancelled: getIsCancelled(token),
+        activePreviewStepId,
       });
       if (useWorkspaceStore.getState().runToken === token) {
         showToast("Workflow pipeline complete", "success");
@@ -303,6 +308,23 @@ export const useUnifiedProcessor = () => {
     }
   };
 
+  const cancel = () => {
+    incrementRunToken();
+    setIsProcessing(false);
+    updateProgress(0, "Paused");
+    const workingItems = [...useWorkspaceStore.getState().items];
+    let changed = false;
+    workingItems.forEach((item) => {
+      if (item.status === "processing") {
+        item.status = "pending";
+        changed = true;
+      }
+    });
+    if (changed) {
+      setItems(workingItems);
+    }
+  };
+
   const batchAvailable = ![
     "image-editor",
     "object-segmentation",
@@ -324,11 +346,10 @@ export const useUnifiedProcessor = () => {
       lastServiceIdRef.current = currentService.id;
       incrementRunToken();
       updateProgress(0, "");
-      if (!isProcessing) {
-        syncServiceChange(oldServiceId, currentService.id);
-      }
+      setIsProcessing(false);
+      syncServiceChange(oldServiceId, currentService.id);
     }
-  }, [currentService.id, isProcessing, incrementRunToken, syncServiceChange, updateProgress]);
+  }, [currentService.id, incrementRunToken, syncServiceChange, updateProgress, setIsProcessing]);
 
   const execute = async (options = {}, runOptions = {}) => {
     switch (activeMode) {
@@ -358,6 +379,7 @@ export const useUnifiedProcessor = () => {
     executeBatch,
     executeWorkflow,
     resetItemsStatus,
+    cancel,
     ...queueActions,
     downloadSelected,
     downloadAll,

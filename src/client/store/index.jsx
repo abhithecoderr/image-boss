@@ -6,12 +6,13 @@ import { useWorkflowStore } from './workflowStore';
 import { useServiceStore } from './serviceStore';
 import { useUIStore } from './uiStore';
 import { useSegmentationStore } from './segmentationStore';
-import { useAuthStore } from '../auth/store';
+import { useAuthStore } from './authStore';
 import { useSession } from '../auth/client';
 import { getDownloadMetadata as calculateMetadata } from '../utils/canvas-utils';
 import { useNavigate } from 'react-router-dom';
 import { SERVICE_ORDER } from '../config/app';
 import { SERVICES } from '../config/services';
+import { useEffect } from 'react';
 
 
 // --- Standardized Store Hook Exports ---
@@ -50,6 +51,23 @@ export const useAuth = () => {
         : "US",
     };
   }
+
+  // Fetch permissions if authenticated and hasPaidAccess is not loaded yet
+  useEffect(() => {
+    if (user && !store.hasPaidAccessLoaded) {
+      fetch('/api/predict/permissions')
+        .then(res => {
+          if (!res.ok) throw new Error("Permission fetch failed");
+          return res.json();
+        })
+        .then(body => {
+          store.setHasPaidAccess(!!body.hasPaidAccess);
+        })
+        .catch(err => {
+          console.warn("Failed to fetch user permissions:", err);
+        });
+    }
+  }, [user, store.hasPaidAccessLoaded, store.setHasPaidAccess]);
 
   return {
     ...store,
@@ -126,4 +144,4 @@ export { useWorkflowStore } from './workflowStore';
 export { useServiceStore } from './serviceStore';
 export { useUIStore } from './uiStore';
 export { useSegmentationStore } from './segmentationStore';
-export { useAuthStore } from '../auth/store';
+export { useAuthStore } from './authStore';

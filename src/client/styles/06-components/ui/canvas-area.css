@@ -12,19 +12,34 @@
   width: 100%;
   aspect-ratio: 1.8 / 1;
   margin: 0 auto;
-  background: var(--bg-surface);
-  border: 1px dashed var(--border-light);
+  background: rgba(24, 24, 27, 0.4);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
+  border: 1px dashed rgba(255, 255, 255, 0.08);
   border-radius: var(--radius-lg);
   cursor: pointer;
-  transition: all var(--transition-fast);
+  transition: all 0.4s cubic-bezier(0.16, 1, 0.3, 1);
   padding: var(--space-6);
   text-align: center;
+  box-shadow: 
+    0 24px 48px rgba(0, 0, 0, 0.5),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
 }
 
-.upload-area:hover,
+.upload-area:hover {
+  border-color: rgba(245, 166, 35, 0.35);
+  background: rgba(24, 24, 27, 0.45);
+  box-shadow: 
+    0 24px 60px rgba(0, 0, 0, 0.6),
+    0 0 80px rgba(245, 166, 35, 0.04),
+    inset 0 1px 0 rgba(255, 255, 255, 0.1);
+  transform: translateY(-2px);
+}
+
 .upload-area--drag-active {
-  border-color: var(--highlight);
-  background: var(--bg-hover);
+  border-color: var(--success);
+  background: rgba(24, 24, 27, 0.5);
+  box-shadow: 0 0 40px rgba(16, 185, 129, 0.2);
 }
 
 .upload-content {

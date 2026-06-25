@@ -6,15 +6,21 @@
 .controls {
   display: flex;
   flex-direction: column;
-  gap: var(--space-3);
+  gap: var(--space-2);
   padding: var(--space-3) var(--space-4);
-  background: rgba(26, 26, 26, 0.4);
-  backdrop-filter: blur(16px);
-  -webkit-backdrop-filter: blur(16px);
+  background: rgba(24, 24, 27, 0.45);
+  backdrop-filter: blur(20px);
+  -webkit-backdrop-filter: blur(20px);
   border: 1px solid rgba(255, 255, 255, 0.06);
   border-radius: var(--radius-lg);
-  margin-top: var(--space-4);
-  box-shadow: 0 12px 40px rgba(0, 0, 0, 0.3);
+  margin-top: var(--space-6);
+  box-shadow: 
+    0 24px 50px rgba(0, 0, 0, 0.4),
+    inset 0 1px 0 rgba(255, 255, 255, 0.05);
+}
+
+.controls.has-image {
+  margin-top: var(--space-3);
 }
 
 .controls-grid {
@@ -51,25 +57,47 @@
 /* Category Tabs inside Editor Controls */
 .editor-categories-box {
   margin-bottom: var(--space-2);
+  background: rgba(0, 0, 0, 0.25);
+  padding: 4px;
+  border-radius: var(--radius-md);
+  border: 1px solid rgba(255, 255, 255, 0.03);
 }
 
 .control-tabs {
   display: flex;
-  gap: var(--space-2);
+  gap: var(--space-1);
   width: 100%;
 }
 
 .tab-item {
   flex: 1;
   text-align: center;
-  font-size: 11.5px;
+  font-size: 12px !important;
+  font-weight: 600 !important;
+  text-transform: capitalize;
   border-radius: var(--radius-sm);
-  height: 26px;
+  height: 28px !important;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  background: transparent !important;
+  border: 1px solid transparent !important;
+  color: var(--text-muted) !important;
+  transition: all var(--transition-fast) ease !important;
+  cursor: pointer;
+  box-shadow: none !important;
+}
+
+.tab-item:hover {
+  color: var(--text-main) !important;
+  background: rgba(255, 255, 255, 0.02) !important;
 }
 
 .tab-item.active {
-  border-color: var(--highlight);
-  color: var(--highlight);
+  background: rgba(255, 255, 255, 0.06) !important;
+  border-color: rgba(255, 255, 255, 0.15) !important;
+  color: #ffffff !important;
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.2) !important;
 }
 
 /* Manual touch-up brush settings */

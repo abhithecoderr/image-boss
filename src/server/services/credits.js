@@ -36,6 +36,9 @@ export function getModelRate(model) {
 
 export function calculateCost(model, durationInSeconds) {
   const rate = getModelRate(model);
+  // A model explicitly priced at 0 (e.g. Workers AI partner models during a free period)
+  // costs nothing — bypass the per-call minimum floor.
+  if (rate === 0) return 0;
   return Math.max(1, Math.round(durationInSeconds * rate));
 }
 

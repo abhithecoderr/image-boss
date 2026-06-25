@@ -55,6 +55,7 @@ self.onmessage = async ({ data }) => {
           dtype,
           progress_callback: report(0.1, 0.45, "Downloading model..."),
           session_options: {
+            graphOptimizationLevel: 'all',
             executionProviders: [{
               name: 'webgpu',
               deviceType: 'gpu',

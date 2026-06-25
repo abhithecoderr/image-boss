@@ -35,33 +35,69 @@ export function isMaskPixel(mask, pi) {
 export function prepareInpaintInputs(originalCanvas, maskCanvas) {
   const imgW = originalCanvas.width;
   const imgH = originalCanvas.height;
-  const aspect = imgW / imgH;
 
-  let targetW, targetH, padX, padY;
-  if (aspect > 1) { // Landscape
-    targetW = 512;
-    targetH = Math.round(512 / aspect);
-    padX = 0;
-    padY = Math.floor((512 - targetH) / 2);
-  } else { // Portrait
-    targetH = 512;
-    targetW = Math.round(512 * aspect);
-    padY = 0;
-    padX = Math.floor((512 - targetW) / 2);
+  // 1. Scan mask to find the bounding box of active mask pixels
+  const maskCtx2 = maskCanvas.getContext('2d');
+  const maskData = maskCtx2.getImageData(0, 0, imgW, imgH);
+  const data = maskData.data;
+
+  let minX = imgW, minY = imgH, maxX = 0, maxY = 0;
+  let hasActiveMask = false;
+
+  for (let y = 0; y < imgH; y++) {
+    for (let x = 0; x < imgW; x++) {
+      const idx = (y * imgW + x) * 4;
+      if (isMaskPixel(data, idx)) {
+        if (x < minX) minX = x;
+        if (x > maxX) maxX = x;
+        if (y < minY) minY = y;
+        if (y > maxY) maxY = y;
+        hasActiveMask = true;
+      }
+    }
   }
 
-  // Setup the 512x512 inputs
+  // Fallback if no mask is drawn (should not happen, but keep safe)
+  if (!hasActiveMask) {
+    minX = 0; minY = 0; maxX = imgW; maxY = imgH;
+  }
+
+  // 2. Expand the crop box to provide surrounding context to the model (e.g., 25% padding)
+  const maskW = maxX - minX;
+  const maskH = maxY - minY;
+  const pad = Math.max(128, Math.round(Math.max(maskW, maskH) * 0.25));
+
+  let boxX = Math.max(0, minX - pad);
+  let boxY = Math.max(0, minY - pad);
+  let boxW = Math.min(imgW - boxX, maskW + pad * 2);
+  let boxH = Math.min(imgH - boxY, maskH + pad * 2);
+
+  // 3. Make the crop box square to fit LaMa input without aspect ratio distortion
+  const boxSide = Math.max(boxW, boxH);
+  
+  // Center the square box as much as possible within boundaries
+  if (boxW < boxSide) {
+    const adjust = Math.min(boxX, Math.round((boxSide - boxW) / 2));
+    boxX = Math.max(0, boxX - adjust);
+    boxW = Math.min(imgW - boxX, boxSide);
+  }
+  if (boxH < boxSide) {
+    const adjust = Math.min(boxY, Math.round((boxSide - boxH) / 2));
+    boxY = Math.max(0, boxY - adjust);
+    boxH = Math.min(imgH - boxY, boxSide);
+  }
+
+  // 4. Setup the cropped 512x512 inputs
   const inputTempCanvas = new OffscreenCanvas(512, 512);
   const inputCtx = inputTempCanvas.getContext('2d');
   inputCtx.clearRect(0, 0, 512, 512);
-  inputCtx.drawImage(originalCanvas, padX, padY, targetW, targetH);
+  inputCtx.drawImage(originalCanvas, boxX, boxY, boxW, boxH, 0, 0, 512, 512);
   
   const maskTempCanvas = new OffscreenCanvas(512, 512);
   const maskCtx = maskTempCanvas.getContext('2d');
   maskCtx.fillStyle = 'black';
   maskCtx.fillRect(0, 0, 512, 512);
-  maskCtx.globalAlpha = 1.0;
-  maskCtx.drawImage(maskCanvas, padX, padY, targetW, targetH);
+  maskCtx.drawImage(maskCanvas, boxX, boxY, boxW, boxH, 0, 0, 512, 512);
 
   const imageData = inputCtx.getImageData(0, 0, 512, 512);
   const maskImageData = maskCtx.getImageData(0, 0, 512, 512);
@@ -69,20 +105,15 @@ export function prepareInpaintInputs(originalCanvas, maskCanvas) {
   return {
     imageData,
     maskImageData,
-    padParams: { padX, padY, targetW, targetH, imgW, imgH }
+    padParams: { boxX, boxY, boxW, boxH, imgW, imgH }
   };
 }
 
 /**
- * Reconstruct the 512x512 inpainted buffer back onto the original high-resolution canvas,
- * removing the aspect ratio padding.
- * 
- * @param {Uint8ClampedArray} outputBuffer Raw inpainted pixel buffer from worker
- * @param {Object} padParams Mapping variables
- * @returns {HTMLCanvasElement} Restored high-res canvas
+ * Reconstruct the 512x512 inpainted crop back onto the high-resolution source image.
  */
 export function composeInpaintOutput(outputBuffer, padParams, originalCanvas, maskCanvas) {
-  const { padX, padY, targetW, targetH, imgW, imgH } = padParams;
+  const { boxX, boxY, boxW, boxH, imgW, imgH } = padParams;
   const finalImageData = new ImageData(outputBuffer, 512, 512);
   
   const outTempCanvas = new OffscreenCanvas(512, 512);
@@ -94,45 +125,41 @@ export function composeInpaintOutput(outputBuffer, padParams, originalCanvas, ma
   finalOutCanvas.height = imgH;
   const finalCtx = finalOutCanvas.getContext('2d');
   
-  // 1. Draw the original high-resolution image first
+  // 1. Draw the original high-resolution image
   finalCtx.drawImage(originalCanvas, 0, 0);
 
-  // 2. Scale the inpainted 512x512 output back to original resolution
+  // 2. Scale the inpainted 512x512 crop back to its original cropped size
   const inpaintedScaleCanvas = document.createElement('canvas');
-  inpaintedScaleCanvas.width = imgW;
-  inpaintedScaleCanvas.height = imgH;
+  inpaintedScaleCanvas.width = boxW;
+  inpaintedScaleCanvas.height = boxH;
   const inpaintedScaleCtx = inpaintedScaleCanvas.getContext('2d');
-  inpaintedScaleCtx.drawImage(outTempCanvas, padX, padY, targetW, targetH, 0, 0, imgW, imgH);
+  inpaintedScaleCtx.drawImage(outTempCanvas, 0, 0, 512, 512, 0, 0, boxW, boxH);
 
-  // 3. Build a clean alpha mask: maskCanvas has black bg (alpha=255) and white mask (alpha=255).
-  //    source-in won't work correctly because black pixels aren't transparent.
-  //    Instead, we read the mask pixels and remap the red channel → alpha channel,
-  //    turning black (R=0) transparent and white (R=255) opaque.
+  // 3. Build a binary alpha mask from the original high-res mask for compositing
   const alphaMaskCanvas = document.createElement('canvas');
-  alphaMaskCanvas.width = imgW;
-  alphaMaskCanvas.height = imgH;
+  alphaMaskCanvas.width = boxW;
+  alphaMaskCanvas.height = boxH;
   const alphaMaskCtx = alphaMaskCanvas.getContext('2d');
-  alphaMaskCtx.drawImage(maskCanvas, 0, 0, imgW, imgH);
+  alphaMaskCtx.drawImage(maskCanvas, boxX, boxY, boxW, boxH, 0, 0, boxW, boxH);
 
-  const maskPixels = alphaMaskCtx.getImageData(0, 0, imgW, imgH);
+  const maskPixels = alphaMaskCtx.getImageData(0, 0, boxW, boxH);
   const d = maskPixels.data;
   for (let i = 0; i < d.length; i += 4) {
-    // Binarize based on pixel presence (colored/bright and not fully transparent)
     d[i + 3] = isMaskPixel(d, i) ? 255 : 0;
   }
   alphaMaskCtx.putImageData(maskPixels, 0, 0);
 
-  // 4. Composite: cut out only the inpainted pixels that fall inside the mask
+  // 4. Clip the upscale inpainted result to only the masked region
   const maskedInpaintCanvas = document.createElement('canvas');
-  maskedInpaintCanvas.width = imgW;
-  maskedInpaintCanvas.height = imgH;
+  maskedInpaintCanvas.width = boxW;
+  maskedInpaintCanvas.height = boxH;
   const maskedInpaintCtx = maskedInpaintCanvas.getContext('2d');
   maskedInpaintCtx.drawImage(inpaintedScaleCanvas, 0, 0);
   maskedInpaintCtx.globalCompositeOperation = 'destination-in';
   maskedInpaintCtx.drawImage(alphaMaskCanvas, 0, 0);
 
-  // 5. Paint the clean masked inpaint on top of the sharp original
-  finalCtx.drawImage(maskedInpaintCanvas, 0, 0);
+  // 5. Composite back onto the original high-resolution image at the correct coordinates
+  finalCtx.drawImage(maskedInpaintCanvas, boxX, boxY);
   
   return finalOutCanvas;
 }

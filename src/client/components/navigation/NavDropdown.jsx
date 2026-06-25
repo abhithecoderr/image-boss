@@ -1,4 +1,4 @@
-import React from "react";
+import React, { useState } from "react";
 import { Link } from "react-router-dom";
 import ServiceIcon from "../ui/ServiceIcon";
 
@@ -17,9 +17,19 @@ export default function NavDropdown({
   dropdownClass = "",
   gridClass = ""
 }) {
+  const [isOpen, setIsOpen] = useState(false);
+
+  const handleClose = () => {
+    setIsOpen(false);
+  };
+
   return (
-    <div className="nav-dropdown-wrapper">
-      <Link to={triggerLink} className="navbar-link dropdown-trigger">
+    <div
+      className={`nav-dropdown-wrapper ${isOpen ? "is-open" : ""}`}
+      onMouseEnter={() => setIsOpen(true)}
+      onMouseLeave={() => setIsOpen(false)}
+    >
+      <Link to={triggerLink} className="navbar-link dropdown-trigger" onClick={handleClose}>
         {triggerText} <span className="dropdown-caret">▾</span>
       </Link>
       <div className={`nav-dropdown-menu ${dropdownClass}`}>
@@ -33,7 +43,7 @@ export default function NavDropdown({
         {items.length > 0 && (
           <div className={`nav-dropdown-grid ${gridClass}`}>
             {items.map((item) => (
-              <Link key={item.id} to={item.link} className="nav-dropdown-item">
+              <Link key={item.id} to={item.link} className="nav-dropdown-item" onClick={handleClose}>
                 <div className="nav-dropdown-icon">
                   <ServiceIcon id={item.icon} />
                 </div>
@@ -48,7 +58,7 @@ export default function NavDropdown({
         
         {viewAllLink && (
           <div className="nav-dropdown-footer">
-            <Link to={viewAllLink} className="nav-dropdown-all-link">
+            <Link to={viewAllLink} className="nav-dropdown-all-link" onClick={handleClose}>
               {viewAllText || "Explore All ➔"}
             </Link>
           </div>

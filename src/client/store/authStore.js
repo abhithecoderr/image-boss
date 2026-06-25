@@ -2,13 +2,16 @@
  * Handles login, signup, social authentication, and logout state management.
  */
 import { create } from "zustand";
-import { signIn, signUp, signOut } from "./client";
-import { useUIStore } from "../store/uiStore";
+import { signIn, signUp, signOut } from "../auth/client";
+import { useUIStore } from "./uiStore";
 
 const toast = (msg, type) => useUIStore.getState().showToast(msg, type);
 
 
-export const useAuthStore = create(() => ({
+export const useAuthStore = create((set) => ({
+  hasPaidAccess: false,
+  hasPaidAccessLoaded: false,
+  setHasPaidAccess: (val) => set({ hasPaidAccess: val, hasPaidAccessLoaded: true }),
   
   login: async (email, password) => {
     const { error } = await signIn.email({ email, password });

@@ -180,6 +180,7 @@ self.onmessage = async ({ data }) => {
       const inputTensorShape = isInputNHWC
         ? [1, maxInputSize, maxInputSize, 3]
         : [1, 3, maxInputSize, maxInputSize];
+
       const inputTensorData = new Float32Array(3 * maxInputSize * maxInputSize);
 
       for (const tile of tiles) {
@@ -209,38 +210,49 @@ self.onmessage = async ({ data }) => {
           );
         }
 
-        const tensor = new ort.Tensor("float32", inputTensorData, inputTensorShape);
-        const results = await sess.run({ [sess.inputNames[0]]: tensor });
-        const outputData = results[sess.outputNames[0]].data;
+        let tensor = null;
+        let results = null;
+        try {
+          tensor = new ort.Tensor("float32", inputTensorData, inputTensorShape);
+          results = await sess.run({ [sess.inputNames[0]]: tensor });
+          const outputData = results[sess.outputNames[0]].data;
 
-        const outOverlap = overlap * scaleFactor;
-        const outStride = stride * scaleFactor;
-        const outSize = maxInputSize * scaleFactor;
+          const outOverlap = overlap * scaleFactor;
+          const outStride = stride * scaleFactor;
+          const outSize = maxInputSize * scaleFactor;
 
-        if (isOutputNHWC) {
-          unpackTileNHWC(
-            outputData,
-            outSize,
-            outOverlap,
-            outStride,
-            masterOutputData,
-            outW,
-            outH,
-            tile.x * scaleFactor,
-            tile.y * scaleFactor,
-          );
-        } else {
-          unpackTilePlanar(
-            outputData,
-            outSize,
-            outOverlap,
-            outStride,
-            masterOutputData,
-            outW,
-            outH,
-            tile.x * scaleFactor,
-            tile.y * scaleFactor,
-          );
+          if (isOutputNHWC) {
+            unpackTileNHWC(
+              outputData,
+              outSize,
+              outOverlap,
+              outStride,
+              masterOutputData,
+              outW,
+              outH,
+              tile.x * scaleFactor,
+              tile.y * scaleFactor,
+            );
+          } else {
+            unpackTilePlanar(
+              outputData,
+              outSize,
+              outOverlap,
+              outStride,
+              masterOutputData,
+              outW,
+              outH,
+              tile.x * scaleFactor,
+              tile.y * scaleFactor,
+            );
+          }
+        } finally {
+          tensor?.dispose?.();
+          if (results) {
+            for (const key in results) {
+              results[key]?.dispose?.();
+            }
+          }
         }
 
         report(

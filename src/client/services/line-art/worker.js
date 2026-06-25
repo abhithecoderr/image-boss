@@ -45,15 +45,26 @@ async function runInference(bitmap, options, onProgress) {
     scale: 1.0 / 255.0
   });
 
-  const tensor = new ort.Tensor("float32", tensorData, [1, 3, MODEL_SIZE, MODEL_SIZE]);
-
   // 2. Inference
-  const inputs = { [session.inputNames[0]]: tensor };
-  const outputs = await session.run(inputs);
-  const output = outputs[session.outputNames[0]];
+  let tensor = null;
+  let outputs = null;
+  let data;
+  try {
+    tensor = new ort.Tensor("float32", tensorData, [1, 3, MODEL_SIZE, MODEL_SIZE]);
+    const inputs = { [session.inputNames[0]]: tensor };
+    outputs = await session.run(inputs);
+    const output = outputs[session.outputNames[0]];
+    data = output.data;
+  } finally {
+    tensor?.dispose?.();
+    if (outputs) {
+      for (const key in outputs) {
+        outputs[key]?.dispose?.();
+      }
+    }
+  }
 
   // 3. Postprocessing
-  const data = output.data;
   const outData = new Uint8ClampedArray(MODEL_SIZE * MODEL_SIZE * 4);
 
   // Details slider mapping: 0-100 -> 0-255 threshold

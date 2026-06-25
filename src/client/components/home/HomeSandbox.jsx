@@ -118,19 +118,18 @@ export default function HomeSandbox() {
             onChange={(val) => setMode(val)}
           />
         </div>
-      </div>
 
-      {/* 3. Process Action Button */}
-      <div className="sandbox-action-row">
-        <Button 
-          variant="primary"
-          size="large"
-          className="sandbox-process-btn"
-          onClick={handleProcessClick}
-          disabled={items.length === 0}
-        >
-          Process in Workspace
-        </Button>
+        <div className="sandbox-control-item sandbox-button-item">
+          <label className="sandbox-control-label" style={{ opacity: 0, userSelect: 'none' }}>Action</label>
+          <Button 
+            variant="primary"
+            className="sandbox-process-btn"
+            onClick={handleProcessClick}
+            disabled={items.length === 0}
+          >
+            Process
+          </Button>
+        </div>
       </div>
     </div>
   );

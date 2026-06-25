@@ -22,7 +22,11 @@ const Landing = () => {
         <div className="landing-hero-content">
           <div className="landing-hero-badge-wrap">
             <span className="landing-hero-badge">
-              ⚡ 100% Free & Browser-Local AI
+              <span className="badge-icon">
+                <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+                </svg>
+              </span> 100% Free &amp; Browser-Local AI
             </span>
           </div>
           <h1 className="landing-hero-heading">

@@ -49,6 +49,14 @@ export const getDownloadMetadata = (canvas, originalFile, serviceId, settings = 
     mimeType = 'image/png';
   } else if (serviceId === 'file-conversion') {
     mimeType = settings['file-conversion']?.format || 'image/png';
+  } else if (serviceId === 'upscaling') {
+    const upscalingSettings = settings['upscaling'] || settings;
+    const outputType = upscalingSettings?.outputType || 'original';
+    if (outputType === 'png') {
+      mimeType = 'image/png';
+    } else if (outputType === 'webp') {
+      mimeType = 'image/webp';
+    }
   }
 
   const mimeMap = {
@@ -150,7 +158,7 @@ export function hasAlphaTransparency(canvas) {
 /**
  * Generate a thumbnail data URL from a canvas for queue previews.
  */
-export function canvasToThumbURL(canvas, size = 56) {
+export function canvasToThumbURL(canvas, size = 600) {
   if (!canvas) return null;
   const thumb = document.createElement('canvas');
   thumb.width = size;

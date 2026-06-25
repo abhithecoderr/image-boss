@@ -1,8 +1,6 @@
 import Worker from './worker.js?worker';
-import { applySobelFilter } from './helpers.js';
 import { createProgressReporter, runWorkerJob } from '../../utils/worker-utils.js';
 import { workerRegistry } from '../../engine/worker-registry.js';
-import { imageToCanvas } from '../../utils/canvas-utils.js';
 
 const SERVICE_ID = 'line-art';
 
@@ -18,31 +16,7 @@ function getWorker() {
  * @returns {HTMLCanvasElement} Result canvas
  */
 export async function process(sourceCanvas, options = {}, onProgress) {
-  const { method = 'sobel' } = options;
-
-  if (method === 'sobel') {
-    return processSobel(sourceCanvas, options, onProgress);
-  } else {
-    return processAI(sourceCanvas, options, onProgress);
-  }
-}
-
-/**
- * Classic WebGL Sobel Filter
- */
-async function processSobel(sourceCanvas, options, onProgress) {
-  const { details = 75 } = options;
-  const threshold = Math.max(1, 200 - (details * 2));
-  const report = createProgressReporter(onProgress);
-
-  report(0.2, 0.2, 'Extracting edges...')();
-
-  const { canvas: resultCanvas } = imageToCanvas(sourceCanvas);
-
-  applySobelFilter(resultCanvas, threshold);
-  report(1, 1, 'Complete')();
-
-  return resultCanvas;
+  return processAI(sourceCanvas, options, onProgress);
 }
 
 /**

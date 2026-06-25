@@ -27,14 +27,8 @@ const Footer = () => {
           </div>
           <div className="footer-column">
             <h4 className="footer-column-title">Company</h4>
-            <Link to="/about" className="footer-link">
-              About
-            </Link>
             <Link to="/blog" className="footer-link">
               Blog
-            </Link>
-            <Link to="/careers" className="footer-link">
-              Careers
             </Link>
           </div>
           <div className="footer-column">

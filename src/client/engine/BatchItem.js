@@ -1,7 +1,4 @@
-/**
- * BatchItem — A standardized wrapper for images within the processing pipeline.
- * It abstracts the source (File, Canvas, etc.) and the result status.
- */
+
 
 export function createBatchItem({ id, name, file = null, sourceCanvas = null }) {
   return {

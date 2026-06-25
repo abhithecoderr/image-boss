@@ -369,27 +369,7 @@ export default function SolutionsDetail() {
           </div>
         </div>
 
-        {/* Sidebar details */}
-        <aside className="article-sidebar">
-          <div className="sidebar-card">
-            <h4>Featured Workflow</h4>
-            <div className="workflow-specs">
-              <p>Combining multiple steps local-first:</p>
-              <ul style={{ paddingLeft: "16px", margin: "10px 0", fontSize: "12px", color: "var(--text-muted)" }}>
-                <li>Select and isolate primary subjects.</li>
-                <li>Enhance edge contours or upscale textures.</li>
-                <li>Compress and package assets for fast sharing.</li>
-              </ul>
-              <button 
-                className="btn btn-secondary btn-full btn-tiny"
-                style={{ marginTop: "12px" }}
-                onClick={() => navigate(`/services/${solution.primaryService}`)}
-              >
-                Launch {targetService?.name || "Tool"}
-              </button>
-            </div>
-          </div>
-        </aside>
+
       </section>
 
       {/* FAQs Section */}

@@ -24,6 +24,92 @@ export default function ServiceCarousel() {
     setActiveIndex((prev) => (prev === activeServices.length - 1 ? 0 : prev + 1));
   };
 
+  const renderSimulation = (id) => {
+    switch (id) {
+      case 'background-removal':
+        return (
+          <div className="sim-bg-removal sim-container">
+            <div className="sim-checkerboard" />
+            <div className="sim-subject-back" />
+            <div className="sim-slide-overlay" />
+            <div className="sim-subject" />
+          </div>
+        );
+      case 'upscaling':
+        return (
+          <div className="sim-upscale sim-container">
+            <div className="sim-upscale-blurred">Image Boss</div>
+            <div className="sim-upscale-hd">
+              <div className="sim-upscale-hd-content">Image Boss</div>
+            </div>
+          </div>
+        );
+      case 'object-segmentation':
+        return (
+          <div className="sim-segment sim-container">
+            <div className="sim-seg-box b1" />
+            <div className="sim-seg-box b2 active" />
+            <div className="sim-seg-dot" />
+          </div>
+        );
+      case 'magic-erase':
+        return (
+          <div className="sim-erase sim-container">
+            <div className="sim-erase-target" />
+            <div className="sim-erase-brush" />
+          </div>
+        );
+      case 'blur':
+        return (
+          <div className="sim-face-blur sim-container">
+            <div className="sim-card">
+              <div className="sim-avatar">
+                <div className="sim-avatar-blur" />
+                <div className="sim-detect-box" />
+              </div>
+              <div className="sim-line" />
+              <div className="sim-line" style={{ width: '25px' }} />
+            </div>
+          </div>
+        );
+      case 'captioning':
+        return (
+          <div className="sim-caption sim-container">
+            <div className="sim-cap-img">🏞️</div>
+            <div className="sim-cap-box">
+              <span>[ "Sunset view", "Mountain path" ]</span>
+              <span className="sim-cap-cursor" />
+            </div>
+          </div>
+        );
+      case 'file-conversion':
+        return (
+          <div className="sim-convert sim-container">
+            <span className="sim-badge png">PNG</span>
+            <span className="sim-arrow">➜</span>
+            <span className="sim-badge webp">WEBP</span>
+          </div>
+        );
+      case 'line-art':
+        return (
+          <div className="sim-lineart sim-container">
+            <div className="sim-lineart-source" />
+            <div className="sim-lineart-art" />
+          </div>
+        );
+      case 'image-editor':
+        return (
+          <div className="sim-editor sim-container">
+            <div className="sim-edit-grid">
+              <div className="sim-crop-box" />
+            </div>
+          </div>
+        );
+      default:
+        return null;
+    }
+  };
+
   return (
     <div className="home-carousel-section">
       <div className="carousel-header">
@@ -72,17 +158,7 @@ export default function ServiceCarousel() {
 
           {/* Interactive Demo View Panel */}
           <div className="carousel-demo-pane">
-            <span className="carousel-demo-image">
-              {service.id === 'background-removal' && '🎭'}
-              {service.id === 'upscaling' && '🔍'}
-              {service.id === 'object-segmentation' && '🎯'}
-              {service.id === 'magic-erase' && '🧽'}
-              {service.id === 'blur' && '👤'}
-              {service.id === 'captioning' && '📝'}
-              {service.id === 'file-conversion' && '♻️'}
-              {service.id === 'line-art' && '🎨'}
-              {service.id === 'image-editor' && '📸'}
-            </span>
+            {renderSimulation(service.id)}
             <span className="carousel-demo-label">Service Demo Preview</span>
           </div>
         </div>

@@ -50,9 +50,9 @@ export const executeSingle = async ({
       serviceId,
       sourceCanvas,
       options,
-      (prog, msg) => {
+      (prog) => {
         if (isCancelled()) return;
-        onProgress(prog, msg);
+        onProgress(prog);
       },
     );
 
@@ -113,9 +113,22 @@ export const executeBatch = async ({
         serviceId,
         activeOptions,
         processorEngine,
-        (prog, msg) => {
+        (prog) => {
           if (isCancelled()) return;
-          onProgress(prog, `[${i + 1}/${pendingItems.length}] ${msg}`);
+          let payload = prog;
+          if (typeof prog !== "object" || prog === null) {
+            payload = {
+              stage: "processing",
+              percent: typeof prog === "number" ? Math.round(prog * 100) : 0,
+              message: "",
+              details: {}
+            };
+          } else {
+            payload = { ...payload, details: { ...payload.details } };
+          }
+          payload.details.itemIndex = i + 1;
+          payload.details.itemTotal = pendingItems.length;
+          onProgress(payload);
         },
       );
 
@@ -148,6 +161,7 @@ export const executeWorkflow = async ({
   processorEngine,
   onProgress,
   isCancelled,
+  activePreviewStepId = null,
 }) => {
   const pendingItems = items.filter((i) => i.status !== "done");
   if (pendingItems.length === 0) return;
@@ -155,6 +169,8 @@ export const executeWorkflow = async ({
   const workingItems = [...items];
 
   try {
+    const inputChangedMap = {};
+
     for (let j = 0; j < workflowSteps.length; j++) {
       if (isCancelled()) break;
       const step = workflowSteps[j];
@@ -187,29 +203,73 @@ export const executeWorkflow = async ({
           continue;
         }
 
-        const prefix = `Step ${j + 1}/${workflowSteps.length} [Image ${i + 1}/${pendingItems.length}]: `;
-
         try {
           const itemOverrides = item.settingsOverrides?.[step.id] || {};
           const activeOptions = { ...step.options, ...itemOverrides };
+          const activeOptionsStr = JSON.stringify(activeOptions);
 
-          const result = await processItem(
-            item,
-            step.serviceId,
-            activeOptions,
-            processorEngine,
-            (prog, msg) => {
-              if (isCancelled()) return;
-              onProgress(prog, `${prefix}${msg}`);
-            },
-            currentCanvas,
-          );
+          const cachedStep = workingItems[itemIdx].stepResults?.[step.id];
+          const canReuse =
+            !inputChangedMap[item.id] &&
+            cachedStep &&
+            cachedStep.status === "done" &&
+            cachedStep.resultCanvas &&
+            cachedStep.optionsStr === activeOptionsStr;
+
+          let result;
+          if (canReuse) {
+            result = cachedStep.resultCanvas;
+            onProgress({
+              stage: "processing",
+              percent: 100,
+              message: "Reusing cached step result",
+              details: {
+                itemIndex: i + 1,
+                itemTotal: pendingItems.length,
+                stepIndex: j + 1,
+                stepTotal: workflowSteps.length,
+              },
+            });
+          } else {
+            inputChangedMap[item.id] = true;
+            result = await processItem(
+              item,
+              step.serviceId,
+              activeOptions,
+              processorEngine,
+              (prog) => {
+                if (isCancelled()) return;
+                let payload = prog;
+                if (typeof prog !== "object" || prog === null) {
+                  payload = {
+                    stage: "processing",
+                    percent: typeof prog === "number" ? Math.round(prog * 100) : 0,
+                    message: "",
+                    details: {}
+                  };
+                } else {
+                  payload = { ...payload, details: { ...payload.details } };
+                }
+                payload.details.itemIndex = i + 1;
+                payload.details.itemTotal = pendingItems.length;
+                payload.details.stepIndex = j + 1;
+                payload.details.stepTotal = workflowSteps.length;
+                onProgress(payload);
+              },
+              currentCanvas,
+            );
+          }
 
           if (result) {
             workingItems[itemIdx].stepResults = {
               ...workingItems[itemIdx].stepResults,
-              [step.id]: { resultCanvas: result, status: "done" },
+              [step.id]: { resultCanvas: result, status: "done", optionsStr: activeOptionsStr },
             };
+            setItems([...workingItems]);
+
+            if (item.id === activeItemId && activePreviewStepId === step.id) {
+              setResultCanvas(result);
+            }
 
             if (j === workflowSteps.length - 1) {
               workingItems[itemIdx] = {
@@ -219,7 +279,11 @@ export const executeWorkflow = async ({
               };
 
               if (item.id === activeItemId) {
-                setResultCanvas(result);
+                if (!activePreviewStepId) {
+                  setResultCanvas(result);
+                } else if (workingItems[itemIdx].stepResults?.[activePreviewStepId]?.resultCanvas) {
+                  setResultCanvas(workingItems[itemIdx].stepResults[activePreviewStepId].resultCanvas);
+                }
               }
             }
           } else {
@@ -275,9 +339,23 @@ export const executeSingleItemInBatch = async ({
       serviceId,
       activeOptions,
       processorEngine,
-      (prog, msg) => {
+      (prog) => {
         if (isCancelled()) return;
-        onProgress(prog, `[Selective] ${msg}`);
+        let payload = prog;
+        if (typeof prog !== "object" || prog === null) {
+          payload = {
+            stage: "processing",
+            percent: typeof prog === "number" ? Math.round(prog * 100) : 0,
+            message: "",
+            details: {}
+          };
+        } else {
+          payload = { ...payload, details: { ...payload.details } };
+        }
+        if (payload.message && !payload.message.startsWith("[Selective]")) {
+          payload.message = `[Selective] ${payload.message}`;
+        }
+        onProgress(payload);
       },
     );
 
@@ -314,6 +392,7 @@ export const executeSingleItemInWorkflow = async ({
   processorEngine,
   onProgress,
   isCancelled,
+  activePreviewStepId = null,
 }) => {
   const item = items.find((i) => i.id === itemId);
   if (!item) return;
@@ -328,36 +407,82 @@ export const executeSingleItemInWorkflow = async ({
   setItems([...workingItems]);
 
   let currentCanvas = item.sourceCanvas;
+  let inputChanged = false;
 
   try {
     for (let j = 0; j < workflowSteps.length; j++) {
       if (isCancelled()) break;
       const step = workflowSteps[j];
-      const prefix = `Step ${j + 1}/${workflowSteps.length} [Selective]: `;
 
       const itemOverrides = item.settingsOverrides?.[step.id] || {};
       const activeOptions = { ...step.options, ...itemOverrides };
+      const activeOptionsStr = JSON.stringify(activeOptions);
 
-      const result = await processItem(
-        item,
-        step.serviceId,
-        activeOptions,
-        processorEngine,
-        (prog, msg) => {
-          if (isCancelled()) return;
-          onProgress(prog, `${prefix}${msg}`);
-        },
-        currentCanvas,
-      );
+      const cachedStep = workingItems[itemIdx].stepResults?.[step.id];
+      const canReuse =
+        !inputChanged &&
+        cachedStep &&
+        cachedStep.status === "done" &&
+        cachedStep.resultCanvas &&
+        cachedStep.optionsStr === activeOptionsStr;
 
-      if (result) {
+      let result;
+      if (canReuse) {
+        result = cachedStep.resultCanvas;
         currentCanvas = result;
-        workingItems[itemIdx].stepResults = {
-          ...workingItems[itemIdx].stepResults,
-          [step.id]: { resultCanvas: result, status: "done" },
-        };
+        onProgress({
+          stage: "processing",
+          percent: 100,
+          message: "Reusing cached step result",
+          details: {
+            stepIndex: j + 1,
+            stepTotal: workflowSteps.length,
+          },
+        });
       } else {
-        throw new Error("Workflow step returned empty canvas");
+        inputChanged = true;
+        result = await processItem(
+          item,
+          step.serviceId,
+          activeOptions,
+          processorEngine,
+          (prog) => {
+            if (isCancelled()) return;
+            let payload = prog;
+            if (typeof prog !== "object" || prog === null) {
+              payload = {
+                stage: "processing",
+                percent: typeof prog === "number" ? Math.round(prog * 100) : 0,
+                message: "",
+                details: {}
+              };
+            } else {
+              payload = { ...payload, details: { ...payload.details } };
+            }
+            payload.details.stepIndex = j + 1;
+            payload.details.stepTotal = workflowSteps.length;
+            if (payload.message && !payload.message.startsWith("[Selective]")) {
+              payload.message = `[Selective] ${payload.message}`;
+            }
+            onProgress(payload);
+          },
+          currentCanvas,
+        );
+
+        if (result) {
+          currentCanvas = result;
+          workingItems[itemIdx].stepResults = {
+            ...workingItems[itemIdx].stepResults,
+            [step.id]: { resultCanvas: result, status: "done", optionsStr: activeOptionsStr },
+          };
+          setItems([...workingItems]);
+
+          if (itemId === activeItemId && activePreviewStepId === step.id) {
+            setResultCanvas(result);
+          }
+        } else {
+          throw new Error("Workflow step returned empty canvas");
+        }
       }
     }
 
@@ -370,7 +495,11 @@ export const executeSingleItemInWorkflow = async ({
     };
 
     if (itemId === activeItemId) {
-      setResultCanvas(currentCanvas);
+      if (!activePreviewStepId) {
+        setResultCanvas(currentCanvas);
+      } else if (workingItems[itemIdx].stepResults?.[activePreviewStepId]?.resultCanvas) {
+        setResultCanvas(workingItems[itemIdx].stepResults[activePreviewStepId].resultCanvas);
+      }
     }
   } catch (err) {
     if (isCancelled()) return;

@@ -114,7 +114,7 @@ export const useQueueActions = (workspace, showToast) => {
     }
 
     addItems(newItems);
-    if (!activeItemId && newItems.length > 0) {
+    if (newItems.length > 0) {
       setActiveItemId(newItems[0].id);
       setOriginalCanvas(newItems[0].sourceCanvas);
     }

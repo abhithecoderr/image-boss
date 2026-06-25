@@ -1,5 +1,5 @@
-import { RawImage } from "@huggingface/transformers";
-export { createCanvas, canvasCache } from "./canvas-utils.js";
+import { createCanvas, canvasCache } from "./canvas-utils.js";
+export { createCanvas, canvasCache };
 
 /**
  * Detect WebGPU and fp16 support
@@ -72,9 +72,21 @@ export async function rawImageToBitmap(rawImg) {
  * Converts an ImageBitmap (received from UI) into a RawImage (for transformers inference).
  */
 export async function bitmapToRawImage(bitmap) {
+  const { RawImage } = await import("@huggingface/transformers");
   const canvas = new OffscreenCanvas(bitmap.width, bitmap.height);
   canvas.getContext("2d").drawImage(bitmap, 0, 0);
   return RawImage.fromCanvas(canvas);
+}
+
+/**
+ * Helper to infer the PROGRESS_STAGE based on message content.
+ */
+function inferStage(msg) {
+  const m = (msg || "").toLowerCase();
+  if (m.includes("download") || m.includes("fetch")) return "downloading";
+  if (m.includes("init") || m.includes("load") || m.includes("start") || m.includes("prepare")) return "initializing";
+  if (m.includes("save") || m.includes("render") || m.includes("final")) return "saving";
+  return "processing"; // Default fallback
 }
 
 /**
@@ -112,14 +124,23 @@ export function createProgressReporter(onProgress) {
         lastPct = p;
       }
 
-      const progress = start + (pct / 100) * (end - start);
-      const fileSuffix = currentFile ? ` [${currentFile}]` : "";
-      const message =
-        pct > 0
-          ? `${messagePrefix}${fileSuffix} ${Math.round(pct)}%`
-          : `${messagePrefix}${fileSuffix}`;
+      const globalProgress = start + (pct / 100) * (end - start);
+      const stage = inferStage(messagePrefix);
 
-      onProgress?.(progress, message);
+      let file = currentFile;
+      if (!file && messagePrefix.startsWith("Downloading ")) {
+        file = messagePrefix.replace("Downloading ", "").replace("...", "");
+      }
+
+      onProgress?.({
+        stage,
+        percent: Math.round(globalProgress * 100),
+        message: messagePrefix,
+        details: {
+          file,
+          globalProgress,
+        }
+      });
     };
   };
 }
@@ -150,14 +171,28 @@ export function runWorkerJob(
 
       if (type === "progress") {
         const now = Date.now();
+        const msgText = (typeof progress === "object" && progress !== null) ? progress.message : message;
         if (
           now - lastProgressTime > PROGRESS_THROTTLE ||
           progress === 1 ||
-          message !== lastMessage
+          msgText !== lastMessage
         ) {
-          onProgress?.(progress, message);
+          let normalizedProgress = progress;
+          if (typeof progress !== "object" || progress === null) {
+            // Normalize legacy format
+            const rawPercent = typeof progress === "number" ? Math.round(progress * 100) : 0;
+            const inferred = inferStage(message);
+            normalizedProgress = {
+              stage: inferred,
+              percent: rawPercent,
+              message: message || "Processing...",
+              details: {}
+            };
+          }
+
+          onProgress?.(normalizedProgress);
           lastProgressTime = now;
-          lastMessage = message;
+          lastMessage = msgText;
         }
       } else if (type === "complete") {
         cleanup();
@@ -266,8 +301,8 @@ export async function imageToTensor(bitmap, size, options = {}) {
     scale = 1.0 / 255.0,
   } = options;
 
-  const canvas = new OffscreenCanvas(size, size);
-  const ctx = canvas.getContext("2d");
+  const { canvas, ctx } = canvasCache.get('image_to_tensor', size, size);
+  ctx.clearRect(0, 0, size, size);
   ctx.drawImage(bitmap, 0, 0, bitmap.width, bitmap.height, 0, 0, size, size);
   const imgData = ctx.getImageData(0, 0, size, size);
   const pixels = imgData.data;

@@ -399,32 +399,7 @@ export default function ProductDetail() {
           </div>
         </div>
 
-        {/* Sidebar Info Card */}
-        <aside className="article-sidebar">
-          <div className="sidebar-card">
-            <h4>Technical Specs</h4>
-            <div className="spec-list">
-              <div className="spec-row">
-                <span className="spec-label">Execution:</span>
-                <span className="spec-value">In-browser local</span>
-              </div>
-              <div className="spec-row">
-                <span className="spec-label">Acceleration:</span>
-                <span className="spec-value">{product.device === "webgpu" ? "WebGPU (GPU)" : "WASM (CPU)"}</span>
-              </div>
-              <div className="spec-row">
-                <span className="spec-label">Data Transit:</span>
-                <span className="spec-value">None (0 KB uploaded)</span>
-              </div>
-              {product.model && (
-                <div className="spec-row">
-                  <span className="spec-label">Model Size:</span>
-                  <span className="spec-value">Optimized Mobile-Net</span>
-                </div>
-              )}
-            </div>
-          </div>
-        </aside>
+
       </section>
 
       {/* FAQs Section */}
